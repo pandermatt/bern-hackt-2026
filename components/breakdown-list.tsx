@@ -17,8 +17,11 @@ export function BreakdownList({
 }: {
   heading: string;
   slices: Slice[];
-  /** Which filter a row links to, so the list doubles as navigation. */
-  linkParam: "category" | "merchant";
+  /** Which filter a row links to, so the list doubles as navigation.
+   * "categories" jumps to that one category alone — a bare `?categories=X`
+   * is exactly what the multi-select filter also produces for a single
+   * selection. */
+  linkParam: "categories" | "merchant";
   emptyLabel: string;
 }) {
   const headingId = `${linkParam}-heading`;

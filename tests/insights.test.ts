@@ -8,6 +8,7 @@ import {
   formatDay,
   formatMoney,
   monthlySeries,
+  paginate,
   summarize,
   topMerchants,
   type Filters,
@@ -214,9 +215,32 @@ describe("applyFilters", () => {
     ];
 
     expect(applyFilters(rows, { ...NO_FILTERS, account: "KK-Konto" })).toHaveLength(1);
-    expect(applyFilters(rows, { ...NO_FILTERS, category: "Travel" })).toHaveLength(1);
+    expect(
+      applyFilters(rows, { ...NO_FILTERS, categories: ["Travel"] }),
+    ).toHaveLength(1);
     expect(applyFilters(rows, { ...NO_FILTERS, merchant: "SWISS" })).toHaveLength(1);
     expect(applyFilters(rows, { ...NO_FILTERS, kind: "income" })).toHaveLength(1);
+  });
+
+  it("keeps a row that matches any selected category", () => {
+    const rows = [
+      row({ category: "Travel" }),
+      row({ category: "Housing" }),
+      row({ category: "Food & Drink" }),
+    ];
+
+    expect(
+      applyFilters(rows, { ...NO_FILTERS, categories: ["Travel", "Housing"] }),
+    ).toHaveLength(2);
+  });
+
+  it("treats an empty categories array like no filter at all", () => {
+    // A checkbox group that starts empty and a filter that was never touched
+    // must behave the same way — otherwise clearing every box hides
+    // everything instead of showing everything.
+    const rows = [row({ category: "Travel" }), row({ category: "Housing" })];
+
+    expect(applyFilters(rows, { ...NO_FILTERS, categories: [] })).toHaveLength(2);
   });
 });
 
@@ -231,6 +255,41 @@ describe("facetsOf", () => {
     expect(facets.merchants).toEqual(["Rent", "SWISS"]);
     expect(facets.first).toBe("2025-01-01");
     expect(facets.last).toBe("2025-12-29");
+  });
+});
+
+describe("paginate", () => {
+  const rows = Array.from({ length: 45 }, (_, index) => row({ id: index + 1 }));
+
+  it("slices a page and reports how many there are in total", () => {
+    const first = paginate(rows, 1, 20);
+    expect(first.rows).toHaveLength(20);
+    expect(first.rows[0].id).toBe(1);
+    expect(first.page).toBe(1);
+    expect(first.pageCount).toBe(3);
+    expect(first.totalCount).toBe(45);
+
+    const last = paginate(rows, 3, 20);
+    expect(last.rows).toHaveLength(5);
+    expect(last.rows[0].id).toBe(41);
+  });
+
+  it("clamps a page past the end to the last real page", () => {
+    // A filter change can shrink the result set out from under a page number
+    // remembered in the URL; that should land on real rows, not an empty page.
+    expect(paginate(rows, 999, 20).page).toBe(3);
+  });
+
+  it("clamps a page below 1 up to the first page", () => {
+    expect(paginate(rows, 0, 20).page).toBe(1);
+    expect(paginate(rows, -5, 20).page).toBe(1);
+  });
+
+  it("treats an empty set as one empty page rather than zero pages", () => {
+    const empty = paginate([], 1, 20);
+    expect(empty.page).toBe(1);
+    expect(empty.pageCount).toBe(1);
+    expect(empty.rows).toEqual([]);
   });
 });
 

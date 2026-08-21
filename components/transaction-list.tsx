@@ -1,4 +1,7 @@
+import { Suspense } from "react";
+
 import { EmptyState } from "@/components/empty-state";
+import { TransactionPagination } from "@/components/transaction-pagination";
 import type { Transaction } from "@/db/schema";
 import { formatDay, formatMoney } from "@/lib/insights";
 
@@ -51,7 +54,19 @@ function TransactionRow({ row }: { row: Transaction }) {
   );
 }
 
-export function TransactionList({ rows }: { rows: Transaction[] }) {
+export function TransactionList({
+  rows,
+  page,
+  pageCount,
+  totalCount,
+}: {
+  /** Just the current page — at most `PAGE_SIZE` rows. */
+  rows: Transaction[];
+  page: number;
+  pageCount: number;
+  /** Rows across every page of the current filter, for the header count. */
+  totalCount: number;
+}) {
   return (
     <section className="card overflow-hidden" aria-labelledby="ledger-heading">
       <div className="flex items-baseline justify-between gap-4 border-b border-line px-4 py-3 sm:px-5">
@@ -59,8 +74,8 @@ export function TransactionList({ rows }: { rows: Transaction[] }) {
           Transactions
         </h2>
         <p className="font-mono text-[12px] tabular-nums text-text-muted">
-          {rows.length.toLocaleString("de-CH")}{" "}
-          {rows.length === 1 ? "line" : "lines"}
+          {totalCount.toLocaleString("de-CH")}{" "}
+          {totalCount === 1 ? "line" : "lines"}
         </p>
       </div>
 
@@ -73,6 +88,12 @@ export function TransactionList({ rows }: { rows: Transaction[] }) {
           ))}
         </ul>
       )}
+
+      {/* TransactionPagination reads useSearchParams, which needs a boundary
+          it can suspend against. */}
+      <Suspense fallback={null}>
+        <TransactionPagination page={page} pageCount={pageCount} />
+      </Suspense>
     </section>
   );
 }

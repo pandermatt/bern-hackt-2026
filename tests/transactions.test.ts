@@ -154,14 +154,22 @@ describe("filters", () => {
   });
 
   it("narrows by category and date range", async () => {
-    expect(await listTransactions({ category: "Housing" })).toHaveLength(1);
+    expect(await listTransactions({ categories: "Housing" })).toHaveLength(1);
     expect(
       await listTransactions({ from: "2025-01-02", to: "2025-01-31" }),
     ).toHaveLength(1);
   });
 
+  it("narrows by more than one category at once", async () => {
+    // `?categories=Housing&categories=Salary` arrives as an array — a single
+    // value collapses to a bare string, which the schema also has to accept.
+    expect(
+      await listTransactions({ categories: ["Housing", "Salary"] }),
+    ).toHaveLength(2);
+  });
+
   it("computes facets and the trend from the unfiltered set", async () => {
-    const dashboard = await getDashboard({ category: "Housing" });
+    const dashboard = await getDashboard({ categories: "Housing" });
 
     // The dropdowns must not narrow themselves into a dead end, and the
     // year's shape is the point of the chart even when viewing one category.
@@ -185,6 +193,34 @@ describe("filters", () => {
     expect(dashboard).not.toBeNull();
     expect(dashboard?.transactions).toHaveLength(2);
     expect(dashboard?.filters.from).toBeUndefined();
+  });
+
+  it("reports page metadata for a result set that fits on one page", async () => {
+    const dashboard = await getDashboard({});
+    expect(dashboard?.page).toBe(1);
+    expect(dashboard?.pageCount).toBe(1);
+    // Total across every page, not just `transactions.length` — the same two
+    // non-transfer rows the other assertions above see.
+    expect(dashboard?.totalCount).toBe(2);
+  });
+
+  it("clamps an out-of-range page instead of leaving the list empty", async () => {
+    const dashboard = await getDashboard({ page: "99" });
+    expect(dashboard?.page).toBe(1);
+    expect(dashboard?.transactions).toHaveLength(2);
+  });
+
+  it("does not let a malformed page wipe out the other filters", async () => {
+    // Unlike `filterSchema`, which fails as one unit, `page` is parsed on its
+    // own — a junk value degrades to page 1 without discarding `category`.
+    const dashboard = await getDashboard({
+      categories: "Housing",
+      page: "not-a-number",
+    });
+
+    expect(dashboard?.page).toBe(1);
+    expect(dashboard?.filters.categories).toEqual(["Housing"]);
+    expect(dashboard?.transactions).toHaveLength(1);
   });
 });
 

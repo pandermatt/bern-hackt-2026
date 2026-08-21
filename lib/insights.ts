@@ -13,7 +13,9 @@ export type Filters = {
   from?: string;
   to?: string;
   account?: string;
-  category?: string;
+  /** Zero or more — an empty array behaves like "unset", same as everywhere
+   * else in this type. */
+  categories?: string[];
   merchant?: string;
   kind?: "expense" | "income";
   q?: string;
@@ -120,7 +122,13 @@ export function applyFilters(
     if (filters.from && row.bookedOn < filters.from) return false;
     if (filters.to && row.bookedOn > filters.to) return false;
     if (filters.account && row.account !== filters.account) return false;
-    if (filters.category && row.category !== filters.category) return false;
+    if (
+      filters.categories &&
+      filters.categories.length > 0 &&
+      !filters.categories.includes(row.category)
+    ) {
+      return false;
+    }
     if (filters.merchant && row.merchant !== filters.merchant) return false;
     if (
       needle &&
@@ -259,5 +267,41 @@ export function facetsOf(rows: Transaction[]): Facets {
     merchants: sorted(merchants),
     first,
     last,
+  };
+}
+
+/** Rows per page in the transaction list. Not a URL param — one fixed size
+ * keeps a shared link's page count stable. */
+export const PAGE_SIZE = 50;
+
+export type Page<T> = {
+  rows: T[];
+  /** Clamped into `[1, pageCount]` (or 1 when there are no rows at all), so a
+   * stale or out-of-range `?page=` — the list narrowed under a filter change,
+   * or someone edited the URL by hand — degrades to the nearest real page
+   * instead of rendering empty. Same "junk input renders a sane default, not
+   * a 500" contract `app/actions/transactions.ts` holds for the other
+   * filters. */
+  page: number;
+  pageCount: number;
+  /** Rows in the full (filtered, unpaginated) set — what the "N lines"
+   * header counts, as opposed to `rows.length`, which is at most `pageSize`. */
+  totalCount: number;
+};
+
+export function paginate<T>(
+  rows: T[],
+  page: number,
+  pageSize: number = PAGE_SIZE,
+): Page<T> {
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const clamped = Math.min(Math.max(1, page), pageCount);
+  const start = (clamped - 1) * pageSize;
+
+  return {
+    rows: rows.slice(start, start + pageSize),
+    page: clamped,
+    pageCount,
+    totalCount: rows.length,
   };
 }

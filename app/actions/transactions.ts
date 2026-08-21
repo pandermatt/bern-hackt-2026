@@ -11,6 +11,7 @@ import {
   byCategory,
   facetsOf,
   monthlySeries,
+  paginate,
   summarize,
   topMerchants,
   type Facets,
@@ -29,7 +30,21 @@ const filterSchema = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   account: z.string().max(60).optional(),
-  category: z.string().max(40).optional(),
+  // `?categories=A&categories=B` arrives as a string array; a single
+  // `?categories=A` collapses to a bare string, so both shapes are accepted
+  // and normalized to an array here.
+  categories: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((value) =>
+      value === undefined
+        ? undefined
+        : (Array.isArray(value) ? value : [value])
+            .filter((entry) => entry.length > 0 && entry.length <= 40)
+            // There are under 20 categories in `CATEGORIES`; this just caps
+            // how much a hand-edited query string can throw at `.includes()`.
+            .slice(0, 40),
+    ),
   merchant: z.string().max(80).optional(),
   kind: z.enum(["expense", "income"]).optional(),
   q: z.string().trim().max(80).optional(),
@@ -49,10 +64,29 @@ export type Dashboard = {
   categories: Slice[];
   merchants: Slice[];
   transactions: Transaction[];
+  page: number;
+  pageCount: number;
+  totalCount: number;
 };
 
 function parseFilters(raw: unknown): Filters {
   return filterSchema.safeParse(raw).data ?? filterSchema.parse({});
+}
+
+/**
+ * Parsed independently of `filterSchema`: that schema fails (and falls back
+ * to *every* filter defaulting) as one unit, and a mistyped or stale `?page=`
+ * — someone hand-edits the URL, or a filter change shrinks the result set out
+ * from under a remembered page number — shouldn't wipe out the rest of the
+ * filters to fix itself. `paginate` clamps the result into range regardless.
+ */
+function parsePage(raw: unknown): number {
+  const value =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>).page
+      : undefined;
+  const page = Math.floor(Number(Array.isArray(value) ? value[0] : value));
+  return Number.isFinite(page) && page > 0 ? page : 1;
 }
 
 /**
@@ -89,6 +123,9 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
 
   const filters = parseFilters(raw);
   const filtered = applyFilters(rows, filters);
+  // Totals, the trend, and both breakdowns are computed from the full
+  // filtered set; only the row list itself is sliced to one page.
+  const paged = paginate(filtered, parsePage(raw));
 
   return {
     filters,
@@ -100,7 +137,10 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     totals: summarize(filtered),
     categories: byCategory(filtered),
     merchants: topMerchants(filtered, 8),
-    transactions: filtered,
+    transactions: paged.rows,
+    page: paged.page,
+    pageCount: paged.pageCount,
+    totalCount: paged.totalCount,
   };
 }
 

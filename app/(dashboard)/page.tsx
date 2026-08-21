@@ -45,7 +45,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <BreakdownList
             heading="Where it goes"
             slices={categories}
-            linkParam="category"
+            linkParam="categories"
             emptyLabel="No spending in this range."
           />
           <BreakdownList
@@ -62,7 +62,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <TransactionFilters facets={facets} filters={filters} />
         </Suspense>
 
-        <TransactionList rows={dashboard.transactions} />
+        <TransactionList
+          rows={dashboard.transactions}
+          page={dashboard.page}
+          pageCount={dashboard.pageCount}
+          totalCount={dashboard.totalCount}
+        />
       </div>
     </main>
   );
