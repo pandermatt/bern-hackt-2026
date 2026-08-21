@@ -191,6 +191,31 @@ To import a different export, drop the `.csv` files in `scripts/seed-data/`
 know falls through a keyword rule to `Other`, and the script names it on
 stderr so the gap is visible rather than silent.
 
+## Anomaly detection
+
+Findings are **precomputed and stored**, not derived while rendering.
+
+Run a scan from **Account & Settings → Anomaly detection → Run scan**. It works
+through your whole history, saves what it finds to the `anomalies` table, and
+shows a progress bar while it goes. The dashboard then reads those rows back for
+the transactions on the page. Re-running replaces the previous results.
+
+This used to run inside the dashboard request, over every transaction, on every
+page view. That did not survive a large account: the engine was superlinear, and
+at 25 000 transactions a single page load took minutes of blocking CPU and hung
+the server for everyone. Two changes fixed it — the engine itself is now
+near-linear (memoised date parsing and per-group baseline statistics), and the
+work moved out of the render path entirely.
+
+| | 25 000 transactions |
+| --- | --- |
+| Dashboard load, before | minutes (server unresponsive) |
+| Dashboard load, now | ~250 ms |
+| Full scan | ~1 s, in the background |
+
+If the dashboard shows no anomaly badges, no scan has run yet — that is expected
+on a fresh database, and the settings card says so.
+
 ## Scripts
 
 | Script | Does |

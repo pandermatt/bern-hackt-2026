@@ -108,7 +108,89 @@ export const transactions = sqliteTable(
   ],
 );
 
+/**
+ * A persisted anomaly finding. The engine is expensive to run over a full
+ * history, so it is no longer evaluated while rendering the dashboard — a scan
+ * is triggered from the account page, writes its results here, and the
+ * dashboard just reads the rows for the transactions it is showing.
+ *
+ * One row per (insight, transaction) pair rather than one per insight. An
+ * insight can implicate several transactions, and every read is "what is wrong
+ * with the rows on this page", so flattening it here turns that into a single
+ * indexed lookup instead of a scan-and-unnest.
+ */
+export const anomalies = sqliteTable(
+  "anomalies",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Nullable for the same deploy-safety reason as `transactions.userId`. */
+    userId: integer("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    /**
+     * Not a foreign key on purpose. A scan is a snapshot; if the statements are
+     * re-imported the transaction ids change, and a cascade would silently
+     * empty this table mid-scan rather than leaving a stale result the user can
+     * see and re-run. Rows are replaced wholesale by the next scan.
+     */
+    transactionId: integer("transaction_id").notNull(),
+    ruleId: text("rule_id").notNull(),
+    severity: text("severity", {
+      enum: ["low", "medium", "high"],
+    }).notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    icon: text("icon").notNull(),
+    emoji: text("emoji").notNull().default(""),
+    /** `supporting_metrics`, JSON-encoded — shape varies per rule. */
+    metrics: text("metrics").notNull().default("{}"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("anomalies_user_id_idx").on(table.userId),
+    // The dashboard's only query: the findings for the ids on this page.
+    index("anomalies_user_transaction_idx").on(table.userId, table.transactionId),
+  ],
+);
+
+/**
+ * One row per scan, holding its progress so the account page can poll it.
+ *
+ * Progress lives in the database rather than in memory because the action that
+ * starts a scan returns immediately — the work continues on the server and the
+ * browser polls a different request to watch it.
+ */
+export const anomalyRuns = sqliteTable(
+  "anomaly_runs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    status: text("status", {
+      enum: ["running", "done", "failed"],
+    }).notNull(),
+    /** Human-readable stage, shown under the progress bar. */
+    phase: text("phase").notNull().default("Starting"),
+    /** Transactions processed so far, and the total this scan is working over. */
+    processed: integer("processed").notNull().default(0),
+    total: integer("total").notNull().default(0),
+    insightCount: integer("insight_count").notNull().default(0),
+    error: text("error"),
+    startedAt: integer("started_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    finishedAt: integer("finished_at", { mode: "timestamp" }),
+  },
+  (table) => [index("anomaly_runs_user_id_idx").on(table.userId)],
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+export type Anomaly = typeof anomalies.$inferSelect;
+export type NewAnomaly = typeof anomalies.$inferInsert;
+export type AnomalyRun = typeof anomalyRuns.$inferSelect;

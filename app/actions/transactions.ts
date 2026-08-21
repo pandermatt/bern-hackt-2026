@@ -19,10 +19,8 @@ import { z } from "zod";
 import { db } from "@/db";
 import { transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
-import {
-  analyzeTransactionAnomalies,
-  type AnomalyInsight,
-} from "@/lib/anomaly-engine";
+import { getStoredAnomaliesForPage } from "@/app/actions/anomalies";
+import { type AnomalyInsight } from "@/lib/anomaly-engine";
 import {
   applyFilters,
   byCategory,
@@ -249,9 +247,11 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     categories: byCategory(filtered),
     merchants: topMerchants(filtered, 8),
     transactions: paged.rows, // only the rows in view loaded from the database
-    anomalies: analyzeTransactionAnomalies(rows, {
-      targetTransactionIds: paged.rows.map((r) => r.id),
-    }),
+    // Read back from the last scan instead of re-deriving. Running the engine
+    // here meant every page view paid for a full-history analysis; on a large
+    // account that took minutes and took the server down with it. Scans are
+    // now triggered from the account page — see app/actions/anomalies.ts.
+    anomalies: await getStoredAnomaliesForPage(paged.rows.map((r) => r.id)),
     page: paged.page,
     pageCount: paged.pageCount,
     totalCount: paged.totalCount,

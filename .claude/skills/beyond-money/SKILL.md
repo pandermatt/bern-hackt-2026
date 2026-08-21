@@ -108,6 +108,10 @@ Unchanged from the template this app grew out of, and still exactly true.
   — no copy of anyone's finances in a client bundle — still holds, because what
   crosses is the *aggregate* (nine numbers a month) and never the ledger.
   `components/transaction-list.tsx` must stay server-side.
+- The other client components are the ones that genuinely need interactivity:
+  `transaction-pagination.tsx`, `demo-data-controls.tsx` and
+  `anomaly-scan-controls.tsx`. The last polls a background job and holds no
+  financial data of its own — only a progress count.
 - **Filter state lives in the URL**, not in React state. A view is shareable,
   bookmarkable, and survives a reload. `TransactionFilters` calls
   `router.replace` inside a `useTransition`; because it reads `useSearchParams`
@@ -192,6 +196,46 @@ Unchanged from the template this app grew out of, and still exactly true.
 - `tests/seed-rules.test.ts` asserts all of the above against the shipped
   files. If you change the merchant table or swap the exports, that is the test
   that will tell you what broke.
+
+## Anomaly detection
+
+- **The engine never runs during a render.** It used to, over the account's
+  whole history, on every dashboard load — at 25k transactions that was minutes
+  of blocking CPU and took the server down with it. A scan is now triggered
+  explicitly from `/account`, writes to the `anomalies` table, and the dashboard
+  only reads rows back for the transaction ids on the page.
+- `app/actions/anomalies.ts` owns the scan. `startAnomalyScan` inserts an
+  `anomaly_runs` row and returns immediately; the work continues as a floating
+  promise and the browser polls `getAnomalyScanStatus`. Progress lives in the
+  database precisely because the request that started it has already returned.
+- **`getStoredAnomaliesForPage` resolves the account from the session, never
+  from an argument.** Every export of a `"use server"` module is an endpoint the
+  browser can call with arguments it chooses, so a `userId` parameter there
+  would be an open door onto any account's findings. Keep that shape for any
+  new action.
+- The scan yields to the event loop (`setImmediate`) around the analysis and
+  between insert batches. Without that, the poll that draws the progress bar
+  cannot be served while the work it reports on is running.
+- Results are **replaced wholesale** per account on each scan, so re-running is
+  idempotent. `anomalies.transactionId` is deliberately **not** a foreign key —
+  a scan is a snapshot, and a cascade would silently empty the table when
+  statements are re-imported rather than leaving a stale result the user can see
+  and re-run.
+- **The engine is performance-sensitive and easy to regress.** Two things keep
+  it near-linear, and both look like harmless cleanups:
+  - `parseTransactionDate` memoises on the transaction object. Several rules
+    compare every transaction with every other, so it is called O(n²) times;
+    un-memoised it was ~75% of total runtime.
+  - `AMOUNT_SPIKE` caches median/MAD **per baseline group**, not per
+    transaction. The baseline is the merchant's or category's whole history, so
+    it is identical for every transaction in that group; computing it inside
+    the loop made the rule O(n · g log g) and was the single largest cost.
+  - `BALANCE_DROP` uses a two-cursor sliding window. Its `right` cursor must
+    cover every transaction sharing the current timestamp — date-only rows all
+    land on the same instant, and stopping at `i` would silently shrink the
+    window.
+  Together these took 25k transactions from ~10 minutes to under a second. If
+  you touch the engine, re-check it against a large synthetic account.
 
 ## Design system
 
