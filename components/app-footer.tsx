@@ -5,7 +5,6 @@ import pkg from "@/package.json";
 import { site } from "@/lib/site";
 import type { User } from "@/db/schema";
 
-
 export function AppFooter({ user }: { user: User | null }) {
   return (
     <footer className="w-full border-t border-line bg-surface py-12">
@@ -30,18 +29,22 @@ export function AppFooter({ user }: { user: User | null }) {
             <ShieldCheck className="size-3.5" />
             <span>Client-Scoped Privacy</span>
           </div>
-          <Link
-            href="/login"
-            className="text-text-muted hover:text-text transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="/register"
-            className="text-text-muted hover:text-text transition-colors"
-          >
-            Register
-          </Link>
+          {!user && (
+            <>
+              <Link
+                href="/login"
+                className="text-text-muted hover:text-text transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/register"
+                className="text-text-muted hover:text-text transition-colors"
+              >
+                Register
+              </Link>
+            </>
+          )}
           <span className="font-mono text-[11px] text-text-subtle">
             v{pkg.version}
           </span>
