@@ -33,6 +33,17 @@ never through the UI.
   "tighten" this to NOT NULL** without a deliberate migration plan — and for
   the same reason, do not add a NOT NULL column to `transactions` once it has
   rows.
+- **`budgets` is the one writable table.** `transactions` is read-only in the
+  UI; budget limits are not. Its `userId` is **NOT NULL**, unlike
+  `transactions.userId` — that column is nullable because it was added to a
+  populated table and `drizzle-kit push` deploys without `--force`, whereas
+  `budgets` is created empty, so the constraint costs nothing. The unique index
+  on `(user_id, category)` is what makes saving an upsert rather than a
+  read-then-write race.
+- **An unset limit is `null`, and zero is a real budget of nothing.** Clearing
+  a field deletes the row; it does not store 0. Don't collapse the two — a
+  category budgeted at nothing and a category with no budget render, sort and
+  warn differently.
 - **Money is signed integer minor units** (`amount_minor`, rappen), never
   `real`. The EUR lines in the source arrive as `46.96976052505031`, and
   summing a few hundred IEEE-754 doubles drifts. Income is positive, expenses
@@ -111,7 +122,13 @@ Unchanged from the template this app grew out of, and still exactly true.
   also what makes the colour slots stable — see the design-system notes. Totals,
   breakdowns and the ledger follow the filter.
 - Filters are validated with zod and parsed with `safeParse(…).data ?? default`,
-  so a junk query string renders defaults rather than throwing.
+  so a junk query string renders defaults rather than throwing. `?month=` on
+  the budget page is checked against the months that exist and falls back to
+  the default rather than rendering an empty page.
+- **`saveBudgets` is the app's only data mutation, and it uses the `{ ok }`
+  envelope** — that is what the envelope was always for. It runs its deletes
+  and upserts inside one `db.transaction`, so a half-saved budget is not a
+  state the page can land in. Reads on that page still return data directly.
 
 ## Rendering
 
@@ -148,6 +165,12 @@ Unchanged from the template this app grew out of, and still exactly true.
   theme changes; it returns `null` until mounted, so the first frame is already
   in the right palette. Don't duplicate the palette into TypeScript — that is
   what breaks "restyle by editing tokens".
+- **The budget radar scales every spoke to itself.** Rent and Pets differ by
+  two orders of magnitude, and one shared maximum flattens every small category
+  into the centre. The cost is that spokes cannot be compared to each other —
+  which is fine, because the comparison the chart is for is *fill against
+  outline on the same spoke*: spend inside the line or past it. Say so in the
+  caption; a reader who assumes a shared scale will misread it.
 - **The two charts answer different questions, and neither should grow into
   the other.** "Month by month" is money **in against out** over time — two
   overlaid areas, no category breakdown. The donut carries the category story —
