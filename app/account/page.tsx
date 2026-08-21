@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
+import { ThemeSetting } from "@/components/theme-setting";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,23 @@ export default async function AccountPage() {
 
       {/* Demo and Synthetic Data Tools */}
       <DemoDataControls />
+
+      <div className="card mt-8 overflow-hidden border-line">
+        <div className="border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5">
+          <h2 className="text-[14.5px] font-semibold text-text">Appearance</h2>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
+          <div>
+            <p className="text-[14px] font-medium text-text">Colour theme</p>
+            <p className="mt-0.5 text-[13px] text-text-muted">
+              Applies to this browser only — the choice is stored locally, not on
+              your account. New visitors follow their system setting until they
+              pick one here.
+            </p>
+          </div>
+          <ThemeSetting />
+        </div>
+      </div>
 
       <div className="card mt-8 overflow-hidden border-danger/30">
         <div className="border-b border-danger/20 bg-danger-soft px-4 py-3 sm:px-5">

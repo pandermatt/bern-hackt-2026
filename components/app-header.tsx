@@ -3,7 +3,6 @@ import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
 
 import { logout } from "@/app/actions/auth";
 import { Logo } from "@/components/logo";
-import { ThemeToggle } from "@/components/theme-toggle";
 import type { User } from "@/db/schema";
 
 /**
@@ -28,7 +27,6 @@ export function AppHeader({ user }: { user: User | null }) {
 
         {user ? (
           <div className="flex items-center gap-2.5">
-            <ThemeToggle />
             <Link
               href="/account"
               aria-label="Account settings"
@@ -48,7 +46,6 @@ export function AppHeader({ user }: { user: User | null }) {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <Link href="/login" className={`flex items-center gap-1.5 ${CONTROL}`}>
               <LogIn className="size-3.5 text-text-subtle" />
               <span>Sign in</span>

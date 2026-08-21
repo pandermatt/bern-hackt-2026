@@ -324,8 +324,10 @@ Every other route requires a session.
   components; both also render the identical figures as a `<table>` that ships
   in the server HTML, which is what a screen reader, a JS-off browser, or a
   failed chunk actually gets.
-- `components/theme-provider.tsx`, `components/theme-toggle.tsx` — the
-  light/dark/system switch, on `next-themes`.
+- `components/theme-provider.tsx`, `components/theme-setting.tsx` — the
+  light/dark switch, on `next-themes`. The control lives on `/account` under
+  Appearance rather than in the header; the provider still defaults to the
+  system setting, so a first visit follows the OS until someone picks a side.
 - `app/globals.css` — the design tokens, mapped onto shadcn's token names.
 
 Schema changes go through `npm run db:push`. There is no migrations folder and
