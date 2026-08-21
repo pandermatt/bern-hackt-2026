@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # .tool-versions is the single source of truth for the Node version;
+      # don't duplicate it here.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      # better-sqlite3's native build is allowed by the allowScripts block in
+      # package.json, so this needs no extra flags.
+      - run: npm ci
+
+      - run: npm run lint
+
+      # Cheap, and keeps the build deterministic if anything ever reaches the
+      # database while rendering.
+      - run: npm run db:push
+        env:
+          DATABASE_PATH: ./data/ci.db
+
+      # Also the typecheck: next build runs TypeScript. A standalone
+      # `tsc --noEmit` would fail on the route types the build generates.
+      - run: npm run build
+
+      - run: npm test
