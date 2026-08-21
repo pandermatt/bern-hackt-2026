@@ -3,17 +3,10 @@ import { ShieldCheck, Heart } from "lucide-react";
 
 import pkg from "@/package.json";
 import { site } from "@/lib/site";
+import type { User } from "@/db/schema";
 
-/*
- * Tokens rather than `neutral-*` literals: this footer arrived from a redesign
- * that predated the dark theme, and a hardcoded `bg-white` is a white slab
- * under a dark page. Each literal maps to the token that renders the same in
- * light mode. The privacy badge moves from emerald onto the app's own
- * `--positive` pair, which is the Pistachio family — a small hue shift, but it
- * is the documented "good" token and it is legible on both grounds.
- */
 
-export function AppFooter() {
+export function AppFooter({ user }: { user: User | null }) {
   return (
     <footer className="w-full border-t border-line bg-surface py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col sm:flex-row items-center justify-between gap-6 px-5 sm:px-8">

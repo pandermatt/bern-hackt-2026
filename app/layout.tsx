@@ -75,14 +75,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased">
         <ThemeProvider>
           <AppHeader user={user} />
-          {children}
-          <AppFooter />
-          <Toaster position="bottom-right" />
-          {/* useSearchParams needs a boundary it can suspend against. */}
-          <Suspense fallback={null}>
-            <FlashToaster />
-          </Suspense>
-          <ServiceWorkerRegistrar />
+        {children}
+        <AppFooter user={user} />
+        <Toaster position="bottom-right" />
+        {/* useSearchParams needs a boundary it can suspend against. */}
+        <Suspense fallback={null}>
+          <FlashToaster />
+        </Suspense>
+        <ServiceWorkerRegistrar />
         </ThemeProvider>
       </body>
     </html>

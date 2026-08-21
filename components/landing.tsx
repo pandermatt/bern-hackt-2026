@@ -301,10 +301,8 @@ export function Landing() {
                         <p className="font-medium text-text truncate">{tx.title}</p>
                         <p className="text-[11px] text-text-subtle truncate">{tx.date} · {tx.account}</p>
                       </div>
-                      <span
-                        className={`font-mono font-semibold shrink-0 ${
-                          tx.inflow ? "text-positive-hover" : "text-text"
-                        }`}
+                      <span className={`font-mono font-semibold shrink-0 ${tx.inflow ? "text-[#4a5800]" : "text-neutral-900"
+                          }`}
                       >
                         {tx.amount}
                       </span>
