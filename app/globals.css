@@ -1,0 +1,199 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* ───────────────────────────────────────────────────────────────
+   PostFinance palette: light ground, white surfaces, teal-tinted
+   neutrals, deep teal for every interactive surface and the brand
+   yellow reserved for the signet. Committed light theme — no dark
+   variant.
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg: #f5f8f9;
+  --surface: #ffffff;
+  --surface-muted: #eef3f5;
+  --surface-hover: #f8fbfb;
+
+  --line: #dde5e8;
+  --line-strong: #c3d1d6;
+
+  --text: #0b2e36;
+  --text-muted: #55707a;
+  --text-subtle: #8fa5ac;
+
+  /* PostFinance deep teal carries every interactive surface: white text on it
+     clears AA comfortably, which the brand yellow does not. */
+  --accent: #004b5a;
+  --accent-hover: #00323d;
+  --accent-soft: #e6f0f2;
+
+  /* The brand yellow is an identity colour, not an interface one — it is the
+     signet tile and nothing else. */
+  --brand: #ffcc00;
+
+  --danger: #d92d20;
+  --danger-hover: #b42318;
+  --danger-soft: #fef3f2;
+
+  /* Money has a direction, and it is not "good/bad" — it is in/out. The green
+     sits a clear 55 degrees of hue off the teal accent so a small chart bar is
+     never mistaken for a piece of chrome. */
+  --positive: #1a7f37;
+  --positive-hover: #136229;
+  --positive-soft: #eaf6ed;
+
+  /* Categorical ramp for the breakdown bars, opening on the two brand colours.
+     The gold is deepened from #ffcc00 so a 6px bar still reads on white. */
+  --chart-1: #004b5a;
+  --chart-2: #d6a100;
+  --chart-3: #0891b2;
+  --chart-4: #7c3aed;
+  --chart-5: #be123c;
+  --chart-6: #1a7f37;
+  --chart-7: #ea580c;
+  --chart-8: #64748b;
+
+  --radius: 8px;
+
+  --shadow-sm: 0 1px 2px 0 rgb(16 24 40 / 0.05);
+  --shadow-md:
+    0 1px 3px 0 rgb(16 24 40 / 0.1), 0 1px 2px -1px rgb(16 24 40 / 0.06);
+  --shadow-lg:
+    0 4px 6px -1px rgb(16 24 40 / 0.08), 0 2px 4px -2px rgb(16 24 40 / 0.05);
+
+  /* shadcn token mapping */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-muted);
+  --muted-foreground: var(--text-muted);
+  --accent-foreground: var(--accent);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--accent);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-hover: var(--surface-hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-brand: var(--brand);
+  --color-positive: var(--positive);
+  --color-positive-hover: var(--positive-hover);
+  --color-positive-soft: var(--positive-soft);
+
+  --font-sans: var(--font-nunito);
+  --font-mono: var(--font-plex-mono);
+  --font-heading: var(--font-nunito);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --shadow-card: var(--shadow-md);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply font-sans;
+    background-color: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+/* Logo hover: the arrow's stem draws itself, the way a balance ticks up.
+   `pathLength={1}` in components/logo.tsx normalizes the stroke so these
+   keyframes work without knowing its real length. Resting state is untouched —
+   the animation only exists while the hover class applies it. */
+@keyframes trend-draw {
+  0% {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  100% {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
