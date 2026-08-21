@@ -3,8 +3,9 @@ import { ShieldCheck, Heart } from "lucide-react";
 
 import pkg from "@/package.json";
 import { site } from "@/lib/site";
+import type { User } from "@/db/schema";
 
-export function AppFooter() {
+export function AppFooter({ user }: { user: User | null }) {
   return (
     <footer className="w-full border-t border-neutral-100 bg-white py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col sm:flex-row items-center justify-between gap-6 px-5 sm:px-8">
@@ -28,18 +29,22 @@ export function AppFooter() {
             <ShieldCheck className="size-3.5" />
             <span>Client-Scoped Privacy</span>
           </div>
-          <Link
-            href="/login"
-            className="text-neutral-500 hover:text-neutral-900 transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="/register"
-            className="text-neutral-500 hover:text-neutral-900 transition-colors"
-          >
-            Register
-          </Link>
+          {!user && (
+            <>
+              <Link
+                href="/login"
+                className="text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/register"
+                className="text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                Register
+              </Link>
+            </>
+          )}
           <span className="font-mono text-[11px] text-neutral-400">
             v{pkg.version}
           </span>
