@@ -105,6 +105,9 @@ export function ChatDebug() {
             </p>
 
             <p className="px-3 pt-0.5 text-[11px] text-text-subtle">
+              {entry.note && (
+                <span className="font-medium text-accent">{entry.note} · </span>
+              )}
               {entry.model} · max {entry.maxTokens} tok
               {entry.usage &&
                 ` · ${entry.usage.promptTokens ?? "?"} in / ${entry.usage.completionTokens ?? "?"} out`}

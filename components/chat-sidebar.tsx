@@ -37,6 +37,7 @@ export function ChatSidebar() {
   const [view, setView] = useState<"chat" | "debug">("chat");
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [followUps, setFollowUps] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -64,6 +65,7 @@ export function ChatSidebar() {
 
     const history = [...messages, { role: "user" as const, content }];
     setMessages(history);
+    setFollowUps([]);
     setInput("");
 
     startTransition(async () => {
@@ -81,6 +83,7 @@ export function ChatSidebar() {
             error: turn.error,
           },
         ]);
+        setFollowUps(turn.followUps ?? []);
       } catch {
         setMessages((prev) => [
           ...prev,
@@ -235,6 +238,24 @@ export function ChatSidebar() {
                 send(input);
               }}
             >
+              {followUps.length > 0 && !pending && (
+                <div
+                  className="mb-2.5 flex gap-2 overflow-x-auto pb-0.5"
+                  aria-label="Suggested follow-up questions"
+                >
+                  {followUps.map((followUp, index) => (
+                    <button
+                      key={followUp}
+                      type="button"
+                      onClick={() => send(followUp)}
+                      className="shrink-0 cursor-pointer rounded-full border border-line bg-bg px-3 py-1.5 text-[12px] text-text-muted transition-colors duration-300 animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards hover:border-accent hover:bg-accent-soft hover:text-accent"
+                      style={{ animationDelay: `${index * 90}ms` }}
+                    >
+                      {followUp}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <input
                   ref={inputRef}

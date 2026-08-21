@@ -25,6 +25,8 @@ export type AssistantLogEntry = {
   model: string;
   maxTokens: number;
   question: string;
+  /** Which round of the tool loop this request was, and what it fetched. */
+  note?: string;
   /** How many chat messages were sent upstream, system prompt included. */
   messageCount: number;
   /** The JSON body sent upstream, pretty-printed and truncated. No key. */
