@@ -7,6 +7,7 @@ import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
 import { ServiceWorkerRegistrar } from "@/components/sw-register";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { getCurrentUser } from "@/lib/auth";
 import { site } from "@/lib/site";
@@ -62,9 +63,18 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${googleSansFlex.variable} ${plexMono.variable} h-full antialiased`}
+      // next-themes' pre-paint script sets `class="dark"` on this element
+      // before React hydrates, so the class it finds never matches the one the
+      // server rendered. Without this, that mismatch is a console error on
+      // every load.
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-white font-sans text-text antialiased">
-        <AppHeader user={user} />
+      {/* `bg-bg`, not `bg-white`: main set `--bg` to #ffffff, so this renders
+          identically in light mode while still following the dark theme. A
+          literal here would keep the page white on a dark ground. */}
+      <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased">
+        <ThemeProvider>
+          <AppHeader user={user} />
         {children}
         <AppFooter user={user} />
         <Toaster position="bottom-right" />
@@ -73,8 +83,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <FlashToaster />
         </Suspense>
         <ServiceWorkerRegistrar />
+        </ThemeProvider>
       </body>
     </html>
   );
 }
-

@@ -12,7 +12,12 @@
    every interactive surface while Supernova and Pistachio stay as
    fills. Everything below is either one of those five or derived
    from one, and every derived tone is checked against WCAG AA.
-   Committed light theme — no dark variant.
+
+   Two themes. `:root` is the light theme; `.dark` re-derives the
+   same five brand colours against a dark ground, which is a set of
+   deliberately chosen steps and not an inversion — Blue Stone at
+   7.9:1 on white is 1.6:1 on #1c1c1c and has to be lightened to
+   stay the accent. next-themes puts the class on <html>.
    ─────────────────────────────────────────────────────────────── */
 
 :root {
@@ -56,16 +61,54 @@
   --positive-hover: #4a5800;
   --positive-soft: #f4f8e6;
 
-  /* Categorical ramp for the breakdown bars, opening on the brand colours.
-     Supernova is deepened to #d6a100 so a 6px bar still reads on white. */
-  --chart-1: #005b61;
-  --chart-2: #a5c400;
-  --chart-3: #d6a100;
-  --chart-4: #0891b2;
-  --chart-5: #7c3aed;
-  --chart-6: #be123c;
-  --chart-7: #ea580c;
-  --chart-8: #64748b;
+  /* Categorical ramp — identity, one slot per category, assigned in fixed
+     order and never cycled.
+
+     These ten hexes are the supplied brand palette, used verbatim. What is
+     *not* verbatim is the slot order. Listed by role the palette groups its
+     families together — three teals, then two limes, then two yellows — and
+     adjacent slots are what touch in a stacked bar and a pie. In listed order
+     Brand yellow beside Soft lime was protanopic ΔE 2.9, and Soft yellow
+     beside Brand yellow was 7.4 even with full colour vision: two categories,
+     one apparent colour. Re-ordering alone fixes that without moving a single
+     hex — worst neighbouring pair is now ΔE 17.2 protan / 25.1 normal, against
+     a target of 8 and a floor of 15. Slot 1 stays Primary teal, the palette's
+     "main / most important category".
+
+     Six of the ten sit under 3:1 on white (Soft yellow is 1.26:1). That is a
+     property of the palette, not of the order, and it is why the percentage
+     labels, the legend and the `sr-only` tables are load-bearing rather than
+     decorative — they are the relief those fills are conditional on. Don't
+     remove them. Re-run the dataviz validator after touching a slot. */
+  --chart-1: #005b61; /* Primary teal  — main category */
+  --chart-2: #a5c400; /* Brand lime    */
+  --chart-3: #16878b; /* Medium teal   */
+  --chart-4: #e99332; /* Warm orange   */
+  --chart-5: #397fad; /* Blue          */
+  --chart-6: #ffe47a; /* Soft yellow   */
+  --chart-7: #63b8b5; /* Light teal    */
+  --chart-8: #ffcc00; /* Brand yellow  */
+  --chart-9: #d66f5c; /* Muted coral   */
+  --chart-10: #c8d95b; /* Soft lime    */
+  /* The fold-in bucket, and the palette's own neutrals. "Other" is
+     everything else, not an eleventh identity — nothing past slot 10 gets a
+     generated hue. Dark neutral here and Concrete in `.dark`: the palette
+     supplies one light and one dark neutral, and each is used on the ground it
+     can actually be seen against. */
+  --chart-other: #343a3a;
+  /* Dark neutral in its stated role — the diagrams' text, connectors and
+     outlines. Canvas cannot read a Tailwind class, so the charts pull this
+     through `useChartTokens`. */
+  --chart-ink: #343a3a;
+
+  /* Money has a direction, and the chart that shows it is not categorical —
+     two series, in and out. These take the palette's own stated roles for it:
+     Brand lime is "positive / growth", Muted coral is the contrasting one.
+     Same hexes in both themes; both clear the pair separation check
+     (deuteranopic ΔE 13.1) and read as green/red, so they agree with the
+     summary tiles above the chart without borrowing a categorical slot. */
+  --flow-in: #a5c400;
+  --flow-out: #d66f5c;
 
   --radius: 12px;
 
@@ -95,6 +138,88 @@
   --ring: var(--accent);
 }
 
+/* ───────────────────────────────────────────────────────────────
+   Dark theme. Chosen steps, not an inversion.
+
+   The neutrals stay untinted for the same reason the light ones do.
+   Blue Stone is lightened to #4cc3cc (8.1:1 on the dark surface,
+   where the brand hex would be 1.6:1) and takes a dark ink on top
+   of it instead of white. Supernova and Pistachio keep their brand
+   hexes: both are already bright, and on a dark ground they finally
+   clear AA as text, so `--positive` can be Pistachio itself rather
+   than the darkened step light mode needs.
+   ─────────────────────────────────────────────────────────────── */
+.dark {
+  --bg: #121212;
+  --surface: #1c1c1c;
+  --surface-muted: #2b2b2b;
+  --surface-hover: #242424;
+
+  --line: #333333;
+  /* Control borders need 3:1 against the surface to be perceivable; the light
+     theme's #c2c2c2 lands at 1.2:1 here. This is 3.3:1. */
+  --line-strong: #6e6e6e;
+
+  --text: #f2f2f2; /* Concrete, now the ink rather than the ground */
+  --text-muted: #a9a9a9; /* 7.3:1 */
+  --text-subtle: #949494; /* 5.6:1 */
+
+  --accent: #4cc3cc; /* 8.1:1 on --surface */
+  --accent-hover: #6fd4db;
+  --accent-soft: #123c40;
+
+  --brand: #ffcc00;
+  --pistachio: #a5c400;
+  /* The edge has to be lighter than the fill here, not darker — its job is to
+     separate the fill from the ground, and the ground moved. */
+  --pistachio-edge: #cbe84a;
+
+  --danger: #f57a70; /* 6.4:1; the light theme's #d92d20 is 3.2:1 here */
+  --danger-hover: #fb8a80;
+  --danger-soft: #3a1a17;
+
+  /* On a dark ground Pistachio clears AA as text on its own (8.5:1), so the
+     darkened step light mode needs would only make it muddier. */
+  --positive: #a5c400;
+  --positive-hover: #b7d92a;
+  --positive-soft: #22290a;
+
+  /* The same ten hexes, in the same slot order — a category keeps its colour
+     across themes. Only the neutrals swap, because only they have a light and
+     a dark member to swap between.
+
+     Nine of the ten read better here than on white; the exception is Primary
+     teal, which is 2.17:1 against this surface. It is kept unchanged rather
+     than lightened, because the palette named it and lightening it would walk
+     it into Medium teal one slot over. The same relief applies as in light
+     mode. */
+  --chart-1: #005b61;
+  --chart-2: #a5c400;
+  --chart-3: #16878b;
+  --chart-4: #e99332;
+  --chart-5: #397fad;
+  --chart-6: #ffe47a;
+  --chart-7: #63b8b5;
+  --chart-8: #ffcc00;
+  --chart-9: #d66f5c;
+  --chart-10: #c8d95b;
+  --chart-other: #f2f2f2;
+  --chart-ink: #f2f2f2;
+
+  /* 8.5:1 and 5.1:1 on this surface — better here than on white. */
+  --flow-in: #a5c400;
+  --flow-out: #d66f5c;
+
+  /* Shadows read as noise on a dark ground — a lifted surface is what carries
+     elevation here, so these thin out to a hairline. */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 4px 12px -2px rgb(0 0 0 / 0.6);
+
+  /* White on a light teal is 1.8:1 — the button ink has to flip with it. */
+  --primary-foreground: #00272a;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -120,6 +245,7 @@
   --color-positive: var(--positive);
   --color-positive-hover: var(--positive-hover);
   --color-positive-soft: var(--positive-soft);
+  --color-chart-other: var(--chart-other);
 
   --font-sans: var(--font-sans), "Google Sans Flex Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), monospace;
@@ -156,6 +282,11 @@
 
   html {
     @apply font-sans;
+    background-color: var(--bg);
+    /* Lets the UA paint scrollbars, date pickers and other built-in controls
+       for the right theme — `<input type="date">` in the filter bar renders a
+       light calendar icon on a dark field without it. */
+    color-scheme: light;
     background-color: #ffffff;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -173,6 +304,10 @@
     color: var(--accent-hover);
   }
 
+  html.dark {
+    color-scheme: dark;
+  }
+
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -180,6 +315,30 @@
 }
 
 @layer components {
+  /*
+   * A fixed-palette island.
+   *
+   * The Supernova CTA band on the landing page keeps its #ffcc00 ground in
+   * both themes — it is the brand colour, not a surface — so the ink on it
+   * must not follow the theme either. In dark mode `--text` is near-white,
+   * which on Supernova is 1.3:1.
+   *
+   * Re-pointing the tokens locally beats hardcoding a colour on each of the
+   * dozen elements inside: `@theme inline` emits `var(--text)` at the use
+   * site, so every `text-text` / `bg-text` / `text-bg` below this class picks
+   * these up instead. `--bg` stays white because the band's filled pill is
+   * `bg-text text-bg` — ink and its inverse, both anchored here.
+   */
+  .on-brand {
+    --text: #1a1a1a;
+    --text-muted: #4a4223;
+    --text-subtle: #57501f;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --line: #e0b900;
+    --line-strong: #c9a600;
+  }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--line);

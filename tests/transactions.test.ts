@@ -183,6 +183,29 @@ describe("filters", () => {
     expect(dashboard?.totals.expense).toBe(182000);
   });
 
+  it("reports the viewed range from the filtered set, not the whole history", async () => {
+    // The header under "Your year in money" reads `view`, so a date filter has
+    // to move it — `facets` stays put because it feeds the dropdowns.
+    const all = await getDashboard({});
+    expect(all?.view.first).toBe("2025-01-01");
+    expect(all?.view.last).toBe("2025-01-23");
+
+    const narrowed = await getDashboard({ from: "2025-01-02", to: "2025-01-31" });
+    expect(narrowed?.view.first).toBe("2025-01-23");
+    expect(narrowed?.view.last).toBe("2025-01-23");
+    // Unchanged, so the date inputs keep offering the full span.
+    expect(narrowed?.facets.first).toBe("2025-01-01");
+  });
+
+  it("leaves the viewed range empty when a filter matches nothing", async () => {
+    // Distinguishes "your filter is too narrow" from "you imported nothing",
+    // which the header words differently.
+    const dashboard = await getDashboard({ from: "2030-01-01" });
+
+    expect(dashboard?.view.first).toBe("");
+    expect(dashboard?.facets.first).toBe("2025-01-01");
+  });
+
   it("falls back to defaults on a malformed query string rather than throwing", async () => {
     const dashboard = await getDashboard({
       from: "not-a-date",

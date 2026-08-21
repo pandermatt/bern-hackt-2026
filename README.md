@@ -96,6 +96,29 @@ only — never type. `--positive` (`#5F7000`) is Pistachio darkened to 5.5:1 for
 amounts set as text, and `--danger` red is a system colour rather than a brand
 one. Every derived tone in `app/globals.css` was checked against WCAG AA.
 
+There are **two themes**. `:root` is light; `.dark` re-derives the same five
+brand colours against a dark ground, and it is a set of chosen steps rather
+than an inversion — Blue Stone at 7.9:1 on white is 1.6:1 on `#1c1c1c`, so it
+is lightened to `#4cc3cc` and takes dark ink on top instead of white. The
+neutrals stay untinted in both. `next-themes` writes the class onto `<html>`,
+which is why `<html>` carries `suppressHydrationWarning`, and `color-scheme`
+follows so native date pickers and scrollbars match.
+
+The categorical ramp (`--chart-1` … `--chart-10`, plus a neutral
+`--chart-other`) is the charts' identity channel: one fixed slot per category,
+assigned from the whole-range ranking so a filter can never repaint the
+survivors, and never cycled — the eleventh category and beyond fold into
+"Other" rather than getting a generated hue.
+
+The ten hexes are supplied brand colours, used verbatim and identical in both
+themes. Their **slot order** is derived, not given: a palette listed by role
+groups its families together, and adjacent slots are what touch in a stacked
+bar and a pie. In the supplied order two pairs collapsed — Brand yellow beside
+Soft lime at protanopic ΔE 2.9, Soft yellow beside Brand yellow at 7.4 under
+normal vision. Re-ordering fixed both without moving a hex. Re-run the
+adjacency check after touching a slot; the list is in `app/globals.css` with
+the current worst-pair numbers in the comment above it.
+
 Nothing else hardcodes the product name.
 
 ### Icons
@@ -295,12 +318,22 @@ Every other route requires a session.
 - `lib/insights.ts` — every aggregate the dashboard shows, as **pure
   functions**. No database import, and the schema type is imported
   `import type`, so `formatMoney` is safe to call from client code.
-- `components/transaction-filters.tsx` — the **only** client component. Filter
-  state lives in the URL rather than React state, so a view is shareable and
-  survives a reload, and the transaction list never leaves the server.
-- `components/monthly-trend.tsx` — the chart, as server-rendered inline SVG.
-  There is no charting library and there should not be one: every React chart
-  library is client-only, and this is twelve pairs of rectangles.
+- `components/transaction-filters.tsx` — the filter bar. Filter state lives in
+  the URL rather than React state, so a view is shareable and survives a
+  reload, and the transaction list never leaves the server.
+- `components/echart.tsx` — the app's single ECharts boundary: module-level
+  chart registration, the palette read out of the CSS custom properties, and
+  the init / resize / dispose lifecycle. The two charts import from here.
+- `components/monthly-trend.tsx` and `components/category-pie.tsx` — an
+  in-versus-out area chart, and a `padAngle` donut of the category split. Both
+  are client
+  components; both also render the identical figures as a `<table>` that ships
+  in the server HTML, which is what a screen reader, a JS-off browser, or a
+  failed chunk actually gets.
+- `components/theme-provider.tsx`, `components/theme-setting.tsx` — the
+  light/dark switch, on `next-themes`. The control lives on `/account` under
+  Appearance rather than in the header; the provider still defaults to the
+  system setting, so a first visit follows the OS until someone picks a side.
 - `app/globals.css` — the design tokens, mapped onto shadcn's token names.
 
 Schema changes go through `npm run db:push`. There is no migrations folder and
