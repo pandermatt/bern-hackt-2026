@@ -32,13 +32,21 @@ export function proxy(request: NextRequest) {
     pathname === "/sw.js" ||
     pathname === "/offline";
 
+  // A *missing* cookie is conclusive — nobody holding no cookie is signed in —
+  // so this direction is safe to decide here.
   if (!hasCookie && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (hasCookie && isAuthRoute) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
+  // The opposite direction is NOT safe here, and used to be: bouncing /login to
+  // "/" whenever a cookie was present assumed presence meant signed in. After a
+  // redeploy that rebuilt the database, every browser still held a cookie whose
+  // session row was gone — so "/" rendered the landing page, its "Sign in" link
+  // went to /login, and /login bounced straight back to "/". An unbreakable
+  // loop, with no way to sign in short of clearing cookies by hand.
+  //
+  // Only `getCurrentUser()` can tell a live session from a dead one, so
+  // app/login and app/register do that redirect themselves.
 
   return NextResponse.next();
 }

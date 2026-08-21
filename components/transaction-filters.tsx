@@ -34,6 +34,26 @@ export function TransactionFilters({
     // in the URL and read as one.
     if (value) params.set(key, value);
     else params.delete(key);
+    // A filter change narrows or widens the result set, so a remembered page
+    // number no longer points at the same rows.
+    params.delete("page");
+
+    startTransition(() => {
+      const query = params.toString();
+      router.replace(query ? `/?${query}` : "/", { scroll: false });
+    });
+  }
+
+  function toggleCategory(category: string) {
+    const params = new URLSearchParams(searchParams);
+    const selected = params.getAll("categories");
+    const next = selected.includes(category)
+      ? selected.filter((value) => value !== category)
+      : [...selected, category];
+
+    params.delete("categories");
+    for (const value of next) params.append("categories", value);
+    params.delete("page");
 
     startTransition(() => {
       const query = params.toString();
@@ -83,24 +103,6 @@ export function TransactionFilters({
             {facets.accounts.map((account) => (
               <option key={account} value={account}>
                 {account}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-text-muted">
-            Category
-          </span>
-          <select
-            className={CONTROL}
-            value={filters.category ?? ""}
-            onChange={(event) => update("category", event.target.value)}
-          >
-            <option value="">All categories</option>
-            {facets.categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
               </option>
             ))}
           </select>
@@ -167,7 +169,38 @@ export function TransactionFilters({
           </select>
         </label>
 
-        <div className="flex items-end justify-between gap-3">
+        {/* Full-width: up to ~19 category chips need room to wrap, which a
+            quarter-width grid cell does not have. */}
+        <fieldset className="sm:col-span-2 lg:col-span-4">
+          <legend className="mb-1.5 block text-[12px] font-medium text-text-muted">
+            Categories
+          </legend>
+          <div className="flex flex-wrap gap-1.5">
+            {facets.categories.map((category) => {
+              const checked = filters.categories?.includes(category) ?? false;
+              return (
+                <label
+                  key={category}
+                  className={`cursor-pointer rounded-full border px-2.5 py-1 text-[12.5px] font-medium transition-colors ${
+                    checked
+                      ? "border-accent bg-accent-soft text-accent"
+                      : "border-line-strong bg-surface text-text-muted hover:bg-surface-muted"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={checked}
+                    onChange={() => toggleCategory(category)}
+                  />
+                  {category}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <div className="flex items-end justify-between gap-3 sm:col-span-2 lg:col-span-4">
           <label className="flex cursor-pointer items-center gap-2 pb-2 text-[13px] text-text">
             <input
               type="checkbox"

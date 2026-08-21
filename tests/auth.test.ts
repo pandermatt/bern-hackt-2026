@@ -97,6 +97,21 @@ describe("sessions", () => {
     await expect(getCurrentUser()).resolves.toBeNull();
   });
 
+  it("returns null when the session row is gone but the cookie remains", async () => {
+    // What a redeploy onto a rebuilt database looks like from the browser: the
+    // cookie is still there, the row behind it is not. `proxy.ts` can only see
+    // the cookie, so this is the check that has to be authoritative — see the
+    // signed-in guard in app/login/page.tsx.
+    const user = await createUser("a@example.com");
+    await createSession(user.id);
+    await expect(getCurrentUser()).resolves.not.toBeNull();
+
+    await db.delete(sessions);
+
+    expect(cookieJar.has(SESSION_COOKIE)).toBe(true);
+    await expect(getCurrentUser()).resolves.toBeNull();
+  });
+
   it("returns null for a forged cookie", async () => {
     await createUser("a@example.com");
     cookieJar.set(SESSION_COOKIE, "not-a-real-token");

@@ -93,6 +93,10 @@ export default function Loading() {
               <Bar key={field} className="h-[52px] w-full" />
             ))}
           </div>
+          {/* The category chip row, collapsed to one bar rather than one per
+              chip — the skeleton approximates fields, it doesn't enumerate
+              them. */}
+          <Bar className="mt-3 h-[30px] w-full" />
         </div>
 
         <div className="card mt-4 overflow-hidden">
@@ -111,6 +115,12 @@ export default function Loading() {
               <Bar className="ml-auto h-[13px] w-[80px] shrink-0" />
             </div>
           ))}
+          {/* The Previous / page N of M / Next footer. */}
+          <div className="flex items-center justify-between gap-4 border-t border-line px-4 py-3 sm:px-5">
+            <Bar className="h-8 w-[76px]" />
+            <Bar className="h-[12px] w-[90px]" />
+            <Bar className="h-8 w-[52px]" />
+          </div>
         </div>
       </div>
     </main>

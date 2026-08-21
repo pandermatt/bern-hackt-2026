@@ -21,19 +21,18 @@
    ─────────────────────────────────────────────────────────────── */
 
 :root {
-  /* PostFinance Concrete on White. Neutral greys, not tinted — Concrete is a
-     pure neutral (HSL 0, 0, 95) and a teal-tinted scale fights it. */
-  --bg: #f2f2f2;
+  /* Clean White Palette with PostFinance Accents */
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-muted: #e6e6e6;
+  --surface-muted: #f5f5f7;
   --surface-hover: #fafafa;
 
-  --line: #dcdcdc;
-  --line-strong: #c2c2c2;
+  --line: #e5e5ea;
+  --line-strong: #d1d1d6;
 
-  --text: #1a1a1a;
-  --text-muted: #5c5c5c;
-  --text-subtle: #6e6e6e;
+  --text: #1d1d1f;
+  --text-muted: #6e6e73;
+  --text-subtle: #86868b;
 
   /* Blue Stone carries every interactive surface. It is the only brand colour
      that works as text: 7.9:1 on white, and 7.9:1 the other way round for
@@ -87,13 +86,13 @@
      ninth identity. Nothing past slot 8 ever gets a generated hue. */
   --chart-other: #7d7d7d;
 
-  --radius: 8px;
+  --radius: 12px;
 
-  --shadow-sm: 0 1px 2px 0 rgb(16 24 40 / 0.05);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --shadow-md:
-    0 1px 3px 0 rgb(16 24 40 / 0.1), 0 1px 2px -1px rgb(16 24 40 / 0.06);
+    0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
   --shadow-lg:
-    0 4px 6px -1px rgb(16 24 40 / 0.08), 0 2px 4px -2px rgb(16 24 40 / 0.05);
+    0 8px 24px -4px rgb(0 0 0 / 0.08), 0 2px 6px -1px rgb(0 0 0 / 0.04);
 
   /* shadcn token mapping */
   --background: var(--bg);
@@ -211,9 +210,9 @@
   --color-positive-soft: var(--positive-soft);
   --color-chart-other: var(--chart-other);
 
-  --font-sans: var(--font-nunito);
-  --font-mono: var(--font-plex-mono);
-  --font-heading: var(--font-nunito);
+  --font-sans: var(--font-sans), "Google Sans Flex Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), monospace;
+  --font-heading: var(--font-sans), "Google Sans Flex Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -231,10 +230,10 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
 
   --shadow-card: var(--shadow-md);
 }
@@ -251,6 +250,7 @@
        for the right theme — `<input type="date">` in the filter bar renders a
        light calendar icon on a dark field without it. */
     color-scheme: light;
+    background-color: #ffffff;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
