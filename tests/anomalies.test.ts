@@ -19,8 +19,12 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   getCurrentUser: async () => signedIn.user,
 }));
 
-const { getAnomalyScanStatus, getStoredAnomaliesForPage, startAnomalyScan } =
-  await import("@/app/actions/anomalies");
+const {
+  getAnomalyScanState,
+  getAnomalyScanStatus,
+  getStoredAnomaliesForPage,
+  startAnomalyScan,
+} = await import("@/app/actions/anomalies");
 
 async function createUser(email: string) {
   const [user] = await db
@@ -157,6 +161,47 @@ describe("running a scan", () => {
     expect(status.status).toBe("done");
     expect(status.total).toBe(0);
     expect(await db.select().from(anomalies)).toHaveLength(0);
+  });
+});
+
+describe("scan state (drives the dashboard prompt)", () => {
+  it("reports no completed scan on a fresh account", async () => {
+    expect(await getAnomalyScanState()).toEqual({
+      hasCompletedScan: false,
+      running: false,
+    });
+  });
+
+  it("reports a scan in flight", async () => {
+    await db
+      .insert(anomalyRuns)
+      .values({ userId: alice.id, status: "running", startedAt: new Date() });
+
+    expect(await getAnomalyScanState()).toEqual({
+      hasCompletedScan: false,
+      running: true,
+    });
+  });
+
+  it("counts a clean scan as completed, so the prompt stops", async () => {
+    // The distinction the prompt hangs on: an account with nothing wrong must
+    // not be nagged to scan again just because it has no findings.
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+    await db.delete(anomalies);
+
+    const state = await getAnomalyScanState();
+    expect(state.hasCompletedScan).toBe(true);
+    expect(state.running).toBe(false);
+  });
+
+  it("reports nothing for a signed-out visitor", async () => {
+    signedIn.user = null;
+    expect(await getAnomalyScanState()).toEqual({
+      hasCompletedScan: false,
+      running: false,
+    });
   });
 });
 

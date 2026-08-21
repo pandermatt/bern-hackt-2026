@@ -6,6 +6,7 @@ import { CategoryPie } from "@/components/category-pie";
 import { Landing } from "@/components/landing";
 import { MonthlyTrend } from "@/components/monthly-trend";
 import { SummaryCards } from "@/components/summary-cards";
+import { AnomalySuggestion } from "@/components/anomaly-suggestion";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
 import { getCurrentUser } from "@/lib/auth";
@@ -69,6 +70,17 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             emptyLabel="No merchants in this range."
           />
         </div>
+
+        {/* Sits directly above the ledger, because that is where the findings
+            it is offering would show up. Only until the first scan completes —
+            after that, no badges is a genuine answer rather than a gap. */}
+        {!dashboard.anomalyScan.hasCompletedScan &&
+          dashboard.totalCount > 0 && (
+            <AnomalySuggestion
+              running={dashboard.anomalyScan.running}
+              transactionCount={dashboard.totalCount}
+            />
+          )}
 
         {/* TransactionFilters reads useSearchParams, which needs a boundary it
             can suspend against. */}

@@ -19,7 +19,10 @@ import { z } from "zod";
 import { db } from "@/db";
 import { transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
-import { getStoredAnomaliesForPage } from "@/app/actions/anomalies";
+import {
+  getAnomalyScanState,
+  getStoredAnomaliesForPage,
+} from "@/app/actions/anomalies";
 import { type AnomalyInsight } from "@/lib/anomaly-engine";
 import {
   applyFilters,
@@ -91,6 +94,11 @@ export type Dashboard = {
   categories: Slice[];
   merchants: Slice[];
   transactions: Transaction[];
+  /**
+   * Lets the dashboard prompt for a first scan without mistaking a clean
+   * account for an un-scanned one — see getAnomalyScanState.
+   */
+  anomalyScan: { hasCompletedScan: boolean; running: boolean };
   anomalies: AnomalyInsight[];
   page: number;
   pageCount: number;
@@ -252,6 +260,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     // account that took minutes and took the server down with it. Scans are
     // now triggered from the account page — see app/actions/anomalies.ts.
     anomalies: await getStoredAnomaliesForPage(paged.rows.map((r) => r.id)),
+    anomalyScan: await getAnomalyScanState(),
     page: paged.page,
     pageCount: paged.pageCount,
     totalCount: paged.totalCount,

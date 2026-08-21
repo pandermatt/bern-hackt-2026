@@ -83,7 +83,11 @@ export function AnomalyScanControls() {
       : 0;
 
   return (
-    <section className="card mt-8 overflow-hidden" aria-labelledby="scan-heading">
+    <section
+      id="anomaly-scan"
+      className="card mt-8 scroll-mt-20 overflow-hidden"
+      aria-labelledby="scan-heading"
+    >
       <div className="border-b border-line bg-surface-muted/50 px-4 py-3 sm:px-5">
         <h2 id="scan-heading" className="text-[14.5px] font-semibold text-text">
           Anomaly detection

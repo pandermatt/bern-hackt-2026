@@ -196,6 +196,36 @@ export async function startAnomalyScan(): Promise<
   return { ok: true };
 }
 
+/**
+ * Whether this account has ever completed a scan, and whether one is running
+ * right now.
+ *
+ * The dashboard needs this to tell two very different states apart: "no
+ * findings because nobody has scanned yet" — worth prompting about — and "no
+ * findings because a scan ran and the account is clean", which is a result, not
+ * a gap. Counting rows in `anomalies` alone cannot distinguish them, and would
+ * nag people whose books are simply in order.
+ */
+export async function getAnomalyScanState(): Promise<{
+  hasCompletedScan: boolean;
+  running: boolean;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { hasCompletedScan: false, running: false };
+
+  const runs = await db
+    .select({ status: anomalyRuns.status })
+    .from(anomalyRuns)
+    .where(eq(anomalyRuns.userId, user.id))
+    .orderBy(desc(anomalyRuns.id))
+    .limit(20);
+
+  return {
+    hasCompletedScan: runs.some((r) => r.status === "done"),
+    running: runs.some((r) => r.status === "running"),
+  };
+}
+
 export async function getAnomalyScanStatus(): Promise<ScanStatus | null> {
   const user = await getCurrentUser();
   if (!user) return null;
