@@ -8,9 +8,12 @@ import {
   formatDay,
   formatMoney,
   monthlySeries,
+  slotsOf,
+  stackByCategory,
   paginate,
   summarize,
   topMerchants,
+  CATEGORY_SLOTS,
   type Filters,
 } from "@/lib/insights";
 
@@ -126,6 +129,120 @@ describe("monthlySeries", () => {
 
   it("returns nothing when there is nothing to plot", () => {
     expect(monthlySeries([])).toEqual([]);
+  });
+});
+
+describe("stackByCategory", () => {
+  /** One expense row per (category, month), so the arithmetic is obvious. */
+  const spend = (category: string, bookedOn: string, minor: number) =>
+    row({ category, bookedOn, amountMinor: -minor, kind: "expense" });
+
+  it("aligns every band with the gap-filled month axis", () => {
+    const stack = stackByCategory([
+      spend("Housing", "2025-01-05", 100_000),
+      spend("Housing", "2025-03-05", 100_000),
+      spend("Transport", "2025-03-05", 5_000),
+    ]);
+
+    expect(stack.months).toEqual(["2025-01", "2025-02", "2025-03"]);
+    expect(stack.labels).toEqual(["Jan", "Feb", "Mar"]);
+    // A band covers the whole axis, zero-filled — a short array would silently
+    // shift a category's spending into the wrong month.
+    for (const band of stack.bands) {
+      expect(band.values).toHaveLength(stack.months.length);
+    }
+    expect(stack.bands.map((band) => band.key)).toEqual(["Housing", "Transport"]);
+    expect(stack.bands[0].values).toEqual([100_000, 0, 100_000]);
+    expect(stack.bands[1].values).toEqual([0, 0, 5_000]);
+    expect(stack.total).toBe(205_000);
+  });
+
+  it("assigns slots by rank, 1-based, matching the --chart-N tokens", () => {
+    const stack = stackByCategory([
+      spend("Transport", "2025-01-05", 1_000),
+      spend("Housing", "2025-01-05", 9_000),
+      spend("Travel", "2025-01-05", 5_000),
+    ]);
+
+    expect(stack.bands.map((band) => [band.key, band.slot])).toEqual([
+      ["Housing", 1],
+      ["Travel", 2],
+      ["Transport", 3],
+    ]);
+  });
+
+  it("folds everything past the last slot into one neutral band", () => {
+    // One more category than the ramp has slots, descending, so exactly one
+    // falls off. Derived from CATEGORY_SLOTS rather than hardcoded — the ramp
+    // has been resized once already and this test should survive the next one.
+    const count = CATEGORY_SLOTS + 1;
+    const rows = Array.from({ length: count }, (_, index) =>
+      spend(`Cat${index}`, "2025-01-05", (count - index) * 1_000),
+    );
+    // 1 + 2 + … + count, in thousands.
+    const grandTotal = ((count * (count + 1)) / 2) * 1_000;
+
+    const stack = stackByCategory(rows);
+
+    expect(stack.bands).toHaveLength(CATEGORY_SLOTS + 1);
+    const last = stack.bands[stack.bands.length - 1];
+    expect(last.key).toBe("Other");
+    // Slot 0 is the neutral: the odd one out never gets a generated hue.
+    expect(last.slot).toBe(0);
+    expect(last.total).toBe(1_000);
+    // Nothing is lost in the fold.
+    expect(stack.total).toBe(grandTotal);
+  });
+
+  it("never lets the literal Other category win a colour of its own", () => {
+    const stack = stackByCategory([
+      spend("Other", "2025-01-05", 90_000),
+      spend("Housing", "2025-01-05", 1_000),
+    ]);
+
+    // "Other" outspends Housing five to one and still takes the neutral: it is
+    // the tail bucket by definition, and two bands both labelled "Other" would
+    // be unreadable.
+    expect(stack.bands.map((band) => [band.key, band.slot])).toEqual([
+      ["Housing", 1],
+      ["Other", 0],
+    ]);
+  });
+
+  it("ignores income and transfers", () => {
+    const stack = stackByCategory([
+      row({ kind: "income", category: "Salary", amountMinor: 500_000 }),
+      row({ kind: "transfer", category: "Transfer", amountMinor: -50_000 }),
+      spend("Housing", "2025-03-14", 1_000),
+    ]);
+
+    expect(stack.bands.map((band) => band.key)).toEqual(["Housing"]);
+    expect(stack.total).toBe(1_000);
+  });
+
+  it("returns nothing when there is nothing to plot", () => {
+    expect(stackByCategory([])).toEqual({
+      months: [],
+      labels: [],
+      bands: [],
+      total: 0,
+    });
+  });
+});
+
+describe("slotsOf", () => {
+  it("maps a category to its slot so a filter cannot repaint it", () => {
+    const stack = stackByCategory([
+      row({ category: "Housing", amountMinor: -9_000 }),
+      row({ category: "Transport", amountMinor: -1_000 }),
+    ]);
+
+    const slots = slotsOf(stack);
+
+    expect(slots.get("Housing")).toBe(1);
+    expect(slots.get("Transport")).toBe(2);
+    // Unknown keys are the caller's problem to default; the map does not guess.
+    expect(slots.get("Pets")).toBeUndefined();
   });
 });
 

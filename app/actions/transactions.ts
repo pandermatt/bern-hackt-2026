@@ -28,9 +28,12 @@ import {
   byCategory,
   facetsOf,
   monthlySeries,
+  stackByCategory,
+  paginate,
   PAGE_SIZE,
   summarize,
   topMerchants,
+  type CategoryStack,
   type Facets,
   type Filters,
   type MonthPoint,
@@ -78,6 +81,8 @@ export type Dashboard = {
   facets: Facets;
   totals: Totals;
   monthly: MonthPoint[];
+  /** Whole-range spending per category per month — the chart pair upstairs. */
+  stack: CategoryStack;
   categories: Slice[];
   merchants: Slice[];
   transactions: Transaction[];
@@ -231,6 +236,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     // the chart even when you are looking at one month.
     facets: facetsOf(rows),
     monthly: monthlySeries(rows),
+    stack: stackByCategory(rows),
     totals: summarize(filtered),
     categories: byCategory(filtered),
     merchants: topMerchants(filtered, 8),

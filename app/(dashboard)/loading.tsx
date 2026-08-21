@@ -11,9 +11,11 @@ import type { CSSProperties } from "react";
  * `/login`, and the same went for `/register` and `/account`. The route group
  * scopes it to `/` without changing the URL. Don't move it back up.
  *
- * Mirrors the dashboard's shape — heading, four tiles, chart, two breakdowns,
- * filters, rows — so the real content lands in roughly the same places rather
- * than shifting.
+ * Mirrors the dashboard's shape — heading, four tiles, the two charts, two
+ * breakdowns, filters, rows — so the real content lands in roughly the same
+ * places rather than shifting. Both chart blocks reserve the height their
+ * ECharts canvas will take, heading and footnote included; a canvas that sizes
+ * itself from its container cannot reserve its own space.
  *
  * `animate-pulse` is safe here where an entrance animation would not be: it
  * animates between visible states, so nothing is hidden if JS never runs.
@@ -51,10 +53,17 @@ export default function Loading() {
           ))}
         </div>
 
+        {/* Month by month: 320px of canvas plus the footnote line. */}
         <div className="card mt-4 p-5">
           <Bar className="h-[15px] w-[130px]" />
-          {/* The chart's own footprint, so the page does not jump when it lands. */}
-          <Bar className="mt-4 h-[212px] w-full" />
+          <Bar className="mt-4 h-[320px] w-full" />
+          <Bar className="mt-3 h-[11px] w-[300px]" />
+        </div>
+
+        {/* The whole year: 320px of donut. */}
+        <div className="card mt-4 p-5">
+          <Bar className="h-[15px] w-[110px]" />
+          <Bar className="mt-4 h-[320px] w-full" />
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">

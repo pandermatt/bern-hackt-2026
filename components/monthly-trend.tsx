@@ -1,25 +1,32 @@
+"use client";
+
+import { useMemo } from "react";
+
+import {
+  EChart,
+  tooltipStyle,
+  useChartTokens,
+  withAlpha,
+  type ChartTokens,
+  type EChartsOption,
+} from "@/components/echart";
 import { formatMoney, type MonthPoint } from "@/lib/insights";
 
-/*
- * Server-rendered SVG rather than a chart library. This is twelve pairs of
- * rectangles, and every React charting library is client-only — one would ship
- * a few hundred KB of JavaScript and a hydration boundary to draw them. Inline
- * SVG is in the HTML at first paint, works with JS off, and never shifts.
+/**
+ * Money in against money out, month by month, as two overlaid areas.
+ *
+ * Deliberately **not** broken down by category. The category story is told
+ * twice already, below: the donut splits the year and "Where it goes" ranks it.
+ * This chart answers the one question those cannot — whether a month earned
+ * more than it spent — and a nine-band stack was drowning that in detail.
+ *
+ * The areas overlap rather than stack. Stacking income on top of spending sums
+ * to a number that means nothing; overlaying them makes the gap between the
+ * two curves the thing you actually read, which is the month's net.
  */
 
-const WIDTH = 720;
-/**
- * Left gutter for the axis labels, so January's bars cannot sit on top of them.
- * Wide enough for a six-character amount at 10px monospace plus breathing room —
- * the labels are anchored at x=0 because an end-anchored one runs off the left
- * edge of the viewBox and gets clipped.
- */
-const GUTTER = 52;
-const PLOT_TOP = 14;
-const PLOT_HEIGHT = 178;
-const BASELINE = PLOT_TOP + PLOT_HEIGHT;
-const LABEL_BASELINE = BASELINE + 20;
-const HEIGHT = LABEL_BASELINE + 8;
+const HEIGHT = 320;
+const GRID = { left: 58, right: 14, top: 16, bottom: 46 };
 
 /** Rounds a rappen amount up to a tidy gridline so the axis reads cleanly. */
 function niceCeiling(value: number): number {
@@ -28,15 +35,110 @@ function niceCeiling(value: number): number {
   return Math.ceil(value / (magnitude / 2)) * (magnitude / 2);
 }
 
-export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
-  if (series.length === 0) return null;
-
+function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
   const peak = niceCeiling(
     Math.max(1, ...series.flatMap((point) => [point.income, point.expense])),
   );
-  const column = (WIDTH - GUTTER) / series.length;
-  const barWidth = Math.min(16, column / 2 - 5);
-  const scale = (value: number) => (value / peak) * PLOT_HEIGHT;
+
+  const area = (colour: string) => ({
+    color: {
+      type: "linear" as const,
+      x: 0, y: 0, x2: 0, y2: 1,
+      // Thin on purpose. Two overlapping fills multiply where they cross, and
+      // at 0.45 the shared region went muddy enough to read as a third colour.
+      // The strokes carry the series; the fill is only there to say which side
+      // of the line is "under".
+      colorStops: [
+        { offset: 0, color: withAlpha(colour, 0.28) },
+        { offset: 1, color: withAlpha(colour, 0.03) },
+      ],
+    },
+  });
+
+  const line = (name: string, colour: string, values: number[]) => ({
+    name,
+    type: "line" as const,
+    smooth: true,
+    // The stroke carries the series; the fill only shades the space under it,
+    // which is why the fill can be transparent enough for both to show.
+    lineStyle: { width: 2, color: colour },
+    itemStyle: { color: colour },
+    areaStyle: area(colour),
+    showSymbol: false,
+    // A visible dot at the hovered month, so the crosshair reading is exact.
+    symbol: "circle",
+    symbolSize: 7,
+    emphasis: { focus: "series" as const },
+    data: values,
+  });
+
+  return {
+    animationDuration: 600,
+    grid: GRID,
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "line", lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
+      ...tooltipStyle(tokens),
+      formatter: (params) => {
+        const rows = Array.isArray(params) ? params : [params];
+        const index = rows[0]?.dataIndex ?? 0;
+        const point = series[index];
+        if (!point) return "";
+        const negative = point.net < 0;
+        return [
+          `${point.month}`,
+          `${rows[0]?.marker ?? ""}In<span style="float:right;padding-left:18px"><strong>${formatMoney(point.income)}</strong></span>`,
+          `${rows[1]?.marker ?? ""}Out<span style="float:right;padding-left:18px"><strong>${formatMoney(point.expense)}</strong></span>`,
+          // The gap between the curves, named.
+          `<span style="opacity:.75">Net</span><span style="float:right;padding-left:18px;color:${
+            negative ? tokens.flowOut : tokens.flowIn
+          }"><strong>${negative ? "−" : "+"}${formatMoney(point.net)}</strong></span>`,
+        ].join("<br/>");
+      },
+    },
+    legend: {
+      bottom: 0,
+      icon: "roundRect",
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 16,
+      textStyle: { color: tokens.textMuted, fontSize: 12 },
+    },
+    xAxis: {
+      type: "category",
+      data: series.map((point) => point.label),
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
+      axisTick: { show: false },
+      axisLabel: { color: tokens.ink, fontSize: 11 },
+    },
+    yAxis: {
+      type: "value",
+      max: peak,
+      axisLabel: {
+        color: withAlpha(tokens.ink, 0.75),
+        fontSize: 10,
+        // Francs, not rappen. The footnote says CHF once.
+        formatter: (value: number) =>
+          Math.round(value / 100).toLocaleString("de-CH"),
+      },
+      splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
+    },
+    series: [
+      line("In", tokens.flowIn, series.map((point) => point.income)),
+      line("Out", tokens.flowOut, series.map((point) => point.expense)),
+    ],
+  };
+}
+
+export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
+  const tokens = useChartTokens();
+  const option = useMemo(
+    () => (tokens ? buildOption(series, tokens) : null),
+    [series, tokens],
+  );
+
+  if (series.length === 0) return null;
 
   return (
     <section className="card p-5" aria-labelledby="trend-heading">
@@ -44,105 +146,21 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
         <h2 id="trend-heading" className="text-[15px] font-semibold text-text">
           Month by month
         </h2>
-        <p className="flex items-center gap-3 text-[12.5px] text-text-muted">
-          <span className="flex items-center gap-1.5">
-            <span
-              className="size-2.5 rounded-[2px] bg-pistachio ring-1 ring-pistachio-edge"
-              aria-hidden
-            />
-            In
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-[2px] bg-danger" aria-hidden />
-            Out
-          </span>
-        </p>
+        <p className="text-[12.5px] text-text-muted">Money in against money out</p>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <svg
-          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          width="100%"
-          height="auto"
-          role="img"
-          aria-labelledby="trend-title trend-desc"
-          className="min-w-[560px]"
-        >
-          <title id="trend-title">Money in and out, by month</title>
-          <desc id="trend-desc">
-            Paired bars for each month. The table below the chart carries the
-            same figures.
-          </desc>
-
-          {/* Quarter gridlines, drawn behind the bars. */}
-          {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
-            const y = BASELINE - fraction * PLOT_HEIGHT;
-            return (
-              <g key={fraction}>
-                <line
-                  x1={GUTTER - 8}
-                  x2={WIDTH}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--line)"
-                  strokeWidth={1}
-                />
-                {fraction > 0 && (
-                  <text
-                    x={0}
-                    y={y + 3.5}
-                    className="fill-[var(--text-subtle)] font-mono text-[10px]"
-                  >
-                    {Math.round((peak * fraction) / 100).toLocaleString("de-CH")}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-          {series.map((point, index) => {
-            const centre = GUTTER + index * column + column / 2;
-            const incomeHeight = scale(point.income);
-            const expenseHeight = scale(point.expense);
-
-            return (
-              <g key={point.month}>
-                {/* Pistachio is only 2:1 against white, so the fill alone is
-                    not enough to make the bar's shape perceptible — the
-                    half-pixel stroke supplies the edge. */}
-                <rect
-                  x={centre - barWidth - 1}
-                  y={BASELINE - incomeHeight}
-                  width={barWidth}
-                  height={incomeHeight}
-                  rx={2}
-                  fill="var(--pistachio)"
-                  stroke="var(--pistachio-edge)"
-                  strokeWidth={1}
-                />
-                <rect
-                  x={centre + 1}
-                  y={BASELINE - expenseHeight}
-                  width={barWidth}
-                  height={expenseHeight}
-                  rx={2}
-                  fill="var(--danger)"
-                />
-                <text
-                  x={centre}
-                  y={LABEL_BASELINE}
-                  textAnchor="middle"
-                  className="fill-[var(--text-muted)] font-mono text-[11px]"
-                >
-                  {point.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+      <div className="mt-4">
+        <EChart
+          option={option}
+          height={HEIGHT}
+          label={`Money in and money out in Swiss francs for each month from ${series[0].month} to ${
+            series[series.length - 1].month
+          }. The table below the chart carries the same figures.`}
+        />
       </div>
 
-      {/* The same numbers, for screen readers and anyone the chart fails. */}
+      {/* The same numbers, for screen readers, for JS-off, and for anyone the
+          canvas fails. Also the relief a sub-3:1 fill requires. */}
       <table className="sr-only">
         <caption>Money in and out, by month</caption>
         <thead>

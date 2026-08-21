@@ -2,12 +2,14 @@ import { Suspense } from "react";
 
 import { getDashboard } from "@/app/actions/transactions";
 import { BreakdownList } from "@/components/breakdown-list";
+import { CategoryPie } from "@/components/category-pie";
 import { Landing } from "@/components/landing";
 import { MonthlyTrend } from "@/components/monthly-trend";
 import { SummaryCards } from "@/components/summary-cards";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
 import { getCurrentUser } from "@/lib/auth";
+import { slotsOf } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +23,11 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const dashboard = await getDashboard(await searchParams);
   if (!dashboard) return <Landing />;
 
-  const { facets, filters, monthly, totals, categories, merchants } = dashboard;
+  const { facets, filters, monthly, stack, totals, categories, merchants } =
+    dashboard;
+  // One category, one colour, everywhere on the page — and the slots come from
+  // the whole-range ranking, so a filter never repaints the survivors.
+  const slots = slotsOf(stack);
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -41,12 +47,15 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
         <MonthlyTrend series={monthly} />
 
+        <CategoryPie stack={stack} />
+
         <div className="grid gap-4 lg:grid-cols-2">
           <BreakdownList
             heading="Where it goes"
             slices={categories}
             linkParam="categories"
             emptyLabel="No spending in this range."
+            slots={slots}
           />
           <BreakdownList
             heading="Top merchants"
