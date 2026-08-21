@@ -1,7 +1,8 @@
 "use client";
 
-import { LineChart, PieChart } from "echarts/charts";
+import { BarChart, PieChart } from "echarts/charts";
 import {
+  GraphicComponent,
   GridComponent,
   LegendComponent,
   TooltipComponent,
@@ -10,7 +11,7 @@ import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useHydrated } from "@/lib/use-hydrated";
 
@@ -18,8 +19,8 @@ import { useHydrated } from "@/lib/use-hydrated";
  * The one ECharts boundary in the app.
  *
  * Charting here used to be inline SVG in a server component, and for paired
- * bars that was the right call. A stacked area over nine categories with a
- * crosshair tooltip is not something to hand-roll in SVG, so this is the
+ * bars that was the right call. A nine-category normalized stack with
+ * variation ribbons is not something to hand-roll in SVG, so this is the
  * trade the app now makes: ~330 KB of chart runtime and a hydration boundary,
  * against a chart that can actually be interrogated. What it costs is that the
  * figures cross into the client bundle — so what crosses is the *aggregate*
@@ -33,8 +34,9 @@ import { useHydrated } from "@/lib/use-hydrated";
 // Registered once per module, not per mount. Only the pieces the two charts
 // use — the barrel import is the whole library and roughly triples this.
 echarts.use([
-  LineChart,
+  BarChart,
   PieChart,
+  GraphicComponent,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -116,6 +118,22 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Plot size in CSS pixels, for options that have to do their own geometry. */
+export type ChartSize = { width: number; height: number };
+
+/**
+ * An option, or a builder that needs to know how big the chart is.
+ *
+ * The builder form exists for `graphic` overlays: ECharts positions those in
+ * pixel space, not data space, so anything drawn that way has to be recomputed
+ * whenever the canvas changes size. Options that don't do their own geometry
+ * should stay plain objects.
+ */
+export type OptionSource =
+  | EChartsOption
+  | ((size: ChartSize) => EChartsOption)
+  | null;
+
 export function EChart({
   option,
   className = "",
@@ -123,13 +141,29 @@ export function EChart({
   /** Announced in place of the canvas, which is opaque to assistive tech. */
   label,
 }: {
-  option: EChartsOption | null;
+  option: OptionSource;
   className?: string;
   height: number;
   label: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
+  // Read by the resize handler, which outlives any single render. Seeded from
+  // the first render and updated in the effect below — never during render.
+  const source = useRef<OptionSource>(option);
+
+  const apply = useCallback((animate: boolean) => {
+    const instance = chart.current;
+    const current = source.current;
+    if (!instance || !current) return;
+    const next =
+      typeof current === "function"
+        ? current({ width: instance.getWidth(), height: instance.getHeight() })
+        : current;
+    // `notMerge` because a filter can change the series count, and a merge
+    // would leave the departed series painted on the canvas.
+    instance.setOption({ ...next, animation: animate }, { notMerge: true });
+  }, []);
 
   useEffect(() => {
     const element = host.current;
@@ -137,11 +171,17 @@ export function EChart({
 
     const instance = echarts.init(element, undefined, { renderer: "canvas" });
     chart.current = instance;
+    apply(true);
 
     // ECharts sizes off the container's client box and does not watch it, so
     // a sidebar collapse or an orientation change would otherwise leave the
-    // canvas at its old width.
-    const observer = new ResizeObserver(() => instance.resize());
+    // canvas at its old width. Re-applying after the resize is what keeps a
+    // pixel-space `graphic` overlay aligned with the bars it belongs to;
+    // without animation, because a resize is not a data change.
+    const observer = new ResizeObserver(() => {
+      instance.resize();
+      apply(false);
+    });
     observer.observe(element);
 
     return () => {
@@ -149,14 +189,12 @@ export function EChart({
       instance.dispose();
       chart.current = null;
     };
-  }, []);
+  }, [apply]);
 
   useEffect(() => {
-    if (!chart.current || !option) return;
-    // `notMerge` because a filter can change the series count, and a merge
-    // would leave the departed series painted on the canvas.
-    chart.current.setOption(option, { notMerge: true });
-  }, [option]);
+    source.current = option;
+    apply(true);
+  }, [option, apply]);
 
   return (
     <div

@@ -8,6 +8,7 @@ import {
   tooltipStyle,
   useChartTokens,
   withAlpha,
+  type ChartSize,
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
@@ -18,43 +19,123 @@ import {
 } from "@/lib/insights";
 
 /**
- * Where the money went, month by month, as a gradient stacked area.
+ * Where the money went, month by month — ECharts' "Stacked Bar Normalization
+ * and Variation".
  *
- * The bands are the categories from "Where it goes" below, in the same fixed
- * colours, so the two panels read as one statement: the pie says how the year
- * split, this says when each slice happened, and the list says what is in it.
+ * Every column is divided by its own total, so each month is a full bar and
+ * what the chart shows is **composition**, not amount: the share each category
+ * took of that month's spending. The ribbons between columns are the
+ * "variation" half — each band's segment joined to the next month's, so a
+ * category widening or narrowing over the year is a shape rather than a
+ * comparison you have to do by eye.
  *
- * The bands are expenses only: a stack has to sum to something meaningful, and
- * income stacked on top of spending sums to nothing. The paired-bar version
- * this replaced also carried money *in* and the monthly net, so those two
- * columns move into the data table rather than disappearing — `series` exists
- * for no other reason.
+ * The trade is that magnitude is gone. A month where nothing was spent looks
+ * exactly like the year's peak. The absolute figures live in the summary tiles
+ * above, in the pie below, and in this chart's own data table.
+ *
+ * Bands are expenses only: a stack has to sum to something meaningful, and
+ * income stacked on spending sums to nothing. The paired-bar chart two
+ * revisions back also carried money *in* and the monthly net, so those columns
+ * stay in the data table — `series` exists for no other reason.
  */
 
-/**
- * Tall enough that the four smallest bands still get a few pixels each. At 300
- * the top of the stack was four hairlines and their separators, which is the
- * separator winning an argument with the data.
- */
 const HEIGHT = 360;
 
-function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
+/**
+ * Explicit numeric insets, and **no `containLabel`**. The variation ribbons are
+ * `graphic` elements positioned in pixel space off these numbers, so the grid
+ * has to be somewhere this file can compute; `containLabel` resolves the plot
+ * box after layout and would slide the bars out from under them. `left` is cut
+ * for a "100%" tick, `bottom` for the month labels plus the legend.
+ */
+const GRID = { left: 46, right: 14, top: 14, bottom: 54 };
+
+/** Below this share a segment is thinner than its own label. */
+const LABEL_THRESHOLD = 0.06;
+
+function buildOption(
+  stack: CategoryStack,
+  tokens: ChartTokens,
+  size: ChartSize,
+): EChartsOption {
+  const { months, labels, bands } = stack;
+
+  // Column totals, then every value as its share of one. Guarded because a
+  // month with no spending would otherwise divide by zero.
+  const totals = months.map((_, index) =>
+    bands.reduce((sum, band) => sum + (band.values[index] ?? 0), 0),
+  );
+  const shareOf = (band: (typeof bands)[number], index: number) =>
+    totals[index] > 0 ? (band.values[index] ?? 0) / totals[index] : 0;
+
+  // ── the variation ribbons ──
+  // Same construction as the ECharts example: for each gap between columns,
+  // walk the stack from the baseline up and emit one polygon per band joining
+  // its left edge to its right edge.
+  const gridWidth = size.width - GRID.left - GRID.right;
+  const gridHeight = size.height - GRID.top - GRID.bottom;
+  const categoryWidth = gridWidth / Math.max(1, months.length);
+  const barPadding = (categoryWidth - categoryWidth * 0.6) / 2;
+
+  const elements =
+    gridWidth > 0 && gridHeight > 0
+      ? months.flatMap((_, column) => {
+          if (column === 0) return [];
+          const leftX = GRID.left + categoryWidth * column - barPadding;
+          const rightX = leftX + barPadding * 2;
+          let leftY = GRID.top + gridHeight;
+          let rightY = leftY;
+
+          return bands.map((band) => {
+            const leftHeight = shareOf(band, column - 1) * gridHeight;
+            const rightHeight = shareOf(band, column) * gridHeight;
+            const points = [
+              [leftX, leftY],
+              [leftX, leftY - leftHeight],
+              [rightX, rightY - rightHeight],
+              [rightX, rightY],
+              [leftX, leftY],
+            ];
+            leftY -= leftHeight;
+            rightY -= rightHeight;
+            return {
+              type: "polygon" as const,
+              // Decoration over the bars, and never a hit target — hovering
+              // one would otherwise swallow the axis tooltip.
+              silent: true,
+              shape: { points },
+              style: { fill: withAlpha(slotColor(tokens, band.slot), 0.25) },
+            };
+          });
+        })
+      : [];
+
   return {
-    // ECharts' own animation, not Motion — it animates the canvas, not a
-    // container, so nothing is hidden if the script never arrives.
     animationDuration: 600,
-    // `bottom` has to clear the legend, which floats over the grid rather than
-    // reserving space against it — at 4 the month labels sat underneath the
-    // legend text. `containLabel` covers the axis labels, not the legend.
-    grid: { left: 8, right: 12, top: 8, bottom: 34, containLabel: true },
+    grid: GRID,
     tooltip: {
       trigger: "axis",
-      // A crosshair, because on a stack the reader is comparing one month
-      // across nine bands and needs the column called out.
-      axisPointer: { type: "line", lineStyle: { color: tokens.line, width: 1 } },
+      axisPointer: { type: "shadow", shadowStyle: { color: withAlpha(tokens.text, 0.06) } },
       ...tooltipStyle(tokens),
-      valueFormatter: (value) => formatMoney(Number(value ?? 0)),
-      order: "seriesDesc",
+      // Both numbers: the bar height is a share, but "23% of March" means
+      // little without the francs behind it.
+      formatter: (params) => {
+        const rows = Array.isArray(params) ? params : [params];
+        const index = rows[0]?.dataIndex ?? 0;
+        const head = `${months[index]} · ${formatMoney(totals[index] ?? 0)}`;
+        const body = rows
+          .slice()
+          .reverse()
+          .map((row) => {
+            const band = bands.find((candidate) => candidate.key === row.seriesName);
+            const amount = band?.values[index] ?? 0;
+            if (amount <= 0) return "";
+            const pct = ((Number(row.value) || 0) * 100).toFixed(1);
+            return `${row.marker}${row.seriesName}<span style="float:right;padding-left:18px"><strong>${formatMoney(amount)}</strong> · ${pct}%</span><br/>`;
+          })
+          .join("");
+        return `${head}<br/>${body}`;
+      },
     },
     legend: {
       type: "scroll",
@@ -63,8 +144,10 @@ function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
       itemWidth: 10,
       itemHeight: 10,
       itemGap: 14,
-      // Legend text wears an ink token, never the series colour — the swatch
-      // beside it is what carries identity.
+      // Toggling a series off would leave the remaining bars summing to less
+      // than 100% while still drawn full height — the shares are computed
+      // against every band, so the legend is a key here, not a filter.
+      selectedMode: false,
       textStyle: { color: tokens.textMuted, fontSize: 12 },
       pageIconColor: tokens.textMuted,
       pageIconInactiveColor: tokens.line,
@@ -72,59 +155,46 @@ function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
     },
     xAxis: {
       type: "category",
-      data: [...stack.labels],
-      boundaryGap: false,
+      data: [...labels],
       axisLine: { lineStyle: { color: tokens.line } },
       axisTick: { show: false },
       axisLabel: { color: tokens.textMuted, fontSize: 11 },
     },
     yAxis: {
       type: "value",
-      // Rappen on the axis would be five digits of noise; the tooltip and the
-      // table carry the exact figures.
+      max: 1,
+      // Raw 0.2 on the axis of a normalized chart is noise.
       axisLabel: {
         color: tokens.textSubtle,
         fontSize: 10,
-        formatter: (value: number) => Math.round(value / 100).toLocaleString("de-CH"),
+        formatter: (value: number) => `${Math.round(value * 100)}%`,
       },
       splitLine: { lineStyle: { color: tokens.line } },
     },
-    series: stack.bands.map((band) => {
-      const colour = slotColor(tokens, band.slot);
-      return {
-        name: band.key,
-        type: "line" as const,
-        stack: "spend",
-        smooth: true,
-        showSymbol: false,
-        // A stroke in the surface colour is the gap between stacked bands:
-        // two neighbours would otherwise share an edge with nothing between
-        // them. 1px rather than the 2px a bar chart would take — with nine
-        // bands the top four are only a few pixels tall, and a 2px gap
-        // between them costs more signal than it buys separation.
-        lineStyle: { width: 1, color: tokens.surface },
-        areaStyle: {
-          // The gradient runs top-to-bottom across each band's own box.
-          // The floor is 0.6 rather than the near-zero fade the canonical
-          // ECharts example uses: alpha is contrast spent, and the palette's
-          // slots were validated against the surface at full opacity. Below
-          // about 0.6 the paler slots stop being separable from the ground.
-          color: {
-            type: "linear" as const,
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: withAlpha(colour, 1) },
-              { offset: 1, color: withAlpha(colour, 0.6) },
-            ],
-          },
+    series: bands.map((band) => ({
+      name: band.key,
+      type: "bar" as const,
+      stack: "total",
+      barWidth: "60%",
+      itemStyle: { color: slotColor(tokens, band.slot) },
+      label: {
+        show: true,
+        // White with a shadow rather than an ink token: these sit on nine
+        // different fills, so no single theme colour clears all of them.
+        color: "#ffffff",
+        textShadowColor: "rgba(0,0,0,0.5)",
+        textShadowBlur: 3,
+        fontSize: 10,
+        // Selective, not on every segment — most of the nine are a few pixels
+        // tall in any given month.
+        formatter: (params: { value?: unknown }) => {
+          const value = Number(params.value) || 0;
+          return value >= LABEL_THRESHOLD ? `${Math.round(value * 100)}%` : "";
         },
-        // Dims the other bands on hover, which is the only way to follow one
-        // category through a nine-deep stack.
-        emphasis: { focus: "series" as const },
-        itemStyle: { color: colour },
-        data: band.values,
-      };
-    }),
+      },
+      data: months.map((_, index) => shareOf(band, index)),
+    })),
+    graphic: { elements },
   };
 }
 
@@ -137,8 +207,11 @@ export function MonthlyTrend({
   series: MonthPoint[];
 }) {
   const tokens = useChartTokens();
+  // A builder rather than an option: the ribbons need the canvas's pixel size,
+  // and `EChart` re-runs this on every resize.
   const option = useMemo(
-    () => (tokens ? buildOption(stack, tokens) : null),
+    () =>
+      tokens ? (size: ChartSize) => buildOption(stack, tokens, size) : null,
     [stack, tokens],
   );
   const byMonth = useMemo(
@@ -155,7 +228,7 @@ export function MonthlyTrend({
           Month by month
         </h2>
         <p className="text-[12.5px] text-text-muted">
-          Spending by category, stacked
+          Share of each month&rsquo;s spending, by category
         </p>
       </div>
 
@@ -163,14 +236,15 @@ export function MonthlyTrend({
         <EChart
           option={option}
           height={HEIGHT}
-          label={`Spending by category for each month from ${stack.months[0]} to ${
+          label={`Share of spending by category for each month from ${stack.months[0]} to ${
             stack.months[stack.months.length - 1]
-          }. The table below the chart carries the same figures.`}
+          }. Every column totals 100%. The table below the chart carries the same figures in francs.`}
         />
       </div>
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
-          canvas fails. Also the relief the palette's sub-3:1 fills require. */}
+          canvas fails. Also where the absolute amounts live, since a
+          normalized chart cannot show them. */}
       <table className="sr-only">
         <caption>Spending by category, by month</caption>
         <thead>
@@ -198,7 +272,7 @@ export function MonthlyTrend({
                 <td>{formatMoney(point?.expense ?? 0)}</td>
                 <td>{formatMoney(point?.income ?? 0)}</td>
                 <td>
-                  {(point?.net ?? 0) < 0 ? "\u2212" : ""}
+                  {(point?.net ?? 0) < 0 ? "−" : ""}
                   {formatMoney(point?.net ?? 0)}
                 </td>
               </tr>
@@ -208,8 +282,8 @@ export function MonthlyTrend({
       </table>
 
       <p className="mt-3 font-mono text-[11.5px] text-text-subtle">
-        Amounts in CHF. Money out only — transfers between your own accounts are
-        excluded.
+        Each column is 100% of that month. Money out only — transfers between
+        your own accounts are excluded.
       </p>
     </section>
   );

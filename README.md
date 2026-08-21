@@ -110,7 +110,7 @@ assigned from the whole-range ranking so a filter can never repaint the
 survivors, and never cycled — the ninth category and beyond fold into "Other"
 rather than getting a generated hue. Both ramps clear an eight-way adjacency
 check under simulated protanopia and deuteranopia, which matters here because
-the stacked area and the pie put every neighbouring pair edge-to-edge. Re-run
+the stacked bars and the pie put every neighbouring pair edge-to-edge. Re-run
 that check after touching a slot; the two hexes lists are in `app/globals.css`
 with the current worst-pair numbers in the comment above them.
 
@@ -319,8 +319,9 @@ Every other route requires a session.
 - `components/echart.tsx` — the app's single ECharts boundary: module-level
   chart registration, the palette read out of the CSS custom properties, and
   the init / resize / dispose lifecycle. The two charts import from here.
-- `components/monthly-trend.tsx` and `components/category-pie.tsx` — a gradient
-  stacked area and a `padAngle` donut over the same aggregate. Both are client
+- `components/monthly-trend.tsx` and `components/category-pie.tsx` — a
+  normalized stacked bar with variation ribbons, and a `padAngle` donut, over
+  the same aggregate. Both are client
   components; both also render the identical figures as a `<table>` that ships
   in the server HTML, which is what a screen reader, a JS-off browser, or a
   failed chunk actually gets.
