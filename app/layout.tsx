@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Nunito } from "next/font/google";
+import { IBM_Plex_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { Suspense } from "react";
 
 import { AppFooter } from "@/components/app-footer";
@@ -11,9 +12,15 @@ import { getCurrentUser } from "@/lib/auth";
 import { site } from "@/lib/site";
 import "./globals.css";
 
-const nunito = Nunito({
-  variable: "--font-nunito",
-  subsets: ["latin"],
+const googleSansFlex = localFont({
+  src: [
+    {
+      path: "../public/fonts/google-sans-flex-latin-wght-normal.woff2",
+      weight: "100 1000",
+      style: "normal",
+    },
+  ],
+  variable: "--font-sans",
   display: "swap",
 });
 
@@ -54,9 +61,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${nunito.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${googleSansFlex.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-bg font-sans">
+      <body className="min-h-full flex flex-col bg-white font-sans text-text antialiased">
         <AppHeader user={user} />
         {children}
         <AppFooter />
@@ -70,3 +77,4 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     </html>
   );
 }
+
