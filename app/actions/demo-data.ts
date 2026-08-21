@@ -12,21 +12,28 @@ export type ActionState = {
   count?: number;
 };
 
-export async function generateSyntheticTransactionsAction(
-  year?: number,
-): Promise<ActionState> {
+export async function generateSyntheticTransactionsAction(options?: {
+  startYear?: number;
+  yearsCount?: number;
+  targetCount?: number;
+}): Promise<ActionState> {
   const user = await getCurrentUser();
   if (!user) {
     return { success: false, message: "You must be signed in to perform this action." };
   }
 
   try {
-    const { count } = await saveGeneratedTransactionsForUser(user.id, { year });
+    const { count } = await saveGeneratedTransactionsForUser(user.id, options);
     revalidatePath("/");
     revalidatePath("/account");
+    const yearsText =
+      options?.yearsCount && options.yearsCount > 1
+        ? `${options.yearsCount} years (from ${options.startYear ?? 2025})`
+        : `year ${options?.startYear ?? 2025}`;
+
     return {
       success: true,
-      message: `Successfully generated ${count} transactions across the year!`,
+      message: `Successfully generated ${count.toLocaleString()} transactions across ${yearsText} with rich anomalies!`,
       count,
     };
   } catch (error) {

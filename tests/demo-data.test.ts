@@ -32,7 +32,7 @@ beforeEach(async () => {
 
 describe("Synthetic Transaction Generator (Faker)", () => {
   it("generates realistic transactions spanning all 12 months", () => {
-    const rows = generateYearlyTransactions(user1.id, { year: 2025, seed: 42 });
+    const rows = generateYearlyTransactions(user1.id, { startYear: 2025, seed: 42 });
 
     expect(rows.length).toBeGreaterThan(200);
 
@@ -45,8 +45,45 @@ describe("Synthetic Transaction Generator (Faker)", () => {
     }
   });
 
+  it("scales transaction volume according to targetCount and spans multiple years", () => {
+    const target500 = generateYearlyTransactions(user1.id, {
+      startYear: 2023,
+      yearsCount: 2,
+      targetCount: 500,
+      seed: 123,
+    });
+
+    expect(target500.length).toBeGreaterThanOrEqual(450);
+
+    const years = new Set(target500.map((r) => r.bookedOn.slice(0, 4)));
+    expect(years.has("2023")).toBe(true);
+    expect(years.has("2024")).toBe(true);
+  });
+
+  it("injects rich financial anomalies into the transaction history", () => {
+    const rows = generateYearlyTransactions(user1.id, {
+      startYear: 2025,
+      targetCount: 500,
+      seed: 777,
+    });
+
+    const anomalies = rows.filter((r) => r.description.startsWith("ANOMALY:"));
+    expect(anomalies.length).toBeGreaterThanOrEqual(5);
+
+    // Check for specific anomaly types
+    const hasWhale = anomalies.some((r) => r.merchant.includes("Bucherer"));
+    const hasDup = anomalies.some((r) => r.description.includes("Duplicate Charge"));
+    const hasMicroBurst = anomalies.some((r) => r.description.includes("Rapid Micro-transaction"));
+    const hasWindfall = anomalies.some((r) => r.merchant.includes("Swisslos"));
+
+    expect(hasWhale).toBe(true);
+    expect(hasDup).toBe(true);
+    expect(hasMicroBurst).toBe(true);
+    expect(hasWindfall).toBe(true);
+  });
+
   it("assigns valid categories, accounts, and signed minor amounts", () => {
-    const rows = generateYearlyTransactions(user1.id, { year: 2025, seed: 100 });
+    const rows = generateYearlyTransactions(user1.id, { startYear: 2025, seed: 100 });
     const validCategories = new Set<string>(CATEGORIES);
 
     for (const row of rows) {
@@ -73,7 +110,8 @@ describe("Synthetic Transaction Generator (Faker)", () => {
 
   it("persists generated transactions into the database scoped to user", async () => {
     const { count } = await saveGeneratedTransactionsForUser(user1.id, {
-      year: 2025,
+      startYear: 2025,
+      targetCount: 250,
       seed: 999,
     });
 
