@@ -1,6 +1,19 @@
 "use server";
 
-import { asc, desc, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  like,
+  lte,
+  ne,
+  or,
+  type SQL,
+} from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/db";
@@ -15,7 +28,7 @@ import {
   byCategory,
   facetsOf,
   monthlySeries,
-  paginate,
+  PAGE_SIZE,
   summarize,
   topMerchants,
   type Facets,
@@ -83,7 +96,7 @@ function parseFilters(raw: unknown): Filters {
  * to *every* filter defaulting) as one unit, and a mistyped or stale `?page=`
  * — someone hand-edits the URL, or a filter change shrinks the result set out
  * from under a remembered page number — shouldn't wipe out the rest of the
- * filters to fix itself. `paginate` clamps the result into range regardless.
+ * filters to fix itself.
  */
 function parsePage(raw: unknown): number {
   const value =
@@ -92,6 +105,87 @@ function parsePage(raw: unknown): number {
       : undefined;
   const page = Math.floor(Number(Array.isArray(value) ? value[0] : value));
   return Number.isFinite(page) && page > 0 ? page : 1;
+}
+
+/**
+ * Builds the array of SQL conditions matching the applied user filters.
+ */
+export function buildFilterConditions(userId: number, filters: Filters): SQL[] {
+  const conditions: SQL[] = [eq(transactions.userId, userId)];
+
+  if (!filters.includeTransfers) {
+    conditions.push(ne(transactions.kind, "transfer"));
+  }
+  if (filters.kind) {
+    conditions.push(eq(transactions.kind, filters.kind));
+  }
+  if (filters.from) {
+    conditions.push(gte(transactions.bookedOn, filters.from));
+  }
+  if (filters.to) {
+    conditions.push(lte(transactions.bookedOn, filters.to));
+  }
+  if (filters.account) {
+    conditions.push(eq(transactions.account, filters.account));
+  }
+  if (filters.categories && filters.categories.length > 0) {
+    conditions.push(inArray(transactions.category, filters.categories));
+  }
+  if (filters.merchant) {
+    conditions.push(eq(transactions.merchant, filters.merchant));
+  }
+  if (filters.q) {
+    const needle = `%${filters.q}%`;
+    conditions.push(
+      or(
+        like(transactions.description, needle),
+        like(transactions.merchant, needle),
+      )!,
+    );
+  }
+
+  return conditions;
+}
+
+/**
+ * Loads only the current page of transactions directly from the database
+ * using SQL LIMIT and OFFSET.
+ */
+export async function getPaginatedTransactionsFromDb(
+  userId: number,
+  filters: Filters,
+  page: number,
+  pageSize: number = PAGE_SIZE,
+): Promise<{ rows: Transaction[]; totalCount: number; pageCount: number; page: number }> {
+  const conditions = buildFilterConditions(userId, filters);
+  const whereClause = and(...conditions);
+
+  // Count total matching rows in database
+  const [countResult] = await db
+    .select({ total: count() })
+    .from(transactions)
+    .where(whereClause);
+
+  const totalCount = countResult?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const clampedPage = Math.min(Math.max(1, page), pageCount);
+  const offset = (clampedPage - 1) * pageSize;
+
+  // Query only the rows in view for the current page directly from the database
+  const rows = await db
+    .select()
+    .from(transactions)
+    .where(whereClause)
+    .orderBy(desc(transactions.bookedOn), asc(transactions.id))
+    .limit(pageSize)
+    .offset(offset);
+
+  return {
+    rows,
+    totalCount,
+    pageCount,
+    page: clampedPage,
+  };
 }
 
 /**
@@ -110,27 +204,25 @@ async function ownedRows(): Promise<Transaction[] | null> {
 }
 
 /**
- * One fetch, then aggregate in JS.
- *
- * A year of statements is ~500 rows of ~60 KB through a synchronous in-process
- * driver — a full scan is well under a millisecond, and cheaper than five
- * `GROUP BY` round trips that would each re-resolve the session. The amounts
- * are integers, so JS addition is exact where drizzle's SQLite `sum()` is typed
- * `string | null`. And it keeps `lib/insights.ts` pure and database-free, which
- * is what makes it testable in milliseconds.
- *
- * The tradeoff is a row ceiling somewhere around 50k per account; past that,
- * push the aggregates into SQL.
+ * Loads the dashboard:
+ * - Loads only the visible page of transactions from the database via SQL LIMIT/OFFSET.
+ * - Computes full baseline aggregates and evaluates anomalies specifically for the visible transactions.
  */
 export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const filters = parseFilters(raw);
+  const targetPage = parsePage(raw);
+
+  // 1. Load only the current page of transactions from the database
+  const paged = await getPaginatedTransactionsFromDb(user.id, filters, targetPage);
+
+  // 2. Fetch full historical baseline rows for calculations (facets, monthly trend, totals, anomaly baseline)
   const rows = await ownedRows();
   if (!rows) return null;
 
-  const filters = parseFilters(raw);
   const filtered = applyFilters(rows, filters);
-  // Totals, the trend, and both breakdowns are computed from the full
-  // filtered set; only the row list itself is sliced to one page.
-  const paged = paginate(filtered, parsePage(raw));
 
   return {
     filters,
@@ -142,8 +234,10 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     totals: summarize(filtered),
     categories: byCategory(filtered),
     merchants: topMerchants(filtered, 8),
-    transactions: paged.rows,
-    anomalies: analyzeTransactionAnomalies(rows),
+    transactions: paged.rows, // only the rows in view loaded from the database
+    anomalies: analyzeTransactionAnomalies(rows, {
+      targetTransactionIds: paged.rows.map((r) => r.id),
+    }),
     page: paged.page,
     pageCount: paged.pageCount,
     totalCount: paged.totalCount,
@@ -151,7 +245,15 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
 }
 
 export async function listTransactions(raw: unknown): Promise<Transaction[]> {
-  const rows = await ownedRows();
-  if (!rows) return [];
-  return applyFilters(rows, parseFilters(raw));
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const filters = parseFilters(raw);
+  const conditions = buildFilterConditions(user.id, filters);
+
+  return db
+    .select()
+    .from(transactions)
+    .where(and(...conditions))
+    .orderBy(desc(transactions.bookedOn), asc(transactions.id));
 }

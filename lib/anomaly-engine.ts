@@ -92,6 +92,7 @@ export interface EngineOptions {
   typicalMonthlyIncomeMinor?: number; // if known in advance, else inferred from salary/income history
   minHistoryDays?: number;
   travelSpeedThresholdKmH?: number; // default 800 km/h
+  targetTransactionIds?: number[] | Set<number>; // if provided, only flag anomalies for these transactions
 }
 
 /* =========================================================================
@@ -1594,7 +1595,18 @@ export function analyzeTransactionAnomalies(
     }
   }
 
-  return rawInsights.map((r) => ({
+  let finalInsights = rawInsights;
+  if (options.targetTransactionIds) {
+    const targetSet =
+      options.targetTransactionIds instanceof Set
+        ? options.targetTransactionIds
+        : new Set(options.targetTransactionIds);
+    finalInsights = rawInsights.filter((r) =>
+      r.transaction_ids.some((id) => targetSet.has(id)),
+    );
+  }
+
+  return finalInsights.map((r) => ({
     ...r,
     emoji: RULE_EMOJIS[r.rule_id] ?? "⚠️",
   }));
