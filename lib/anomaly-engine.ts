@@ -110,14 +110,35 @@ export function normalizeMerchant(name: string): string {
     .trim();
 }
 
+/**
+ * Parsed dates are memoised per transaction object.
+ *
+ * Several rules compare every transaction against every other one inside a
+ * sliding window, so this is called O(n²) times — at 25k transactions that was
+ * ~625 million `Date` allocations and roughly 75% of the engine's total
+ * runtime. The objects are read-only here (nothing mutates a returned Date),
+ * so handing back the same instance is safe, and a WeakMap keeps it from
+ * pinning rows in memory after a scan.
+ */
+const dateCache = new WeakMap<TransactionInput, Date>();
+
 export function parseTransactionDate(t: TransactionInput): Date {
-  if (t.timestamp) return new Date(t.timestamp);
-  // Support both YYYY-MM-DD and full ISO strings
-  if (t.bookedOn.includes("T") || t.bookedOn.includes(":")) {
-    return new Date(t.bookedOn);
+  const cached = dateCache.get(t);
+  if (cached) return cached;
+
+  let parsed: Date;
+  if (t.timestamp) {
+    parsed = new Date(t.timestamp);
+  } else if (t.bookedOn.includes("T") || t.bookedOn.includes(":")) {
+    // Support both YYYY-MM-DD and full ISO strings
+    parsed = new Date(t.bookedOn);
+  } else {
+    const [y, m, d] = t.bookedOn.split("-").map(Number);
+    parsed = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
   }
-  const [y, m, d] = t.bookedOn.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+
+  dateCache.set(t, parsed);
+  return parsed;
 }
 
 export function getDaysDiff(d1: Date, d2: Date): number {
@@ -399,6 +420,8 @@ export function analyzeTransactionAnomalies(
      Trigger when amount > median + 3 * MAD (>= 5 historical comparable transactions)
      Require substantial absolute and proportional deviation (>= 50% above median).
      ------------------------------------------------------------------------- */
+  const baselineStatsCache = new Map<string, { median: number; mad: number }>();
+
   for (let i = 0; i < sorted.length; i++) {
     const t = sorted[i];
     if (t.kind !== "expense") continue;
@@ -415,9 +438,24 @@ export function analyzeTransactionAnomalies(
     const baselineType = fullMerchantHistory.length >= 5 ? "merchant" : "category";
 
     if (baselineGroup.length >= 5) {
-      const amounts = baselineGroup.map((b) => Math.abs(b.amountMinor));
-      const median = calculateMedian(amounts);
-      const rawMAD = calculateMAD(amounts, median);
+      /*
+       * Memoised per group, not per transaction. The baseline is the merchant's
+       * (or category's) whole history, so its median and MAD are identical for
+       * every transaction in that group — but this loop used to rebuild the
+       * amount array and sort it three times for each of n transactions, which
+       * made the rule O(n · g log g) and the single largest cost in the engine
+       * at scale. There are far fewer groups than transactions.
+       */
+      const baselineKey = `${baselineType}:${baselineType === "merchant" ? norm : t.category}`;
+      let stats = baselineStatsCache.get(baselineKey);
+      if (!stats) {
+        const amounts = baselineGroup.map((b) => Math.abs(b.amountMinor));
+        const m = calculateMedian(amounts);
+        stats = { median: m, mad: calculateMAD(amounts, m) };
+        baselineStatsCache.set(baselineKey, stats);
+      }
+      const median = stats.median;
+      const rawMAD = stats.mad;
 
       // Proportional noise floor: MAD is at least 25% of median or CHF 20.00 (2000 minor)
       const effectiveMAD = Math.max(rawMAD, median * 0.25, 2000);
@@ -456,13 +494,18 @@ export function analyzeTransactionAnomalies(
 
   if (nonRecurringExpenseMags.length >= 20) {
     const p99 = calculatePercentile(nonRecurringExpenseMags, 99);
+    // Hoisted: this is loop-invariant, and calculateMedian copies and sorts the
+    // whole array every call. Left inside the loop it made this rule
+    // O(n² log n) — the dominant cost in the engine once date parsing was
+    // memoised.
+    const nonRecurringMedian = calculateMedian(nonRecurringExpenseMags);
     for (const t of sorted) {
       if (t.kind !== "expense" || predictableRecurringTxIds.has(t.id)) continue;
       const mag = Math.abs(t.amountMinor);
       const isP99 = mag >= p99;
       const isIncomePct = typicalMonthlyIncome > 0 && mag > 0.2 * typicalMonthlyIncome;
 
-      if (isP99 || (isIncomePct && mag > calculateMedian(nonRecurringExpenseMags) * 3)) {
+      if (isP99 || (isIncomePct && mag > nonRecurringMedian * 3)) {
         const severity: AnomalySeverity = isP99 && isIncomePct ? "high" : "medium";
         insights.push({
           rule_id: "UNUSUALLY_LARGE_TRANSACTION",
@@ -1124,17 +1167,37 @@ export function analyzeTransactionAnomalies(
      ------------------------------------------------------------------------- */
   if (sorted.length >= 20) {
     const rollingDrops: { date: string; dropMinor: number; topTxId: number }[] = [];
+    /*
+     * A sliding window, not a re-scan. `sorted` is chronologically ascending,
+     * so the 7-day window's start only ever moves forward — advancing a `left`
+     * cursor visits each transaction once across the whole loop (O(n)) where
+     * the previous `sorted.filter(...)` per iteration was O(n²). At 25k rows
+     * that was the single biggest cost in the engine.
+     *
+     * The largest expense still needs a pass over the live window, because a
+     * running maximum cannot be undone when the element leaving the window was
+     * the maximum. That inner pass is bounded by the window's own size (a
+     * week's worth of transactions), not by the total.
+     */
+    const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+    const times = sorted.map((t) => parseTransactionDate(t).getTime());
+    let left = 0;
+    let right = -1;
     for (let i = 0; i < sorted.length; i++) {
-      const curDate = parseTransactionDate(sorted[i]);
-      const windowTxs = sorted.filter((t) => {
-        const td = parseTransactionDate(t);
-        const diff = (curDate.getTime() - td.getTime()) / (1000 * 60 * 60 * 24);
-        return diff >= 0 && diff <= 7;
-      });
+      const curMs = times[i];
+      while (times[left] < curMs - WINDOW_MS) left++;
+      // `right` must cover every transaction sharing this timestamp, not stop
+      // at `i`. Date-only rows all land on the same instant, and the scan this
+      // replaces matched them by time rather than by position — stopping at `i`
+      // would silently shrink the window for tied rows. Both cursors only move
+      // forward, so the whole loop stays O(n).
+      if (right < i) right = i;
+      while (right + 1 < sorted.length && times[right + 1] <= curMs) right++;
 
       let netOutflow = 0;
       let largestExpense: TransactionInput | null = null;
-      for (const w of windowTxs) {
+      for (let w_i = left; w_i <= right; w_i++) {
+        const w = sorted[w_i];
         if (w.kind === "expense") {
           netOutflow += Math.abs(w.amountMinor);
           if (!largestExpense || Math.abs(w.amountMinor) > Math.abs(largestExpense.amountMinor)) {
