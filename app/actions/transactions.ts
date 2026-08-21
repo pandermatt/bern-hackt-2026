@@ -79,6 +79,13 @@ const filterSchema = z.object({
 export type Dashboard = {
   filters: Filters;
   facets: Facets;
+  /**
+   * The same shape as `facets`, but over the rows the filters actually kept —
+   * what the header says you are looking at. `facets` cannot answer that: it is
+   * deliberately unfiltered so the dropdowns keep offering every option, which
+   * means its date range and account list never move when a filter is applied.
+   */
+  view: Facets;
   totals: Totals;
   monthly: MonthPoint[];
   /** Whole-range spending per category per month — the chart pair upstairs. */
@@ -235,6 +242,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     // narrow themselves into a dead end, and the year's shape is the point of
     // the chart even when you are looking at one month.
     facets: facetsOf(rows),
+    view: facetsOf(filtered),
     monthly: monthlySeries(rows),
     stack: stackByCategory(rows),
     totals: summarize(filtered),

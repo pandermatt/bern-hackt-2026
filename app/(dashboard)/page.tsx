@@ -23,7 +23,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const dashboard = await getDashboard(await searchParams);
   if (!dashboard) return <Landing />;
 
-  const { facets, filters, monthly, stack, totals, categories, merchants } =
+  const { facets, view, filters, monthly, stack, totals, categories, merchants } =
     dashboard;
   // One category, one colour, everywhere on the page — and the slots come from
   // the whole-range ranking, so a filter never repaints the survivors.
@@ -35,10 +35,15 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
           Your year in money
         </h1>
+        {/* Describes the rows in view, so it tracks the filters. An empty view
+            with statements behind it is a filter that matched nothing — a
+            different thing to say than having imported nothing at all. */}
         <p className="mt-1 text-[13.5px] text-text-muted">
-          {facets.first
-            ? `${facets.accounts.join(" and ")} · ${facets.first} to ${facets.last}`
-            : "No statements imported yet."}
+          {view.first
+            ? `${view.accounts.join(" and ")} · ${view.first} to ${view.last}`
+            : facets.first
+              ? "No transactions match these filters."
+              : "No statements imported yet."}
         </p>
       </div>
 
