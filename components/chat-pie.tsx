@@ -29,6 +29,9 @@ function buildOption(chart: ChartSpec, tokens: ChartTokens): EChartsOption {
     animationDuration: 500,
     tooltip: {
       trigger: "item",
+      // Never poke out of the chart box: in a scrolling thread an overflowing
+      // tooltip reads as a label floating over the neighbouring bubbles.
+      confine: true,
       ...tooltipStyle(tokens),
       formatter: (params) => {
         const point = params as { name: string; value: number; percent?: number };

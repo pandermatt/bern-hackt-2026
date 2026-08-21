@@ -151,7 +151,16 @@ export function EChart({
     const observer = new ResizeObserver(() => instance.resize());
     observer.observe(element);
 
+    // A scroll moves the chart out from under a stationary pointer without
+    // firing a single mouse event, so ECharts never learns the hover ended
+    // and a visible tooltip lingers over whatever scrolled into its place.
+    // Capture phase, because the chat thread scrolls an inner container and
+    // scroll events do not bubble.
+    const hideTip = () => instance.dispatchAction({ type: "hideTip" });
+    window.addEventListener("scroll", hideTip, { capture: true, passive: true });
+
     return () => {
+      window.removeEventListener("scroll", hideTip, { capture: true });
       observer.disconnect();
       instance.dispose();
       chart.current = null;
