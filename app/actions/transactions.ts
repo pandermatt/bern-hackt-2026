@@ -7,6 +7,10 @@ import { db } from "@/db";
 import { transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import {
+  analyzeTransactionAnomalies,
+  type AnomalyInsight,
+} from "@/lib/anomaly-engine";
+import {
   applyFilters,
   byCategory,
   facetsOf,
@@ -64,6 +68,7 @@ export type Dashboard = {
   categories: Slice[];
   merchants: Slice[];
   transactions: Transaction[];
+  anomalies: AnomalyInsight[];
   page: number;
   pageCount: number;
   totalCount: number;
@@ -138,6 +143,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     categories: byCategory(filtered),
     merchants: topMerchants(filtered, 8),
     transactions: paged.rows,
+    anomalies: analyzeTransactionAnomalies(rows),
     page: paged.page,
     pageCount: paged.pageCount,
     totalCount: paged.totalCount,

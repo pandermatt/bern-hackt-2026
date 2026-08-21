@@ -302,9 +302,8 @@ export function Landing() {
                         <p className="text-[11px] text-neutral-400 truncate">{tx.date} · {tx.account}</p>
                       </div>
                       <span
-                        className={`font-mono font-semibold shrink-0 ${
-                          tx.inflow ? "text-[#4a5800]" : "text-neutral-900"
-                        }`}
+                        className={`font-mono font-semibold shrink-0 ${tx.inflow ? "text-[#4a5800]" : "text-neutral-900"
+                          }`}
                       >
                         {tx.amount}
                       </span>

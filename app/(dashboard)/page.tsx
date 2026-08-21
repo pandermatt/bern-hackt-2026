@@ -64,6 +64,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
 
         <TransactionList
           rows={dashboard.transactions}
+          anomalies={dashboard.anomalies}
           page={dashboard.page}
           pageCount={dashboard.pageCount}
           totalCount={dashboard.totalCount}
