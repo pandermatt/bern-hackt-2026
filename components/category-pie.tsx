@@ -7,6 +7,7 @@ import {
   slotColor,
   tooltipStyle,
   useChartTokens,
+  withAlpha,
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
@@ -77,14 +78,15 @@ function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
           borderWidth: 1,
         },
         label: {
-          color: tokens.textMuted,
+          // Dark neutral, the palette's text/connector role.
+          color: tokens.ink,
           fontSize: 11.5,
           formatter: (params) => {
             const point = params as { name: string; percent?: number };
             return `${point.name}  ${(point.percent ?? 0).toFixed(0)}%`;
           },
         },
-        labelLine: { length: 10, length2: 12, lineStyle: { color: tokens.line } },
+        labelLine: { length: 10, length2: 12, lineStyle: { color: withAlpha(tokens.ink, 0.4) } },
         // Never let two labels stack on top of each other; drop one instead.
         labelLayout: { hideOverlap: true },
         emphasis: {

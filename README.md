@@ -104,15 +104,20 @@ neutrals stay untinted in both. `next-themes` writes the class onto `<html>`,
 which is why `<html>` carries `suppressHydrationWarning`, and `color-scheme`
 follows so native date pickers and scrollbars match.
 
-The categorical ramp (`--chart-1` … `--chart-8`, plus a neutral
+The categorical ramp (`--chart-1` … `--chart-10`, plus a neutral
 `--chart-other`) is the charts' identity channel: one fixed slot per category,
 assigned from the whole-range ranking so a filter can never repaint the
-survivors, and never cycled — the ninth category and beyond fold into "Other"
-rather than getting a generated hue. Both ramps clear an eight-way adjacency
-check under simulated protanopia and deuteranopia, which matters here because
-the stacked bars and the pie put every neighbouring pair edge-to-edge. Re-run
-that check after touching a slot; the two hexes lists are in `app/globals.css`
-with the current worst-pair numbers in the comment above them.
+survivors, and never cycled — the eleventh category and beyond fold into
+"Other" rather than getting a generated hue.
+
+The ten hexes are supplied brand colours, used verbatim and identical in both
+themes. Their **slot order** is derived, not given: a palette listed by role
+groups its families together, and adjacent slots are what touch in a stacked
+bar and a pie. In the supplied order two pairs collapsed — Brand yellow beside
+Soft lime at protanopic ΔE 2.9, Soft yellow beside Brand yellow at 7.4 under
+normal vision. Re-ordering fixed both without moving a hex. Re-run the
+adjacency check after touching a slot; the list is in `app/globals.css` with
+the current worst-pair numbers in the comment above it.
 
 Nothing else hardcodes the product name.
 

@@ -235,10 +235,10 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
 
 /**
  * How many categories get an identity colour before the tail folds together.
- * The categorical ramp is eight fixed hues; a ninth is never generated, so the
- * ninth-and-beyond categories become "Other" instead.
+ * The categorical ramp is ten fixed hues; an eleventh is never generated, so
+ * the eleventh-and-beyond categories become "Other" instead.
  */
-export const CATEGORY_SLOTS = 8;
+export const CATEGORY_SLOTS = 10;
 
 /**
  * The fold-in bucket. `scripts/lib/statement.ts` already assigns a literal

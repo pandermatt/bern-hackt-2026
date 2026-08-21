@@ -44,7 +44,7 @@ export function BreakdownList({
    * same colour their spending wears inside the pie's "Other" wedge.
    */
   const swatch = (key: string, index: number) => {
-    if (!slots) return `var(--chart-${(index % 8) + 1})`;
+    if (!slots) return `var(--chart-${(index % 10) + 1})`;
     const slot = slots.get(key) ?? 0;
     return slot === 0 ? "var(--chart-other)" : `var(--chart-${slot})`;
   };

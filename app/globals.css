@@ -62,29 +62,44 @@
   --positive-soft: #f4f8e6;
 
   /* Categorical ramp — identity, one slot per category, assigned in fixed
-     order and never cycled. It opens on Blue Stone, so the biggest category
-     wears the brand colour.
+     order and never cycled.
 
-     The old ramp put Pistachio next to a deepened Supernova, which is fine
-     for the breakdown bars (they never touch) but collapses the moment those
-     two share an edge: deuteranopic ΔE 2.7, and 11.1 even with full colour
-     vision. The stacked area and the pie put every neighbour edge-to-edge, so
-     the slots were re-stepped and re-ordered against that constraint — hues
-     held, lightness moved, chroma capped so the result still reads as
-     PostFinance rather than as a highlighter. Worst adjacent pair is now
-     ΔE 17.0 deutan / 28.6 normal, against a target of 8 and a floor of 15.
-     Verified with the dataviz palette validator; re-run it after any edit. */
-  --chart-1: #06adb7; /* Blue Stone   */
-  --chart-2: #922764; /* Rose         */
-  --chart-3: #7b9203; /* Pistachio    */
-  --chart-4: #9b233b; /* Crimson      */
-  --chart-5: #2c9ff1; /* Cyan         */
-  --chart-6: #8e7105; /* Supernova    */
-  --chart-7: #a87fe9; /* Violet       */
-  --chart-8: #a54c01; /* Orange       */
-  /* The fold-in bucket, deliberately neutral: it is "everything else", not a
-     ninth identity. Nothing past slot 8 ever gets a generated hue. */
-  --chart-other: #7d7d7d;
+     These ten hexes are the supplied brand palette, used verbatim. What is
+     *not* verbatim is the slot order. Listed by role the palette groups its
+     families together — three teals, then two limes, then two yellows — and
+     adjacent slots are what touch in a stacked bar and a pie. In listed order
+     Brand yellow beside Soft lime was protanopic ΔE 2.9, and Soft yellow
+     beside Brand yellow was 7.4 even with full colour vision: two categories,
+     one apparent colour. Re-ordering alone fixes that without moving a single
+     hex — worst neighbouring pair is now ΔE 17.2 protan / 25.1 normal, against
+     a target of 8 and a floor of 15. Slot 1 stays Primary teal, the palette's
+     "main / most important category".
+
+     Six of the ten sit under 3:1 on white (Soft yellow is 1.26:1). That is a
+     property of the palette, not of the order, and it is why the percentage
+     labels, the legend and the `sr-only` tables are load-bearing rather than
+     decorative — they are the relief those fills are conditional on. Don't
+     remove them. Re-run the dataviz validator after touching a slot. */
+  --chart-1: #005b61; /* Primary teal  — main category */
+  --chart-2: #a5c400; /* Brand lime    */
+  --chart-3: #16878b; /* Medium teal   */
+  --chart-4: #e99332; /* Warm orange   */
+  --chart-5: #397fad; /* Blue          */
+  --chart-6: #ffe47a; /* Soft yellow   */
+  --chart-7: #63b8b5; /* Light teal    */
+  --chart-8: #ffcc00; /* Brand yellow  */
+  --chart-9: #d66f5c; /* Muted coral   */
+  --chart-10: #c8d95b; /* Soft lime    */
+  /* The fold-in bucket, and the palette's own neutrals. "Other" is
+     everything else, not an eleventh identity — nothing past slot 10 gets a
+     generated hue. Dark neutral here and Concrete in `.dark`: the palette
+     supplies one light and one dark neutral, and each is used on the ground it
+     can actually be seen against. */
+  --chart-other: #343a3a;
+  /* Dark neutral in its stated role — the diagrams' text, connectors and
+     outlines. Canvas cannot read a Tailwind class, so the charts pull this
+     through `useChartTokens`. */
+  --chart-ink: #343a3a;
 
   --radius: 12px;
 
@@ -160,18 +175,27 @@
   --positive-hover: #b7d92a;
   --positive-soft: #22290a;
 
-  /* Same eight hue families in the same slot order, re-stepped for the dark
-     surface — a series keeps its identity across themes. Worst adjacent pair
-     ΔE 15.2 deutan / 28.2 normal. */
-  --chart-1: #0ca2ac;
-  --chart-2: #9c316d;
-  --chart-3: #839c00;
-  --chart-4: #a62e43;
-  --chart-5: #1d96e6;
-  --chart-6: #836804;
-  --chart-7: #9f76df;
-  --chart-8: #984501;
-  --chart-other: #8c8c8c;
+  /* The same ten hexes, in the same slot order — a category keeps its colour
+     across themes. Only the neutrals swap, because only they have a light and
+     a dark member to swap between.
+
+     Nine of the ten read better here than on white; the exception is Primary
+     teal, which is 2.17:1 against this surface. It is kept unchanged rather
+     than lightened, because the palette named it and lightening it would walk
+     it into Medium teal one slot over. The same relief applies as in light
+     mode. */
+  --chart-1: #005b61;
+  --chart-2: #a5c400;
+  --chart-3: #16878b;
+  --chart-4: #e99332;
+  --chart-5: #397fad;
+  --chart-6: #ffe47a;
+  --chart-7: #63b8b5;
+  --chart-8: #ffcc00;
+  --chart-9: #d66f5c;
+  --chart-10: #c8d95b;
+  --chart-other: #f2f2f2;
+  --chart-ink: #f2f2f2;
 
   /* Shadows read as noise on a dark ground — a lifted surface is what carries
      elevation here, so these thin out to a hairline. */

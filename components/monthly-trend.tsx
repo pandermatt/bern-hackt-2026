@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 import {
   EChart,
+  inkOn,
   slotColor,
   tooltipStyle,
   useChartTokens,
@@ -115,7 +116,7 @@ function buildOption(
     grid: GRID,
     tooltip: {
       trigger: "axis",
-      axisPointer: { type: "shadow", shadowStyle: { color: withAlpha(tokens.text, 0.06) } },
+      axisPointer: { type: "shadow", shadowStyle: { color: withAlpha(tokens.ink, 0.08) } },
       ...tooltipStyle(tokens),
       // Both numbers: the bar height is a share, but "23% of March" means
       // little without the francs behind it.
@@ -156,34 +157,35 @@ function buildOption(
     xAxis: {
       type: "category",
       data: [...labels],
-      axisLine: { lineStyle: { color: tokens.line } },
+      axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
       axisTick: { show: false },
-      axisLabel: { color: tokens.textMuted, fontSize: 11 },
+      // The palette's dark neutral in its stated role, rather than the app ink.
+      axisLabel: { color: tokens.ink, fontSize: 11 },
     },
     yAxis: {
       type: "value",
       max: 1,
       // Raw 0.2 on the axis of a normalized chart is noise.
       axisLabel: {
-        color: tokens.textSubtle,
+        color: withAlpha(tokens.ink, 0.75),
         fontSize: 10,
         formatter: (value: number) => `${Math.round(value * 100)}%`,
       },
-      splitLine: { lineStyle: { color: tokens.line } },
+      splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
     },
-    series: bands.map((band) => ({
+    series: bands.map((band) => {
+      const fill = slotColor(tokens, band.slot);
+      return {
       name: band.key,
       type: "bar" as const,
       stack: "total",
       barWidth: "60%",
-      itemStyle: { color: slotColor(tokens, band.slot) },
+      itemStyle: { color: fill },
       label: {
         show: true,
-        // White with a shadow rather than an ink token: these sit on nine
-        // different fills, so no single theme colour clears all of them.
-        color: "#ffffff",
-        textShadowColor: "rgba(0,0,0,0.5)",
-        textShadowBlur: 3,
+        // Chosen from the fill's luminance, not fixed: this ramp runs from
+        // Primary teal to Soft yellow, and one ink cannot cover both ends.
+        color: inkOn(fill),
         fontSize: 10,
         // Selective, not on every segment — most of the nine are a few pixels
         // tall in any given month.
@@ -193,7 +195,8 @@ function buildOption(
         },
       },
       data: months.map((_, index) => shareOf(band, index)),
-    })),
+      };
+    }),
     graphic: { elements },
   };
 }

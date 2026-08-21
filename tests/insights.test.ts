@@ -171,22 +171,27 @@ describe("stackByCategory", () => {
     ]);
   });
 
-  it("folds everything past the eighth category into one neutral band", () => {
-    // Nine named categories, descending, so exactly one falls off the ramp.
-    const rows = Array.from({ length: 9 }, (_, index) =>
-      spend(`Cat${index}`, "2025-01-05", (9 - index) * 1_000),
+  it("folds everything past the last slot into one neutral band", () => {
+    // One more category than the ramp has slots, descending, so exactly one
+    // falls off. Derived from CATEGORY_SLOTS rather than hardcoded — the ramp
+    // has been resized once already and this test should survive the next one.
+    const count = CATEGORY_SLOTS + 1;
+    const rows = Array.from({ length: count }, (_, index) =>
+      spend(`Cat${index}`, "2025-01-05", (count - index) * 1_000),
     );
+    // 1 + 2 + … + count, in thousands.
+    const grandTotal = ((count * (count + 1)) / 2) * 1_000;
 
     const stack = stackByCategory(rows);
 
     expect(stack.bands).toHaveLength(CATEGORY_SLOTS + 1);
     const last = stack.bands[stack.bands.length - 1];
     expect(last.key).toBe("Other");
-    // Slot 0 is the neutral: the ninth category never gets a generated hue.
+    // Slot 0 is the neutral: the odd one out never gets a generated hue.
     expect(last.slot).toBe(0);
     expect(last.total).toBe(1_000);
     // Nothing is lost in the fold.
-    expect(stack.total).toBe(45_000);
+    expect(stack.total).toBe(grandTotal);
   });
 
   it("never lets the literal Other category win a colour of its own", () => {

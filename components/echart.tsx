@@ -58,9 +58,11 @@ export type ChartTokens = {
   series: string[];
   /** The neutral fold-in bucket, slot 0. */
   other: string;
+  /** The palette's dark neutral — axis text, connectors, outlines. */
+  ink: string;
 };
 
-const SERIES_TOKENS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `--chart-${n}`);
+const SERIES_TOKENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `--chart-${n}`);
 
 function readTokens(): ChartTokens {
   const style = getComputedStyle(document.documentElement);
@@ -73,6 +75,7 @@ function readTokens(): ChartTokens {
     line: read("--line"),
     series: SERIES_TOKENS.map(read),
     other: read("--chart-other"),
+    ink: read("--chart-ink"),
   };
 }
 
@@ -133,6 +136,29 @@ export type OptionSource =
   | EChartsOption
   | ((size: ChartSize) => EChartsOption)
   | null;
+
+/** WCAG relative luminance of a `#rrggbb`. */
+function luminance(hex: string): number {
+  const value = hex.replace("#", "");
+  const channels = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16) / 255);
+  const [r, g, b] = channels.map((c) =>
+    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Ink for a label sitting *on* a fill, picked from the fill's own luminance.
+ *
+ * A fixed label colour cannot work across this ramp: it spans Primary teal at
+ * 2% luminance and Soft yellow at 79%, so white is invisible on one end and
+ * near-black on the other. The two candidates are the palette's own neutrals.
+ * Theme-independent by design — what the label sits on is the series colour,
+ * which does not change with the theme.
+ */
+export function inkOn(fill: string): string {
+  return luminance(fill) > 0.42 ? "#343a3a" : "#f2f2f2";
+}
 
 export function EChart({
   option,
