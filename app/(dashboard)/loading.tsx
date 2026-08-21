@@ -1,9 +1,15 @@
 import type { CSSProperties } from "react";
 
 /**
- * Shown while a route's data resolves. Every route renders dynamically (the
+ * Shown while the dashboard's data resolves. The page renders dynamically (the
  * layout reads the session), so without this the content area sits blank
  * between navigations — including on every filter change.
+ *
+ * It lives inside the `(dashboard)` route group, not at the app root, because
+ * a root `loading.tsx` is the loading boundary for **every** route beneath it.
+ * At the root, clicking "Sign in" flashed this dashboard skeleton over
+ * `/login`, and the same went for `/register` and `/account`. The route group
+ * scopes it to `/` without changing the URL. Don't move it back up.
  *
  * Mirrors the dashboard's shape — heading, four tiles, chart, two breakdowns,
  * filters, rows — so the real content lands in roughly the same places rather
