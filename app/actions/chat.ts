@@ -4,9 +4,11 @@ import { z } from "zod";
 
 import { getDashboard } from "@/app/actions/transactions";
 import {
+  defaultChartSource,
   extractFollowUps,
   formatSwissNumbers,
   looksLikeStall,
+  parseChartRequest,
   parsePeriod,
   parseToolCalls,
   periodFromQuestion,
@@ -130,6 +132,9 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     ...parsed.data.slice(-8),
   ];
   let chart: ChartSpec | undefined;
+  // An explicit display_chart call outranks the auto-attach fallback that
+  // fires when the model fetched chartable data but never asked for a chart.
+  let chartExplicit = false;
   let reply: string | undefined;
   let proposedFollowUps: string[] = [];
 
@@ -265,10 +270,33 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       ? ((await getDashboard({ from: period.from, to: period.to })) ?? dashboard)
       : dashboard;
 
+    // Presentation choices for a display_chart call; the source falls back
+    // to what the question is about when the argument didn't survive.
+    let chartRequest;
+    if (calls.includes("display_chart")) {
+      chartRequest = parseChartRequest(content);
+      chartRequest.source ??= defaultChartSource(question.content);
+      // "just the top 3" in the question stands in for a lost top_n arg.
+      chartRequest.topN ??=
+        Number(/\btop\s+(\d{1,2})\b/i.exec(question.content)?.[1]) || undefined;
+    }
+
     messages.push({ role: "assistant", content });
     for (const name of calls) {
-      const tool = runTool(name, scoped, period);
-      if (tool.chart) chart = tool.chart;
+      const tool = runTool(
+        name,
+        scoped,
+        period,
+        name === "display_chart" ? chartRequest : undefined,
+      );
+      if (tool.chart) {
+        if (name === "display_chart") {
+          chart = tool.chart;
+          chartExplicit = true;
+        } else if (!chartExplicit) {
+          chart = tool.chart;
+        }
+      }
       messages.push({
         role: "tool",
         content: JSON.stringify({ tool: name, result: tool.result }),

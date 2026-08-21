@@ -54,13 +54,13 @@ export type AssistantTurn = {
 /** No figures — the model has to ask for them. */
 export const SYSTEM_PROMPT = [
   "You are the analytics assistant of Beyond Money, a personal-finance dashboard.",
-  "You answer questions about the customer's imported bank statements.",
+  "You answer questions about the customer's bank statements.",
   "You know none of the figures yourself: always call one of the provided tools first and answer only from what the tools return — never invent or estimate a number.",
   "To call a tool, emit only the tool call itself — no prose before or after it. Once you have the data, answer without mentioning tools or their names.",
   'Every tool accepts an optional period argument for time-scoped questions, e.g. [{"get_spending_by_category": {"period": "ytd"}}]. Accepted values: ytd, a year like 2025, a month like 2025-03, a range like 2025-01-01..2025-03-31, last_month, or last_3_months. Omit it for all data.',
   "Be concise: 2–3 short sentences, plain text, no markdown, no lists.",
   "All amounts are Swiss francs. Write them exactly as the tools format them, e.g. CHF 1'234.55 — apostrophe as thousands separator, two decimals.",
-  "Prefer a chart as the answer whenever the data allows it: the app automatically draws a pie chart when you fetch category, merchant, or income data, so for questions about spending, money habits, or a general overview, reach for get_spending_by_category (or the merchant/income tool) rather than plain totals.",
+  'Prefer a chart as the answer whenever the data allows it: call display_chart with a source — e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie chart from the customer\'s real data, and the tool result hands you the same figures for your caption, so display_chart alone usually answers spending, habit, and overview questions.',
   "When a chart will be shown, your text is its caption: one or two sentences naming the biggest item and the takeaway. Never describe chart shapes and never list many figures the chart already shows.",
   "After your answer, propose 2 or 3 short follow-up questions the user could ask next, each on its own line starting with FOLLOWUP: — nothing else on those lines.",
 ].join("\n");
@@ -71,9 +71,23 @@ export const TOOL_NAMES = [
   "get_top_merchants",
   "get_income_breakdown",
   "get_monthly_series",
+  "display_chart",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
+
+export type ChartSource = "categories" | "merchants" | "income";
+
+/**
+ * What the model may choose about a chart — all of it presentation, none of
+ * it data. `source` and `period` are references the server resolves against
+ * the real aggregates; the model never supplies a number.
+ */
+export type ChartRequest = {
+  source?: ChartSource;
+  topN?: number;
+  title?: string;
+};
 
 /**
  * The one argument every tool shares. A single constrained string instead of
@@ -92,40 +106,74 @@ const PERIOD_PARAMETERS = {
   },
 };
 
-/** OpenAI-style declarations. Names only plus the shared period argument —
- * an 8B model emits a bare name far more reliably than argument JSON. */
+/**
+ * The chart tool's own schema: the shared period plus presentation choices.
+ * Enum-valued references only — the server assembles the slices.
+ */
+const CHART_PARAMETERS = {
+  type: "object" as const,
+  properties: {
+    source: {
+      type: "string" as const,
+      enum: ["categories", "merchants", "income"],
+      description:
+        "Which data the chart shows: spending by category, top merchants, or income (salary vs refunds).",
+    },
+    ...PERIOD_PARAMETERS.properties,
+    top_n: {
+      type: "integer" as const,
+      description:
+        "How many slices to show before the rest folds into 'Other'. Default 5, maximum 8.",
+    },
+    title: {
+      type: "string" as const,
+      description: "Optional chart title. Omit for a sensible default.",
+    },
+  },
+  required: ["source"],
+};
+
+/** OpenAI-style declarations. Enum-valued references, never free-form data —
+ * a small model emits names and enums far more reliably than argument JSON. */
 export const TOOL_DEFINITIONS = [
   {
     name: "get_overview",
     description:
-      "Accounts, statement date range, and the year's totals: salary, refunds, total income, total spending, net saved. No chart — prefer a breakdown tool when the question allows one.",
+      "Accounts, statement date range, and the year's totals: salary, refunds, total income, total spending, net saved. Figures only — prefer display_chart when the question allows a chart.",
+    parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_spending_by_category",
     description:
-      "Spending broken down by category, largest first. Shown to the user as a pie chart.",
+      "Spending broken down by category, largest first. Figures only — call display_chart to show it as a pie chart.",
+    parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_top_merchants",
     description:
-      "The merchants the customer spent the most at. Shown to the user as a pie chart.",
+      "The merchants the customer spent the most at. Figures only — call display_chart to show it as a pie chart.",
+    parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_income_breakdown",
     description:
-      "Where the incoming money came from: salary versus merchant refunds. Shown to the user as a pie chart.",
+      "Where the incoming money came from: salary versus merchant refunds. Figures only — call display_chart to show it as a pie chart.",
+    parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_monthly_series",
     description: "Money in and money out for every month.",
-  },
-].map(({ name, description }) => ({
-  type: "function" as const,
-  function: {
-    name,
-    description,
     parameters: PERIOD_PARAMETERS,
   },
+  {
+    name: "display_chart",
+    description:
+      "Show the user a pie chart assembled by the app from their real statements, and get the same figures back for your caption. The preferred way to answer questions about spending, merchants, or income.",
+    parameters: CHART_PARAMETERS,
+  },
+].map(({ name, description, parameters }) => ({
+  type: "function" as const,
+  function: { name, description, parameters },
 }));
 
 /**
@@ -184,11 +232,16 @@ export function runTool(
   name: ToolName,
   dashboard: Dashboard,
   period?: Period,
+  chartRequest?: ChartRequest,
 ): { result: unknown; chart?: ChartSpec } {
   const { facets, totals, categories, merchants, monthly } = dashboard;
   const scope = period?.label ?? "all statements";
   const titled = (title: string) =>
     period ? `${title} — ${period.label}` : title;
+  const incomeSlices = (): Slice[] => [
+    { key: "Salary", amount: totals.salary, count: 0, share: 0 },
+    { key: "Refunds", amount: totals.refunds, count: 0, share: 0 },
+  ];
 
   switch (name) {
     case "get_overview":
@@ -220,11 +273,7 @@ export function runTool(
         result: { period: scope, merchants: sliceRows(merchants) },
         chart: toPie(titled("Top merchants by spending"), merchants),
       };
-    case "get_income_breakdown": {
-      const slices: Slice[] = [
-        { key: "Salary", amount: totals.salary, count: 0, share: 0 },
-        { key: "Refunds", amount: totals.refunds, count: 0, share: 0 },
-      ];
+    case "get_income_breakdown":
       return {
         result: {
           period: scope,
@@ -233,9 +282,8 @@ export function runTool(
           total_income_chf: chf(totals.income),
           note: "Refunds are merchant credits, not earnings.",
         },
-        chart: toPie(titled("Where the money came from"), slices),
+        chart: toPie(titled("Where the money came from"), incomeSlices()),
       };
-    }
     case "get_monthly_series": {
       // The monthly series is computed from the unfiltered rows by design,
       // so the period window is applied here, on the month keys.
@@ -256,6 +304,41 @@ export function runTool(
             net_chf: chf(m.net),
           })),
         },
+      };
+    }
+    case "display_chart": {
+      // The model chose presentation (source, size, title, window); every
+      // number still comes from the aggregates it points at.
+      const source = chartRequest?.source ?? "categories";
+      const slices =
+        source === "merchants"
+          ? merchants
+          : source === "income"
+            ? incomeSlices()
+            : categories;
+      const defaultTitle =
+        source === "merchants"
+          ? "Top merchants by spending"
+          : source === "income"
+            ? "Where the money came from"
+            : "Spending by category";
+      const title = chartRequest?.title?.slice(0, 60).trim() || titled(defaultTitle);
+      const topN = Math.min(8, Math.max(2, chartRequest?.topN ?? 5));
+      const chart = toPie(title, slices, topN);
+      return {
+        result: chart
+          ? {
+              displayed: chart.title,
+              period: scope,
+              total_chf: chf(chart.totalMinor),
+              slices: chart.slices.map((s) => ({
+                name: s.label,
+                amount_chf: chf(s.amountMinor),
+                share_pct: Number(s.share.toFixed(1)),
+              })),
+            }
+          : { error: `No ${source} data in this period — nothing to chart.` },
+        chart,
       };
     }
   }
@@ -288,6 +371,41 @@ export type Period = {
 export function parsePeriod(content: string): string | undefined {
   const match = /["']?period["']?\s*[:=]\s*["']?([\w.-]+)["']?/i.exec(content);
   return match?.[1]?.toLowerCase();
+}
+
+/**
+ * The presentation choices in a display_chart call, fished out one regex per
+ * field so a mangled argument object still yields whatever it did contain.
+ */
+export function parseChartRequest(content: string): ChartRequest {
+  const sourceMatch =
+    /["']?source["']?\s*[:=]\s*["']?(categor\w*|merchant\w*|income|spend\w*)/i.exec(content);
+  const raw = sourceMatch?.[1]?.toLowerCase();
+  const source: ChartSource | undefined =
+    raw?.startsWith("categor") || raw?.startsWith("spend")
+      ? "categories"
+      : raw?.startsWith("merchant")
+        ? "merchants"
+        : raw === "income"
+          ? "income"
+          : undefined;
+
+  const topMatch = /["']?top_?n["']?\s*[:=]\s*["']?(\d{1,2})/i.exec(content);
+  const titleMatch = /["']?title["']?\s*[:=]\s*["']([^"'\n]{1,80})["']/i.exec(content);
+
+  return {
+    source,
+    topN: topMatch ? Number(topMatch[1]) : undefined,
+    title: titleMatch?.[1]?.trim(),
+  };
+}
+
+/** Where a chart should come from when the model named no source. */
+export function defaultChartSource(question: string): ChartSource {
+  const q = question.toLowerCase();
+  if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) return "merchants";
+  if (/\b(income|earn(ed|ings)?|salary|refunds?)\b/.test(q)) return "income";
+  return "categories";
 }
 
 const MONTH_NUMBERS: Record<string, string> = {
@@ -386,6 +504,11 @@ export function resolvePeriod(
  */
 export function looksLikeStall(content: string): boolean {
   if (/CHF/i.test(content)) return false;
+  // Promising to do something is not doing it — "I'll get the top 3
+  // spending categories for you." carries a digit but no answer.
+  if (/\b(i'?ll|i will|let me|one moment|hold on|fetching|retrieving|getting)\b/i.test(content)) {
+    return true;
+  }
   return /\b(tools?|fetch|call|retriev|look up|data)\b/i.test(content) || !/\d/.test(content);
 }
 
@@ -396,6 +519,11 @@ export function looksLikeStall(content: string): boolean {
  */
 export function routeTool(question: string): ToolName | undefined {
   const q = question.toLowerCase();
+  // An explicit ask for a chart routes to the chart tool itself — the
+  // caller fills the source from `defaultChartSource`.
+  if (/\b(pie|charts?|graphs?|diagrams?|visuali[sz]e)\b/.test(q)) {
+    return "display_chart";
+  }
   if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) {
     return "get_top_merchants";
   }
