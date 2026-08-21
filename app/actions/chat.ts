@@ -7,7 +7,10 @@ import {
   extractFollowUps,
   formatSwissNumbers,
   looksLikeStall,
+  parsePeriod,
   parseToolCalls,
+  periodFromQuestion,
+  resolvePeriod,
   routeTool,
   runTool,
   stripModelMarkup,
@@ -28,8 +31,8 @@ import {
 } from "@/lib/assistant-log";
 import { getCurrentUser } from "@/lib/auth";
 
-const STONEY_URL =
-  process.env.STONEY_URL ?? "https://llm.stoney-cloud.com/v1/chat/completions";
+const APERTUS_URL =
+  process.env.APERTUS_URL ?? "https://llm.stoney-cloud.com/v1/chat/completions";
 
 /** API requests per turn. Tools are offered on all but the last, which forces
  * an answer so a fetch-happy model cannot loop forever. */
@@ -107,11 +110,11 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     return failure("That message could not be read — try rephrasing it.");
   }
 
-  const key = process.env.STONEY_KEY;
+  const key = process.env.APERTUS_KEY;
   if (!key) {
-    record(turnStarted, { status: "error", error: "STONEY_KEY is not set." });
+    record(turnStarted, { status: "error", error: "APERTUS_KEY is not set." });
     return failure(
-      "The assistant is not configured yet. Set STONEY_KEY in .env.local and restart the server.",
+      "The assistant is not configured yet. Set APERTUS_KEY in .env.local and restart the server.",
     );
   }
 
@@ -148,7 +151,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     let response: Response;
     let raw: string;
     try {
-      response = await fetch(STONEY_URL, {
+      response = await fetch(APERTUS_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${key}`,
@@ -187,7 +190,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       });
       return failure(
         response.status === 401
-          ? "The model endpoint rejected the API key — check STONEY_KEY."
+          ? "The model endpoint rejected the API key — check APERTUS_KEY."
           : `The model endpoint answered ${response.status} — try again in a moment.`,
       );
     }
@@ -229,12 +232,19 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       }
     }
 
+    // Time scope: the model's period argument wins; when it passed none,
+    // a period the question itself names ("all data ytd", "in March") still
+    // applies. Relative periods anchor to the newest statement date.
+    const periodRaw = parsePeriod(content) ?? periodFromQuestion(question.content);
+    const period =
+      calls.length > 0 ? resolvePeriod(periodRaw, dashboard.facets.last) : undefined;
+
     record(startedAt, {
       status: "ok",
       httpStatus: response.status,
       note:
         calls.length > 0
-          ? `round ${round} · fetched ${calls.join(", ")}${routed ? " (routed)" : ""}`
+          ? `round ${round} · fetched ${calls.join(", ")}${routed ? " (routed)" : ""}${period ? ` · ${period.label}` : ""}`
           : `round ${round} · answer`,
       messageCount,
       request,
@@ -249,9 +259,15 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       break;
     }
 
+    // Aggregates scoped to the window come from a second, filtered fetch —
+    // the same query path the dashboard itself uses.
+    const scoped = period
+      ? ((await getDashboard({ from: period.from, to: period.to })) ?? dashboard)
+      : dashboard;
+
     messages.push({ role: "assistant", content });
     for (const name of calls) {
-      const tool = runTool(name, dashboard);
+      const tool = runTool(name, scoped, period);
       if (tool.chart) chart = tool.chart;
       messages.push({
         role: "tool",
