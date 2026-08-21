@@ -212,6 +212,42 @@ export const anomalyRuns = sqliteTable(
   (table) => [index("anomaly_runs_user_id_idx").on(table.userId)],
 );
 
+/**
+ * A per-category monthly spending limit, set by the account holder.
+ *
+ * `userId` is NOT NULL here, unlike `transactions.userId`. That column is
+ * nullable because it was added to a table that already had rows and
+ * `drizzle-kit push` runs without `--force` on deploy; this table is created
+ * empty, so the constraint costs nothing and ownership is enforced by the
+ * database rather than only by the query layer.
+ *
+ * Limits are minor units (rappen) like every other amount in the schema, and
+ * positive — a budget is a magnitude, not a signed movement. A category with
+ * no row simply has no limit; there is no "unlimited" sentinel to
+ * misinterpret.
+ */
+export const budgets = sqliteTable(
+  "budgets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Matches `transactions.category` — the rule-assigned name, not free text. */
+    category: text("category").notNull(),
+    /** Positive minor units per month. */
+    limitMinor: integer("limit_minor").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    // One limit per category per user, which is what makes saving an upsert
+    // rather than a delete-and-reinsert.
+    uniqueIndex("budgets_user_category_idx").on(table.userId, table.category),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
@@ -219,3 +255,4 @@ export type NewTransaction = typeof transactions.$inferInsert;
 export type Anomaly = typeof anomalies.$inferSelect;
 export type NewAnomaly = typeof anomalies.$inferInsert;
 export type AnomalyRun = typeof anomalyRuns.$inferSelect;
+export type Budget = typeof budgets.$inferSelect;

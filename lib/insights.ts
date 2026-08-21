@@ -639,6 +639,80 @@ export function categorySpendPeriods(
 }
 
 /**
+ * How many categories the budget radar carries. A radar stops being readable
+ * somewhere past eight spokes — the labels collide and the polygon turns to
+ * noise — so the tail is simply not budgeted rather than crammed in.
+ */
+export const BUDGET_AXES = 8;
+
+export type BudgetRow = {
+  category: string;
+  /** The same palette slot the category wears on the dashboard. */
+  slot: number;
+  /** What the account holder set, or null if they have not set one. */
+  limitMinor: number | null;
+  /** Average spend per month across the whole range — the app's suggestion. */
+  suggestedMinor: number;
+  /** Spend in the month being viewed. Partial if that month is still running. */
+  usedMinor: number;
+};
+
+/**
+ * The budget page's rows: one per category, carrying the limit, the suggestion
+ * and the month's usage side by side.
+ *
+ * Built on `stackByCategory` rather than its own pass, so the ranking and the
+ * colour slots are the same ones the dashboard uses — a category cannot be
+ * teal on one page and coral on the next. "Other" is excluded: it is a bucket,
+ * not something anyone budgets for.
+ *
+ * The suggestion is the mean monthly spend over the **whole** range, not the
+ * trailing few months. A budget set from a quiet stretch is one you break in
+ * the first busy month.
+ */
+export function budgetRows(
+  rows: Transaction[],
+  month: string,
+  limits: Map<string, number>,
+  axes = BUDGET_AXES,
+): BudgetRow[] {
+  const stack = stackByCategory(rows);
+  if (stack.months.length === 0) return [];
+
+  const index = stack.months.indexOf(month);
+  const monthCount = stack.months.length;
+
+  return stack.bands
+    .filter((band) => band.slot !== 0)
+    .slice(0, axes)
+    .map((band) => ({
+      category: band.key,
+      slot: band.slot,
+      limitMinor: limits.get(band.key) ?? null,
+      suggestedMinor: Math.round(band.total / monthCount),
+      // A month outside the range is not an error — it is a month with no
+      // spending, which is exactly zero used.
+      usedMinor: index >= 0 ? (band.values[index] ?? 0) : 0,
+    }));
+}
+
+/**
+ * Which month the budget page opens on: the current one when the statements
+ * reach it, otherwise the most recent month there is data for.
+ *
+ * `todayMonth` is passed in rather than derived. This module never constructs a
+ * `Date` — see the note on `formatDay` — and "now" is the caller's business
+ * anyway.
+ */
+export function defaultBudgetMonth(
+  months: string[],
+  todayMonth: string,
+): string | null {
+  if (months.length === 0) return null;
+  return months.includes(todayMonth) ? todayMonth : months[months.length - 1];
+}
+
+/**
  * category → palette slot, so the breakdown list beneath the charts paints each
  * row the colour its wedge already has. Anything the stack folded away — and
  * anything absent from it entirely — resolves to slot 0, the neutral.

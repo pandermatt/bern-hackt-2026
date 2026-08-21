@@ -1,9 +1,16 @@
 "use client";
 
-import { BarChart, LineChart, PieChart, ScatterChart } from "echarts/charts";
+import {
+  BarChart,
+  LineChart,
+  PieChart,
+  RadarChart,
+  ScatterChart,
+} from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
+  RadarComponent,
   TooltipComponent,
 } from "echarts/components";
 import * as echarts from "echarts/core";
@@ -36,8 +43,10 @@ echarts.use([
   BarChart,
   LineChart,
   PieChart,
+  RadarChart,
   ScatterChart,
   GridComponent,
+  RadarComponent,
   LegendComponent,
   TooltipComponent,
   // The bar ↔ donut morph: series sharing a `seriesKey` hand their shapes to
@@ -69,6 +78,8 @@ export type ChartTokens = {
   /** Money in / money out. Direction, not identity — never a series slot. */
   flowIn: string;
   flowOut: string;
+  /** Blue Stone. A threshold or reference line, not a series. */
+  accent: string;
 };
 
 const SERIES_TOKENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `--chart-${n}`);
@@ -88,6 +99,7 @@ function readTokens(): ChartTokens {
     ink: read("--chart-ink"),
     flowIn: read("--flow-in"),
     flowOut: read("--flow-out"),
+    accent: read("--accent"),
   };
 }
 
