@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { DangerZone } from "@/components/danger-zone";
+import { DemoDataControls } from "@/components/demo-data-controls";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,12 @@ export default async function AccountPage() {
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
       <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
-        Account
+        Account & Settings
       </h1>
       <p className="mt-1 text-[13.5px] text-text-muted">{user.email}</p>
+
+      {/* Demo and Synthetic Data Tools */}
+      <DemoDataControls />
 
       <div className="card mt-8 overflow-hidden border-danger/30">
         <div className="border-b border-danger/20 bg-danger-soft px-4 py-3 sm:px-5">
@@ -36,3 +40,4 @@ export default async function AccountPage() {
     </main>
   );
 }
+
