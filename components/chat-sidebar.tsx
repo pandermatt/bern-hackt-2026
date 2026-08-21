@@ -20,8 +20,8 @@ type Message = {
  * trip a different branch of `pickChart`, so the demo shows a chart early.
  */
 const SUGGESTIONS = [
-  "Where does my money go?",
-  "Who are my top merchants?",
+  "Where does my money go YTD?",
+  "Who are my top merchants YTD?",
   "How much of my income is salary?",
   "How much did I save this year?",
 ];

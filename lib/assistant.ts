@@ -648,13 +648,13 @@ export function suggestFollowUps(
   const candidates: string[] = [];
   if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) {
     if (topMerchant) candidates.push(`How much did I spend at ${topMerchant}?`);
-    candidates.push("Where does my money go by category?");
+    candidates.push("Where does my money go by category YTD?");
   } else if (/\b(income|earn(ed|ings)?|salary|refunds?)\b/.test(q)) {
     candidates.push("How much of my income did I spend?");
-    candidates.push("Where does my money go?");
+    candidates.push("Where does my money go YTD?");
   } else {
     if (topCategory) candidates.push(`Why is ${topCategory} so high?`);
-    candidates.push("Who are my top merchants?");
+    candidates.push("Who are my top merchants YTD?");
   }
   if (priciest && priciest.expense > 0) {
     candidates.push(`What happened in ${priciest.label}?`);
