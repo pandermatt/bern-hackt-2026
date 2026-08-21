@@ -310,7 +310,7 @@ Every other route requires a session.
   is one you might never see.
 - `app/api/health/route.ts` — `{ ok, version }`, touching the database. Point the
   host's healthcheck here.
-- `db/schema.ts` — `users`, `sessions`, and `transactions`.
+- `db/schema.ts` — `users`, `sessions`, `transactions`, and `budgets`.
 - `db/index.ts` — the **only** module that imports `better-sqlite3`. Marked
   `server-only`; creates `data/` before opening, enables WAL, and caches the
   connection on `globalThis` so dev HMR doesn't leak file handles.
@@ -334,6 +334,10 @@ Every other route requires a session.
   light/dark switch, on `next-themes`. The control lives on `/account` under
   Appearance rather than in the header; the provider still defaults to the
   system setting, so a first visit follows the OS until someone picks a side.
+- `app/budget/page.tsx` — per-category monthly limits, suggested from the
+  account's own averages, with a radar of the month against them. The set limit
+  is an outline; what was spent is a translucent fill, so anything poking
+  outside the line is over budget.
 - `app/globals.css` — the design tokens, mapped onto shadcn's token names.
 
 Schema changes go through `npm run db:push`. There is no migrations folder and

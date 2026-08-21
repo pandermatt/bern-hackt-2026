@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
 
+import { HeaderNav } from "@/components/header-nav";
+
 import { logout } from "@/app/actions/auth";
 import { Logo } from "@/components/logo";
 import type { User } from "@/db/schema";
@@ -23,7 +25,11 @@ export function AppHeader({ user }: { user: User | null }) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
-        <Logo />
+        <div className="flex min-w-0 items-center gap-5">
+          <Logo />
+          {/* Only signed-in visitors have anything to navigate between. */}
+          {user && <HeaderNav />}
+        </div>
 
         {user ? (
           <div className="flex items-center gap-2.5">

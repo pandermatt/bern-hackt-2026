@@ -8,11 +8,14 @@ import {
   formatDay,
   formatMoney,
   monthlySeries,
+  budgetRows,
+  defaultBudgetMonth,
   slotsOf,
   stackByCategory,
   paginate,
   summarize,
   topMerchants,
+  BUDGET_AXES,
   CATEGORY_SLOTS,
   type Filters,
 } from "@/lib/insights";
@@ -227,6 +230,112 @@ describe("stackByCategory", () => {
       bands: [],
       total: 0,
     });
+  });
+});
+
+describe("budgetRows", () => {
+  const spend = (category: string, bookedOn: string, minor: number) =>
+    row({ category, bookedOn, amountMinor: -minor, kind: "expense" });
+
+  it("suggests the mean monthly spend over the whole range", () => {
+    // Two months in range, 3'000 of Housing across them.
+    const rows = [
+      spend("Housing", "2025-01-10", 200_000),
+      spend("Housing", "2025-02-10", 100_000),
+    ];
+
+    const [housing] = budgetRows(rows, "2025-02", new Map());
+
+    expect(housing.category).toBe("Housing");
+    expect(housing.suggestedMinor).toBe(150_000);
+    // Usage is the viewed month only, not the average.
+    expect(housing.usedMinor).toBe(100_000);
+  });
+
+  it("divides by every month in range, including the empty ones", () => {
+    // Jan and Mar have spending; Feb has none but is still a month you had.
+    const rows = [
+      spend("Housing", "2025-01-10", 300_000),
+      spend("Housing", "2025-03-10", 300_000),
+    ];
+
+    const [housing] = budgetRows(rows, "2025-03", new Map());
+
+    // 600'000 over three months, not two — a budget set from only the busy
+    // months is one you break in the quiet ones.
+    expect(housing.suggestedMinor).toBe(200_000);
+  });
+
+  it("reports a missing limit as null, never as zero", () => {
+    const rows = [spend("Housing", "2025-01-10", 1_000)];
+    const [housing] = budgetRows(rows, "2025-01", new Map());
+    // A limit of zero is a real budget of nothing; the two must not collapse.
+    expect(housing.limitMinor).toBeNull();
+
+    const [withZero] = budgetRows(rows, "2025-01", new Map([["Housing", 0]]));
+    expect(withZero.limitMinor).toBe(0);
+  });
+
+  it("carries the dashboard's colour slot, so a category matches across pages", () => {
+    const rows = [
+      spend("Housing", "2025-01-10", 9_000),
+      spend("Travel", "2025-01-10", 1_000),
+    ];
+
+    const stack = stackByCategory(rows);
+    const slots = slotsOf(stack);
+    const budget = budgetRows(rows, "2025-01", new Map());
+
+    for (const entry of budget) {
+      expect(entry.slot).toBe(slots.get(entry.category));
+    }
+  });
+
+  it("leaves the Other bucket out — it is not something anyone budgets for", () => {
+    const rows = [
+      spend("Housing", "2025-01-10", 5_000),
+      spend("Other", "2025-01-10", 9_000),
+    ];
+
+    const budget = budgetRows(rows, "2025-01", new Map());
+
+    expect(budget.map((entry) => entry.category)).toEqual(["Housing"]);
+  });
+
+  it("caps the axes, because a radar past eight spokes is unreadable", () => {
+    const rows = Array.from({ length: 12 }, (_, index) =>
+      spend(`Cat${index}`, "2025-01-10", (12 - index) * 1_000),
+    );
+
+    expect(budgetRows(rows, "2025-01", new Map())).toHaveLength(BUDGET_AXES);
+    expect(budgetRows(rows, "2025-01", new Map(), 3)).toHaveLength(3);
+  });
+
+  it("treats a month outside the range as nothing spent, not an error", () => {
+    const rows = [spend("Housing", "2025-01-10", 1_000)];
+    const [housing] = budgetRows(rows, "2030-06", new Map());
+    expect(housing.usedMinor).toBe(0);
+  });
+
+  it("returns nothing when there is nothing imported", () => {
+    expect(budgetRows([], "2025-01", new Map())).toEqual([]);
+  });
+});
+
+describe("defaultBudgetMonth", () => {
+  const months = ["2025-01", "2025-02", "2025-03"];
+
+  it("opens on the current month when the statements reach it", () => {
+    expect(defaultBudgetMonth(months, "2025-02")).toBe("2025-02");
+  });
+
+  it("falls back to the most recent month there is data for", () => {
+    // The demo statements stop in 2025; "today" is well past them.
+    expect(defaultBudgetMonth(months, "2026-08")).toBe("2025-03");
+  });
+
+  it("has nothing to open on when nothing is imported", () => {
+    expect(defaultBudgetMonth([], "2026-08")).toBeNull();
   });
 });
 

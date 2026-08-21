@@ -1,9 +1,10 @@
 "use client";
 
-import { LineChart, PieChart } from "echarts/charts";
+import { LineChart, PieChart, RadarChart } from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
+  RadarComponent,
   TooltipComponent,
 } from "echarts/components";
 import * as echarts from "echarts/core";
@@ -34,6 +35,8 @@ import { useHydrated } from "@/lib/use-hydrated";
 echarts.use([
   LineChart,
   PieChart,
+  RadarChart,
+  RadarComponent,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -60,6 +63,8 @@ export type ChartTokens = {
   /** Money in / money out. Direction, not identity — never a series slot. */
   flowIn: string;
   flowOut: string;
+  /** Blue Stone. A threshold or reference line, not a series. */
+  accent: string;
 };
 
 const SERIES_TOKENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `--chart-${n}`);
@@ -78,6 +83,7 @@ function readTokens(): ChartTokens {
     ink: read("--chart-ink"),
     flowIn: read("--flow-in"),
     flowOut: read("--flow-out"),
+    accent: read("--accent"),
   };
 }
 
