@@ -9,7 +9,7 @@ export const alt = `${site.name} — ${site.description}`;
 
 /* The same mark as app/icon.svg. Satori renders SVG reliably through an <img>
    data URI, so the signet is embedded rather than written as JSX elements. */
-const SIGNET = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${SIGNET_VIEWBOX}"><path d="${SIGNET_PATH}" fill="#004B5A"/></svg>`;
+const SIGNET = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${SIGNET_VIEWBOX}"><path d="${SIGNET_PATH}" fill="#005B61"/></svg>`;
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -21,7 +21,7 @@ export default function OpengraphImage() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: "#f5f8f9",
+          background: "#f2f2f2",
           padding: "80px",
         }}
       >
@@ -50,7 +50,7 @@ export default function OpengraphImage() {
               marginLeft: "28px",
               fontSize: "56px",
               fontWeight: 600,
-              color: "#0b2e36",
+              color: "#1a1a1a",
             }}
           >
             {site.name}
@@ -63,7 +63,7 @@ export default function OpengraphImage() {
               display: "flex",
               fontSize: "64px",
               fontWeight: 600,
-              color: "#0b2e36",
+              color: "#1a1a1a",
               lineHeight: 1.15,
             }}
           >
@@ -74,7 +74,7 @@ export default function OpengraphImage() {
               display: "flex",
               marginTop: "24px",
               fontSize: "30px",
-              color: "#55707a",
+              color: "#5c5c5c",
             }}
           >
             {site.description}

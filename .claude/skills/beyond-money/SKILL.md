@@ -168,13 +168,33 @@ Unchanged from the template this app grew out of, and still exactly true.
 
 ## Design system
 
-- Tokens live in `app/globals.css`: PostFinance deep teal `--accent` on
-  teal-tinted neutrals, the brand yellow `--brand` reserved for the signet, a
-  green `--positive` for money in and the existing `--danger` for money out,
-  plus a `--chart-1..8` categorical ramp. Restyle by editing tokens, not by
-  patching components — no component hardcodes a colour.
-- **The brand yellow is an identity colour, not an interface one.** White text
-  on `#FFCC00` fails contrast; the teal carries every interactive surface.
+- The palette is PostFinance's five brand colours, in `app/globals.css`:
+
+  | | | Contrast on white |
+  | --- | --- | --- |
+  | Supernova | `#FFCC00` | 1.5:1 |
+  | Pistachio | `#A5C400` | 2.0:1 |
+  | Blue Stone | `#005B61` | 7.9:1 |
+  | Concrete | `#F2F2F2` | ground |
+  | White | `#FFFFFF` | surface |
+
+  Every other token is derived from one of those five, and every derived tone
+  clears WCAG AA. Restyle by editing tokens, not by patching components — no
+  component hardcodes a colour.
+- **Only Blue Stone works as text.** It is `--accent` and carries every
+  interactive surface, in both directions (white-on-teal buttons included).
+  Supernova and Pistachio are under 2:1 and are **fills only** — `--brand` is
+  the signet tile, `--pistachio` is the inflow bars. Never set type in either.
+- **A Pistachio fill needs `--pistachio-edge` (`#7E9500`) as a stroke.** At 2:1
+  the fill alone does not make a bar's shape perceptible against white; the
+  edge brings it to 3.4:1. The chart bars and the legend swatch both carry it.
+- `--positive` (`#5F7000`) is Pistachio darkened to 5.5:1 for amounts set as
+  **text**. Don't use the bright Pistachio for a figure, and don't use
+  `--positive` where the brand colour should show.
+- `--danger` red is a system colour, not a brand one — brand palettes rarely
+  cover error states. Money out and destructive actions share it.
+- Neutrals are **untinted**. Concrete is a pure neutral (HSL 0, 0, 95) and a
+  teal-tinted grey scale fights it.
 - The signet path lives once in `lib/signet.ts` and is consumed by
   `components/logo.tsx`, `app/opengraph-image.tsx` (as a data URI — Satori only
   renders SVG reliably through an `<img>`), and `app/icon.svg` (its own copy,

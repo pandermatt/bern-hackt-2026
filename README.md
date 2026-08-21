@@ -79,6 +79,23 @@ Everything that names the app lives in `lib/site.ts`. To rebrand a clone:
 6. `lib/signet.ts` and `app/globals.css` — the PostFinance mark and palette.
    Swap the signet path and the `:root` tokens; no component hardcodes a colour.
 
+### Palette
+
+The five PostFinance brand colours, and what each one is allowed to do:
+
+| Hex | Name | Used for |
+| --- | --- | --- |
+| `#005B61` | Blue Stone | `--accent` — every interactive surface, links, focus rings. The only brand colour that passes a text contrast threshold (7.9:1 on white) |
+| `#FFCC00` | Supernova | `--brand` — the signet tile, and nothing else |
+| `#A5C400` | Pistachio | `--pistachio` — inflow bars, always with a `--pistachio-edge` stroke |
+| `#F2F2F2` | Concrete | `--bg`, the page ground |
+| `#FFFFFF` | White | `--surface`, cards |
+
+Supernova and Pistachio sit at 1.5:1 and 2.0:1 against white, so they are fills
+only — never type. `--positive` (`#5F7000`) is Pistachio darkened to 5.5:1 for
+amounts set as text, and `--danger` red is a system colour rather than a brand
+one. Every derived tone in `app/globals.css` was checked against WCAG AA.
+
 Nothing else hardcodes the product name.
 
 ### Icons

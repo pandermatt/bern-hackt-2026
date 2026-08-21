@@ -10,7 +10,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: site.description,
     start_url: "/",
     display: "standalone",
-    background_color: "#f5f8f9",
+    background_color: "#f2f2f2",
     theme_color: "#FFCC00",
     /*
      * Chrome wants a 192 and a 512 PNG before it treats the app as

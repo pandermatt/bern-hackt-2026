@@ -3,54 +3,68 @@
 @import "shadcn/tailwind.css";
 
 /* ───────────────────────────────────────────────────────────────
-   PostFinance palette: light ground, white surfaces, teal-tinted
-   neutrals, deep teal for every interactive surface and the brand
-   yellow reserved for the signet. Committed light theme — no dark
-   variant.
+   The PostFinance brand palette:
+
+     Supernova  #FFCC00   Pistachio  #A5C400   Blue Stone #005B61
+     Concrete   #F2F2F2   White      #FFFFFF
+
+   Only Blue Stone clears a text contrast threshold, so it carries
+   every interactive surface while Supernova and Pistachio stay as
+   fills. Everything below is either one of those five or derived
+   from one, and every derived tone is checked against WCAG AA.
+   Committed light theme — no dark variant.
    ─────────────────────────────────────────────────────────────── */
 
 :root {
-  --bg: #f5f8f9;
+  /* PostFinance Concrete on White. Neutral greys, not tinted — Concrete is a
+     pure neutral (HSL 0, 0, 95) and a teal-tinted scale fights it. */
+  --bg: #f2f2f2;
   --surface: #ffffff;
-  --surface-muted: #eef3f5;
-  --surface-hover: #f8fbfb;
+  --surface-muted: #e6e6e6;
+  --surface-hover: #fafafa;
 
-  --line: #dde5e8;
-  --line-strong: #c3d1d6;
+  --line: #dcdcdc;
+  --line-strong: #c2c2c2;
 
-  --text: #0b2e36;
-  --text-muted: #55707a;
-  --text-subtle: #8fa5ac;
+  --text: #1a1a1a;
+  --text-muted: #5c5c5c;
+  --text-subtle: #6e6e6e;
 
-  /* PostFinance deep teal carries every interactive surface: white text on it
-     clears AA comfortably, which the brand yellow does not. */
-  --accent: #004b5a;
-  --accent-hover: #00323d;
-  --accent-soft: #e6f0f2;
+  /* Blue Stone carries every interactive surface. It is the only brand colour
+     that works as text: 7.9:1 on white, and 7.9:1 the other way round for
+     white-on-teal buttons. Supernova and Pistachio are both under 2:1. */
+  --accent: #005b61;
+  --accent-hover: #00464b;
+  --accent-soft: #e6f0f0;
 
-  /* The brand yellow is an identity colour, not an interface one — it is the
-     signet tile and nothing else. */
+  /* Identity colours, never text. Supernova is the signet tile; Pistachio
+     fills the inflow bars, where a large area plus a legend plus the chart's
+     data table carry the meaning. */
   --brand: #ffcc00;
+  --pistachio: #a5c400;
+  /* Pistachio is only 2:1 against white, so a filled bar needs a defining edge
+     to stay perceptible. This is that edge, at 3.4:1. */
+  --pistachio-edge: #7e9500;
 
   --danger: #d92d20;
   --danger-hover: #b42318;
   --danger-soft: #fef3f2;
 
-  /* Money has a direction, and it is not "good/bad" — it is in/out. The green
-     sits a clear 55 degrees of hue off the teal accent so a small chart bar is
-     never mistaken for a piece of chrome. */
-  --positive: #1a7f37;
-  --positive-hover: #136229;
-  --positive-soft: #eaf6ed;
+  /* Money has a direction, and it is not "good/bad" — it is in/out. This is
+     Pistachio darkened until it clears AA (5.5:1), for amounts set as text;
+     the bright original is for fills only. */
+  --positive: #5f7000;
+  --positive-hover: #4a5800;
+  --positive-soft: #f4f8e6;
 
-  /* Categorical ramp for the breakdown bars, opening on the two brand colours.
-     The gold is deepened from #ffcc00 so a 6px bar still reads on white. */
-  --chart-1: #004b5a;
-  --chart-2: #d6a100;
-  --chart-3: #0891b2;
-  --chart-4: #7c3aed;
-  --chart-5: #be123c;
-  --chart-6: #1a7f37;
+  /* Categorical ramp for the breakdown bars, opening on the brand colours.
+     Supernova is deepened to #d6a100 so a 6px bar still reads on white. */
+  --chart-1: #005b61;
+  --chart-2: #a5c400;
+  --chart-3: #d6a100;
+  --chart-4: #0891b2;
+  --chart-5: #7c3aed;
+  --chart-6: #be123c;
   --chart-7: #ea580c;
   --chart-8: #64748b;
 
@@ -102,6 +116,8 @@
   --color-danger-hover: var(--danger-hover);
   --color-danger-soft: var(--danger-soft);
   --color-brand: var(--brand);
+  --color-pistachio: var(--pistachio);
+  --color-pistachio-edge: var(--pistachio-edge);
   --color-positive: var(--positive);
   --color-positive-hover: var(--positive-hover);
   --color-positive-soft: var(--positive-soft);

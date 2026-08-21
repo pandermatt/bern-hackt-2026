@@ -46,7 +46,10 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
         </h2>
         <p className="flex items-center gap-3 text-[12.5px] text-text-muted">
           <span className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-[2px] bg-positive" aria-hidden />
+            <span
+              className="size-2.5 rounded-[2px] bg-pistachio ring-1 ring-pistachio-edge"
+              aria-hidden
+            />
             In
           </span>
           <span className="flex items-center gap-1.5">
@@ -104,13 +107,18 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
 
             return (
               <g key={point.month}>
+                {/* Pistachio is only 2:1 against white, so the fill alone is
+                    not enough to make the bar's shape perceptible — the
+                    half-pixel stroke supplies the edge. */}
                 <rect
                   x={centre - barWidth - 1}
                   y={BASELINE - incomeHeight}
                   width={barWidth}
                   height={incomeHeight}
                   rx={2}
-                  fill="var(--positive)"
+                  fill="var(--pistachio)"
+                  stroke="var(--pistachio-edge)"
+                  strokeWidth={1}
                 />
                 <rect
                   x={centre + 1}
