@@ -411,8 +411,8 @@ export function analyzeTransactionAnomalies(
     const fullMerchantHistory = expensesByMerchant.get(norm) ?? [];
     const fullCategoryHistory = expensesByCategory.get(t.category) ?? [];
 
-    let baselineGroup = fullMerchantHistory.length >= 5 ? fullMerchantHistory : fullCategoryHistory;
-    let baselineType = fullMerchantHistory.length >= 5 ? "merchant" : "category";
+    const baselineGroup = fullMerchantHistory.length >= 5 ? fullMerchantHistory : fullCategoryHistory;
+    const baselineType = fullMerchantHistory.length >= 5 ? "merchant" : "category";
 
     if (baselineGroup.length >= 5) {
       const amounts = baselineGroup.map((b) => Math.abs(b.amountMinor));
