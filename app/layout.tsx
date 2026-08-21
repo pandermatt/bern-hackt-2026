@@ -6,6 +6,7 @@ import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
 import { ServiceWorkerRegistrar } from "@/components/sw-register";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { getCurrentUser } from "@/lib/auth";
 import { site } from "@/lib/site";
@@ -55,17 +56,24 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${nunito.variable} ${plexMono.variable} h-full antialiased`}
+      // next-themes' pre-paint script sets `class="dark"` on this element
+      // before React hydrates, so the class it finds never matches the one the
+      // server rendered. Without this, that mismatch is a console error on
+      // every load.
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-bg font-sans">
-        <AppHeader user={user} />
-        {children}
-        <AppFooter />
-        <Toaster position="bottom-right" />
-        {/* useSearchParams needs a boundary it can suspend against. */}
-        <Suspense fallback={null}>
-          <FlashToaster />
-        </Suspense>
-        <ServiceWorkerRegistrar />
+        <ThemeProvider>
+          <AppHeader user={user} />
+          {children}
+          <AppFooter />
+          <Toaster position="bottom-right" />
+          {/* useSearchParams needs a boundary it can suspend against. */}
+          <Suspense fallback={null}>
+            <FlashToaster />
+          </Suspense>
+          <ServiceWorkerRegistrar />
+        </ThemeProvider>
       </body>
     </html>
   );

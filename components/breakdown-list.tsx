@@ -14,17 +14,37 @@ export function BreakdownList({
   slices,
   linkParam,
   emptyLabel,
+  slots,
 }: {
   heading: string;
   slices: Slice[];
   /** Which filter a row links to, so the list doubles as navigation. */
   linkParam: "category" | "merchant";
   emptyLabel: string;
+  /**
+   * key → palette slot, from `slotsOf`. Supplied for the category list so each
+   * row wears the colour its wedge already has in the pie above; the merchant
+   * list has no counterpart up there and passes nothing, which falls back to
+   * position. Colouring by position is only defensible when the colour is
+   * decoration — for a category it would mean the same spend changes colour as
+   * soon as a filter reorders the list.
+   */
+  slots?: Map<string, number>;
 }) {
   const headingId = `${linkParam}-heading`;
   // Bars are scaled against the leader, not the total: with a long tail, a
   // share-scaled bar for rank 8 is a sliver nobody can compare.
   const leader = slices[0]?.amount ?? 1;
+
+  /**
+   * Slot 0 and anything the stack folded away take the neutral, which is the
+   * same colour their spending wears inside the pie's "Other" wedge.
+   */
+  const swatch = (key: string, index: number) => {
+    if (!slots) return `var(--chart-${(index % 8) + 1})`;
+    const slot = slots.get(key) ?? 0;
+    return slot === 0 ? "var(--chart-other)" : `var(--chart-${slot})`;
+  };
 
   return (
     <section className="card p-5" aria-labelledby={headingId}>
@@ -60,7 +80,7 @@ export function BreakdownList({
                     className="h-full rounded-full"
                     style={{
                       width: `${Math.max(2, (slice.amount / leader) * 100)}%`,
-                      background: `var(--chart-${(index % 8) + 1})`,
+                      background: swatch(slice.key, index),
                     }}
                   />
                 </div>

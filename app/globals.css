@@ -12,7 +12,12 @@
    every interactive surface while Supernova and Pistachio stay as
    fills. Everything below is either one of those five or derived
    from one, and every derived tone is checked against WCAG AA.
-   Committed light theme — no dark variant.
+
+   Two themes. `:root` is the light theme; `.dark` re-derives the
+   same five brand colours against a dark ground, which is a set of
+   deliberately chosen steps and not an inversion — Blue Stone at
+   7.9:1 on white is 1.6:1 on #1c1c1c and has to be lightened to
+   stay the accent. next-themes puts the class on <html>.
    ─────────────────────────────────────────────────────────────── */
 
 :root {
@@ -57,16 +62,30 @@
   --positive-hover: #4a5800;
   --positive-soft: #f4f8e6;
 
-  /* Categorical ramp for the breakdown bars, opening on the brand colours.
-     Supernova is deepened to #d6a100 so a 6px bar still reads on white. */
-  --chart-1: #005b61;
-  --chart-2: #a5c400;
-  --chart-3: #d6a100;
-  --chart-4: #0891b2;
-  --chart-5: #7c3aed;
-  --chart-6: #be123c;
-  --chart-7: #ea580c;
-  --chart-8: #64748b;
+  /* Categorical ramp — identity, one slot per category, assigned in fixed
+     order and never cycled. It opens on Blue Stone, so the biggest category
+     wears the brand colour.
+
+     The old ramp put Pistachio next to a deepened Supernova, which is fine
+     for the breakdown bars (they never touch) but collapses the moment those
+     two share an edge: deuteranopic ΔE 2.7, and 11.1 even with full colour
+     vision. The stacked area and the pie put every neighbour edge-to-edge, so
+     the slots were re-stepped and re-ordered against that constraint — hues
+     held, lightness moved, chroma capped so the result still reads as
+     PostFinance rather than as a highlighter. Worst adjacent pair is now
+     ΔE 17.0 deutan / 28.6 normal, against a target of 8 and a floor of 15.
+     Verified with the dataviz palette validator; re-run it after any edit. */
+  --chart-1: #06adb7; /* Blue Stone   */
+  --chart-2: #922764; /* Rose         */
+  --chart-3: #7b9203; /* Pistachio    */
+  --chart-4: #9b233b; /* Crimson      */
+  --chart-5: #2c9ff1; /* Cyan         */
+  --chart-6: #8e7105; /* Supernova    */
+  --chart-7: #a87fe9; /* Violet       */
+  --chart-8: #a54c01; /* Orange       */
+  /* The fold-in bucket, deliberately neutral: it is "everything else", not a
+     ninth identity. Nothing past slot 8 ever gets a generated hue. */
+  --chart-other: #7d7d7d;
 
   --radius: 8px;
 
@@ -96,6 +115,75 @@
   --ring: var(--accent);
 }
 
+/* ───────────────────────────────────────────────────────────────
+   Dark theme. Chosen steps, not an inversion.
+
+   The neutrals stay untinted for the same reason the light ones do.
+   Blue Stone is lightened to #4cc3cc (8.1:1 on the dark surface,
+   where the brand hex would be 1.6:1) and takes a dark ink on top
+   of it instead of white. Supernova and Pistachio keep their brand
+   hexes: both are already bright, and on a dark ground they finally
+   clear AA as text, so `--positive` can be Pistachio itself rather
+   than the darkened step light mode needs.
+   ─────────────────────────────────────────────────────────────── */
+.dark {
+  --bg: #121212;
+  --surface: #1c1c1c;
+  --surface-muted: #2b2b2b;
+  --surface-hover: #242424;
+
+  --line: #333333;
+  /* Control borders need 3:1 against the surface to be perceivable; the light
+     theme's #c2c2c2 lands at 1.2:1 here. This is 3.3:1. */
+  --line-strong: #6e6e6e;
+
+  --text: #f2f2f2; /* Concrete, now the ink rather than the ground */
+  --text-muted: #a9a9a9; /* 7.3:1 */
+  --text-subtle: #949494; /* 5.6:1 */
+
+  --accent: #4cc3cc; /* 8.1:1 on --surface */
+  --accent-hover: #6fd4db;
+  --accent-soft: #123c40;
+
+  --brand: #ffcc00;
+  --pistachio: #a5c400;
+  /* The edge has to be lighter than the fill here, not darker — its job is to
+     separate the fill from the ground, and the ground moved. */
+  --pistachio-edge: #cbe84a;
+
+  --danger: #f57a70; /* 6.4:1; the light theme's #d92d20 is 3.2:1 here */
+  --danger-hover: #fb8a80;
+  --danger-soft: #3a1a17;
+
+  /* On a dark ground Pistachio clears AA as text on its own (8.5:1), so the
+     darkened step light mode needs would only make it muddier. */
+  --positive: #a5c400;
+  --positive-hover: #b7d92a;
+  --positive-soft: #22290a;
+
+  /* Same eight hue families in the same slot order, re-stepped for the dark
+     surface — a series keeps its identity across themes. Worst adjacent pair
+     ΔE 15.2 deutan / 28.2 normal. */
+  --chart-1: #0ca2ac;
+  --chart-2: #9c316d;
+  --chart-3: #839c00;
+  --chart-4: #a62e43;
+  --chart-5: #1d96e6;
+  --chart-6: #836804;
+  --chart-7: #9f76df;
+  --chart-8: #984501;
+  --chart-other: #8c8c8c;
+
+  /* Shadows read as noise on a dark ground — a lifted surface is what carries
+     elevation here, so these thin out to a hairline. */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 4px 12px -2px rgb(0 0 0 / 0.6);
+
+  /* White on a light teal is 1.8:1 — the button ink has to flip with it. */
+  --primary-foreground: #00272a;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -121,6 +209,7 @@
   --color-positive: var(--positive);
   --color-positive-hover: var(--positive-hover);
   --color-positive-soft: var(--positive-soft);
+  --color-chart-other: var(--chart-other);
 
   --font-sans: var(--font-nunito);
   --font-mono: var(--font-plex-mono);
@@ -158,6 +247,10 @@
   html {
     @apply font-sans;
     background-color: var(--bg);
+    /* Lets the UA paint scrollbars, date pickers and other built-in controls
+       for the right theme — `<input type="date">` in the filter bar renders a
+       light calendar icon on a dark field without it. */
+    color-scheme: light;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -172,6 +265,10 @@
   ::selection {
     background: var(--accent-soft);
     color: var(--accent-hover);
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   :focus-visible {

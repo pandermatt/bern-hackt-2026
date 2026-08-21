@@ -48,6 +48,38 @@ export type Slice = {
   share: number;
 };
 
+/**
+ * One band of the stacked area chart and one wedge of the pie — the two views
+ * are the same aggregate, so a category cannot mean one colour in one and
+ * another colour in the other.
+ */
+export type CategoryBand = {
+  key: string;
+  /**
+   * Fixed palette slot, 1-based to match the `--chart-N` tokens, or 0 for the
+   * neutral fold-in bucket. Derived from the whole-range ranking and therefore
+   * stable under filtering: a colour identifies a category, never its current
+   * rank. Re-colouring the survivors when a filter changes is the fastest way
+   * to make a chart lie.
+   */
+  slot: number;
+  /** Whole-range expense total, a positive magnitude. */
+  total: number;
+  /** One figure per entry in `months`, in the same order. */
+  values: number[];
+};
+
+export type CategoryStack = {
+  /** "2025-01" … , gap-filled. */
+  months: string[];
+  /** "Jan" … , aligned with `months`. */
+  labels: string[];
+  /** Descending by total, with the fold-in bucket last if it exists. */
+  bands: CategoryBand[];
+  /** The sum of every band — what the pie divides up. */
+  total: number;
+};
+
 export type Facets = {
   accounts: string[];
   categories: string[];
@@ -177,10 +209,9 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
 
   if (buckets.size === 0) return [];
 
-  const months = [...buckets.keys()].sort();
   const series: MonthPoint[] = [];
 
-  for (let month = months[0]; month <= months[months.length - 1]; month = nextMonth(month)) {
+  for (const month of monthAxis([...buckets.keys()])) {
     const bucket = buckets.get(month) ?? { income: 0, expense: 0 };
     series.push({
       month,
@@ -192,6 +223,127 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
   }
 
   return series;
+}
+
+/**
+ * How many categories get an identity colour before the tail folds together.
+ * The categorical ramp is eight fixed hues; a ninth is never generated, so the
+ * ninth-and-beyond categories become "Other" instead.
+ */
+export const CATEGORY_SLOTS = 8;
+
+/**
+ * The fold-in bucket. `scripts/lib/statement.ts` already assigns a literal
+ * "Other" category, and it always lands here rather than competing for a slot
+ * of its own — otherwise a big enough miscellaneous bucket would win a colour
+ * and the chart would carry two bands both labelled "Other".
+ */
+export const OTHER_CATEGORY = "Other";
+
+/** The gap-filled month axis shared by `monthlySeries` and `stackByCategory`. */
+function monthAxis(months: string[]): string[] {
+  if (months.length === 0) return [];
+  const sorted = [...months].sort();
+  const axis: string[] = [];
+  for (
+    let month = sorted[0];
+    month <= sorted[sorted.length - 1];
+    month = nextMonth(month)
+  ) {
+    axis.push(month);
+  }
+  return axis;
+}
+
+/**
+ * Expenses per category per month — the stacked area chart's series, and the
+ * pie's wedges, from one pass.
+ *
+ * Slots are assigned from the **whole-range** ranking, which is what keeps a
+ * category's colour fixed while the user filters. The caller decides which rows
+ * to hand over; the dashboard hands over the unfiltered set, so the year's
+ * shape stays the year's shape even when the ledger below is showing one month.
+ */
+export function stackByCategory(rows: Transaction[]): CategoryStack {
+  const totals = new Map<string, number>();
+  const perMonth = new Map<string, Map<string, number>>();
+  const seenMonths: string[] = [];
+
+  for (const row of rows) {
+    if (row.kind !== "expense") continue;
+    const month = row.bookedOn.slice(0, 7);
+    const amount = -row.amountMinor;
+
+    totals.set(row.category, (totals.get(row.category) ?? 0) + amount);
+
+    let bucket = perMonth.get(month);
+    if (!bucket) {
+      bucket = new Map();
+      perMonth.set(month, bucket);
+      seenMonths.push(month);
+    }
+    bucket.set(row.category, (bucket.get(row.category) ?? 0) + amount);
+  }
+
+  const months = monthAxis(seenMonths);
+  if (months.length === 0) {
+    return { months: [], labels: [], bands: [], total: 0 };
+  }
+
+  // Rank everything except the literal "Other", which is the tail by
+  // definition and never competes for an identity slot.
+  const ranked = [...totals.entries()]
+    .filter(([key]) => key !== OTHER_CATEGORY)
+    .sort((a, b) => b[1] - a[1]);
+
+  const named = ranked.slice(0, CATEGORY_SLOTS).map(([key]) => key);
+  const folded = new Set([
+    ...ranked.slice(CATEGORY_SLOTS).map(([key]) => key),
+    ...(totals.has(OTHER_CATEGORY) ? [OTHER_CATEGORY] : []),
+  ]);
+
+  const valuesFor = (matches: (category: string) => boolean) =>
+    months.map((month) => {
+      const bucket = perMonth.get(month);
+      if (!bucket) return 0;
+      let sum = 0;
+      for (const [category, amount] of bucket) if (matches(category)) sum += amount;
+      return sum;
+    });
+
+  const bands: CategoryBand[] = named.map((key, index) => ({
+    key,
+    slot: index + 1,
+    total: totals.get(key) ?? 0,
+    values: valuesFor((category) => category === key),
+  }));
+
+  if (folded.size > 0) {
+    let total = 0;
+    for (const key of folded) total += totals.get(key) ?? 0;
+    bands.push({
+      key: OTHER_CATEGORY,
+      slot: 0,
+      total,
+      values: valuesFor((category) => folded.has(category)),
+    });
+  }
+
+  return {
+    months,
+    labels: months.map((month) => MONTH_LABELS[Number(month.slice(5, 7)) - 1]),
+    bands,
+    total: bands.reduce((sum, band) => sum + band.total, 0),
+  };
+}
+
+/**
+ * category → palette slot, so the breakdown list beneath the charts paints each
+ * row the colour its wedge already has. Anything the stack folded away — and
+ * anything absent from it entirely — resolves to slot 0, the neutral.
+ */
+export function slotsOf(stack: CategoryStack): Map<string, number> {
+  return new Map(stack.bands.map((band) => [band.key, band.slot]));
 }
 
 /** Expenses only, descending by magnitude, with each slice's share of the total. */
