@@ -1,0 +1,38 @@
+import { redirect } from "next/navigation";
+
+import { DangerZone } from "@/components/danger-zone";
+import { getCurrentUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
+
+export default async function AccountPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  return (
+    <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
+      <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
+        Account
+      </h1>
+      <p className="mt-1 text-[13.5px] text-text-muted">{user.email}</p>
+
+      <div className="card mt-8 overflow-hidden border-danger/30">
+        <div className="border-b border-danger/20 bg-danger-soft px-4 py-3 sm:px-5">
+          <h2 className="text-[14.5px] font-semibold text-danger">
+            Danger zone
+          </h2>
+        </div>
+        <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5">
+          <div>
+            <p className="text-[14px] font-medium text-text">Delete account</p>
+            <p className="mt-0.5 text-[13px] text-text-muted">
+              Permanently deletes your account and every transaction. This cannot be
+              undone.
+            </p>
+          </div>
+          <DangerZone />
+        </div>
+      </div>
+    </main>
+  );
+}
