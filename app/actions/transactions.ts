@@ -110,7 +110,7 @@ function parsePage(raw: unknown): number {
 /**
  * Builds the array of SQL conditions matching the applied user filters.
  */
-export function buildFilterConditions(userId: number, filters: Filters): SQL[] {
+function buildFilterConditions(userId: number, filters: Filters): SQL[] {
   const conditions: SQL[] = [eq(transactions.userId, userId)];
 
   if (!filters.includeTransfers) {
@@ -151,7 +151,7 @@ export function buildFilterConditions(userId: number, filters: Filters): SQL[] {
  * Loads only the current page of transactions directly from the database
  * using SQL LIMIT and OFFSET.
  */
-export async function getPaginatedTransactionsFromDb(
+async function getPaginatedTransactionsFromDb(
   userId: number,
   filters: Filters,
   page: number,
