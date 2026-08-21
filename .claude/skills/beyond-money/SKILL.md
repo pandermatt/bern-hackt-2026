@@ -91,28 +91,55 @@ Unchanged from the template this app grew out of, and still exactly true.
   imported with `import type` — a value import would pull drizzle into the
   client bundle the moment `transaction-filters.tsx` reaches for `formatMoney`,
   and only `npm run build` catches that.
-- Facets and the monthly series are computed from the **unfiltered** rows: a
-  dropdown that only offers surviving values is a dead end, and the year's
-  shape is the point of the chart even when viewing one month. Totals,
+- Facets, the monthly series and the category stack are computed from the
+  **unfiltered** rows: a dropdown that only offers surviving values is a dead
+  end, and the year's shape is the point of the charts even when viewing one
+  month. The pie is explicitly "the whole year" for the same reason. This is
+  also what makes the colour slots stable — see the design-system notes. Totals,
   breakdowns and the ledger follow the filter.
 - Filters are validated with zod and parsed with `safeParse(…).data ?? default`,
   so a junk query string renders defaults rather than throwing.
 
 ## Rendering
 
-- **The dashboard is server-rendered.** `components/transaction-filters.tsx` is
-  the **only** `"use client"` file in the app. Keep it that way: nothing else
-  on this page is interactive, and it means no copy of anyone's finances ends
-  up in a client bundle.
+- **The dashboard is server-rendered apart from the filter bar, the two
+  charts, and the theme switch.** Everything else stays on the server. The
+  charts are the deliberate exception described below; the rule they came from
+  — no copy of anyone's finances in a client bundle — still holds, because what
+  crosses is the *aggregate* (nine numbers a month) and never the ledger.
+  `components/transaction-list.tsx` must stay server-side.
 - **Filter state lives in the URL**, not in React state. A view is shareable,
   bookmarkable, and survives a reload. `TransactionFilters` calls
   `router.replace` inside a `useTransition`; because it reads `useSearchParams`
   it must stay wrapped in a `<Suspense>` boundary.
-- **The chart is inline SVG in a server component, and must stay that way.**
-  Every React charting library is client-only; one would ship a few hundred KB
-  and a hydration boundary to draw twelve pairs of rectangles. Server SVG is in
-  the HTML at first paint, works with JS off, and never shifts. Keep the
-  `role="img"` + `<title>`/`<desc>` and the `sr-only` table of the same figures.
+- **The charts are Apache ECharts, behind one boundary.** `components/echart.tsx`
+  is the only module that imports from `echarts`; it registers the pieces the
+  charts use (`BarChart`, `PieChart`, graphic, grid, tooltip, legend, canvas
+  renderer)
+  at module scope and owns init / resize / dispose. Import charts and
+  components from `echarts/charts` and `echarts/components`, never the `echarts`
+  barrel — the barrel is the whole library and roughly triples the bundle.
+  This replaced a hand-rolled server SVG. That was the right call for twelve
+  pairs of rectangles and the wrong one for a nine-band stack, but the
+  accessibility contract it came with **did not lapse**: every chart
+  still ships an `aria-label` and an `sr-only` `<table>` carrying the identical
+  figures, rendered server-side, and that table is also the "relief" the
+  palette's sub-3:1 fills are conditional on. A chart without its table is not
+  finished.
+- **Canvas cannot resolve `var(--chart-1)`.** `useChartTokens()` reads the
+  tokens out of the cascade with `getComputedStyle` and re-reads them when the
+  theme changes; it returns `null` until mounted, so the first frame is already
+  in the right palette. Don't duplicate the palette into TypeScript — that is
+  what breaks "restyle by editing tokens".
+- **The two charts answer different questions, and neither should grow into
+  the other.** "Month by month" is money **in against out** over time — two
+  overlaid areas, no category breakdown. The donut and "Where it goes" carry
+  the category story. A category breakdown was tried in the trend chart and
+  drowned the in-versus-out reading in nine bands; if you want detail there,
+  add a second chart rather than another dimension to this one.
+- **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
+  container and cannot reserve its own space, so the skeleton has to carry the
+  same pixel heights the components do.
 - **Never animate the page shell in.** Motion applies `initial` styles during
   SSR, so an entrance animation on a container ships it at `opacity: 0` and the
   page stays blank until hydration — or forever, if JS fails. `animate-pulse` in
@@ -183,24 +210,93 @@ Unchanged from the template this app grew out of, and still exactly true.
   component hardcodes a colour.
 - **Only Blue Stone works as text.** It is `--accent` and carries every
   interactive surface, in both directions (white-on-teal buttons included).
-  Supernova and Pistachio are under 2:1 and are **fills only** — `--brand` is
-  the signet tile, `--pistachio` is the inflow bars. Never set type in either.
-- **A Pistachio fill needs `--pistachio-edge` (`#7E9500`) as a stroke.** At 2:1
-  the fill alone does not make a bar's shape perceptible against white; the
-  edge brings it to 3.4:1. The chart bars and the legend swatch both carry it.
+  Supernova and Pistachio are under 2:1 on white and are **fills only** —
+  `--brand` is the signet tile in `components/logo.tsx`. Never set type in
+  either. (On the dark ground both clear AA, which is why `--positive` is
+  Pistachio itself there rather than the darkened step.)
+- **A Pistachio fill needs `--pistachio-edge` as a stroke.** At 2:1 the fill
+  alone does not make a shape perceptible against white; the edge brings it to
+  3.4:1. `--pistachio` and `--pistachio-edge` currently have **no consumer** —
+  they belonged to the paired-bar chart's inflow bars and its legend swatch,
+  both of which the ECharts rewrite removed. They are kept because they are two
+  of the five brand colours, not because something is drawing with them; if you
+  reach for Pistachio as a fill again, bring the edge with it. Note the edge has
+  to be *lighter* than the fill in `.dark`, not darker — its job is to separate
+  the fill from the ground, and the ground moved.
 - `--positive` (`#5F7000`) is Pistachio darkened to 5.5:1 for amounts set as
   **text**. Don't use the bright Pistachio for a figure, and don't use
   `--positive` where the brand colour should show.
 - `--danger` red is a system colour, not a brand one — brand palettes rarely
   cover error states. Money out and destructive actions share it.
+- **The ramp's hexes are given; its slot *order* is derived.** `--chart-1` …
+  `--chart-10` are ten supplied brand colours, used verbatim and identical in
+  both themes. The order is not the order they were supplied in, because a
+  palette listed by role groups its families together — three teals, then two
+  limes, then two yellows — and adjacent slots are exactly what touch in a
+  stacked bar and a pie. As listed, Brand yellow beside Soft lime was
+  protanopic ΔE 2.9 and Soft yellow beside Brand yellow was 7.4 under *normal*
+  vision: two categories, one apparent colour. Re-ordering fixed it without
+  moving a hex (now ΔE 17.2 protan / 25.1 normal). **If you add or move a slot,
+  re-run the validator** (`dataviz` skill → `scripts/validate_palette.js`, once
+  per mode with that mode's surface) and re-derive the order rather than
+  appending.
+- **Six of the ten fills are under 3:1 on white** (Soft yellow is 1.26:1), and
+  Primary teal is 2.17:1 on the dark surface. That is a property of the
+  supplied palette, not something the order can fix, and it is why the
+  percentage labels, the legend and the `sr-only` tables are load-bearing
+  rather than decorative — they are the relief those fills are conditional on.
+- **`--flow-in` / `--flow-out` are direction, not identity.** Money in and
+  money out are a two-state encoding, so they get their own pair — the
+  palette's "positive / growth" lime and its contrasting coral — and never
+  borrow a categorical slot. Keep them out of `--chart-N`: a series colour
+  means "which category", and reusing one for "which direction" makes both
+  meanings weaker.
+- **A colour identifies a category, never its rank.** Slots come from
+  `slotsOf(stack)`, computed on the whole-range ranking, and the pie, the
+  stacked bars and the "Where it goes" list all read from that one map. A list
+  coloured by array index repaints its survivors every time a filter reorders
+  it, which makes the colour a lie. The merchant list is the one place index
+  colouring survives — it has no chart counterpart, so there is nothing for it
+  to disagree with.
+- **A constant ground needs constant ink — use `.on-brand`.** Supernova is the
+  brand colour, not a surface, so the landing's yellow CTA band keeps `#ffcc00`
+  in both themes. Theme-following ink on it is near-white on yellow (1.3:1).
+  `.on-brand` in `app/globals.css` re-points `--text`, `--bg` and `--surface`
+  locally, so every `text-text` / `bg-text` / `text-bg` inside the band
+  resolves to fixed values. This works because `@theme inline` emits
+  `var(--text)` at the use site rather than a resolved colour — which is also
+  why the `inline` there is load-bearing. Reach for this pattern instead of
+  hardcoding a hex per element whenever a section's background does not follow
+  the theme.
+- **No component hardcodes a colour**, and that includes marketing pages.
+  `landing.tsx` arrived from a redesign carrying ~100 `neutral-*` / `bg-white`
+  literals and a copy of the *old* chart ramp inlined in its mock preview; both
+  were converted to tokens. If a preview advertises the dashboard, point it at
+  `var(--chart-N)` so it cannot drift from the real thing.
+- **Never generate an eleventh hue.** Ten slots, then `--chart-other`.
+  `stackByCategory` folds the tail — and the literal "Other" category, which
+  never competes for a slot — into it. `CATEGORY_SLOTS` in `lib/insights.ts` is
+  the single source of that number; `components/breakdown-list.tsx` has its own
+  modulo for the merchant list, so grep for it if the ramp is resized again.
+- **`--chart-other` and `--chart-ink` swap between themes; the ten hues do
+  not.** The palette supplies one light neutral (Concrete) and one dark
+  neutral, and each is used on the ground it can actually be seen against —
+  Dark neutral on white, Concrete on the dark surface. `--chart-ink` is the
+  diagrams' text, connectors and outlines.
 - Neutrals are **untinted**. Concrete is a pure neutral (HSL 0, 0, 95) and a
   teal-tinted grey scale fights it.
 - The signet path lives once in `lib/signet.ts` and is consumed by
   `components/logo.tsx`, `app/opengraph-image.tsx` (as a data URI — Satori only
   renders SVG reliably through an `<img>`), and `app/icon.svg` (its own copy,
   being a static file).
-- Committed **light theme**. There is no dark variant — don't add `.dark`
-  blocks.
+- **Two themes.** `:root` is light, `.dark` is dark, and `next-themes` puts the
+  class on `<html>` — which is why `<html>` needs `suppressHydrationWarning`
+  and why `color-scheme` is set alongside each (without it, a native
+  `<input type="date">` renders a light calendar icon on a dark field). The
+  dark steps are **chosen, not inverted**: Blue Stone is 7.9:1 on white and
+  1.6:1 on `#1c1c1c`, so `--accent` becomes `#4cc3cc` and `--primary-foreground`
+  flips to a dark ink. Neutrals stay untinted in both. Add a token to `:root`
+  and you must add it to `.dark` too.
 - Nunito for UI, IBM Plex Mono for money, dates and counts. **Every amount is
   `font-mono` and `tabular-nums`** so columns of figures line up.
 - `formatMoney` is unsigned (`signDisplay: "never"`): de-CH renders a negative
