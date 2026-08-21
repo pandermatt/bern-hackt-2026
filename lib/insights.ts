@@ -71,6 +71,19 @@ export const MONTH_LABELS = [
 const FORMATTERS = new Map<string, Intl.NumberFormat>();
 
 /**
+ * de-CH's thousands separator is not stable across runtimes: CLDR 47 (Node 22,
+ * ICU 77) groups with a right single quote, CLDR 48 (Node 24, ICU 78) with an
+ * ASCII apostrophe. Left to ICU, the same amount renders differently depending
+ * on which Node the process started under — a diff between a dev machine and
+ * CI, and between two deploys of the same commit. Pinned so the output is a
+ * property of this function rather than of the runtime's bundled locale data.
+ *
+ * Written as an escape, not the glyph: telling U+2019 from a plain "'" by eye
+ * in a diff is the exact confusion this constant exists to settle.
+ */
+const GROUP_SEPARATOR = "\u2019";
+
+/**
  * `signDisplay: "never"` on purpose. de-CH renders a negative as
  * "CHF-92’969.40" — no space, the minus welded to the code — and `Math.round`
  * can hand back `-0`, which formats as "CHF-0.00". The sign is a UI decision
@@ -88,7 +101,12 @@ export function formatMoney(minor: number, currency = "CHF"): string {
     });
     FORMATTERS.set(currency, formatter);
   }
-  return formatter.format(minor / 100);
+  // Via parts rather than a replace over the finished string, so only the
+  // grouping is touched and a currency symbol is left exactly as ICU wrote it.
+  return formatter
+    .formatToParts(minor / 100)
+    .map((part) => (part.type === "group" ? GROUP_SEPARATOR : part.value))
+    .join("");
 }
 
 /** "2025-03-14" → "14 Mar 2025". No `Date`, so no timezone can shift the day. */

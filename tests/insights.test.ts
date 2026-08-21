@@ -303,6 +303,15 @@ describe("formatting", () => {
     expect(formatMoney(182000)).toBe("CHF\u00A01\u2019820.00");
   });
 
+  it("groups the same way regardless of the runtime's CLDR version", () => {
+    // CLDR 48 (Node 24, ICU 78) groups de-CH with an ASCII apostrophe where
+    // CLDR 47 (Node 22, ICU 77) used U+2019, so an unpinned formatter renders
+    // differently on a dev machine than it does in CI. `formatMoney` pins the
+    // separator; this is the assertion that notices if that pin comes off.
+    expect(formatMoney(100000)).toBe("CHF\u00A01\u2019000.00");
+    expect(formatMoney(100000)).not.toContain("'");
+  });
+
   it("never renders negative zero", () => {
     // Math.round hands back -0 for any amount that rounds to nothing, and
     // without signDisplay:"never" that formats as "CHF-0.00".
