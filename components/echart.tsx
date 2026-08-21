@@ -1,11 +1,7 @@
 "use client";
 
 import { LineChart, PieChart } from "echarts/charts";
-import {
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-} from "echarts/components";
+import { GridComponent, LegendComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
@@ -35,7 +31,6 @@ echarts.use([
   LineChart,
   PieChart,
   GridComponent,
-  TooltipComponent,
   LegendComponent,
   CanvasRenderer,
 ]);
@@ -151,16 +146,7 @@ export function EChart({
     const observer = new ResizeObserver(() => instance.resize());
     observer.observe(element);
 
-    // A scroll moves the chart out from under a stationary pointer without
-    // firing a single mouse event, so ECharts never learns the hover ended
-    // and a visible tooltip lingers over whatever scrolled into its place.
-    // Capture phase, because the chat thread scrolls an inner container and
-    // scroll events do not bubble.
-    const hideTip = () => instance.dispatchAction({ type: "hideTip" });
-    window.addEventListener("scroll", hideTip, { capture: true, passive: true });
-
     return () => {
-      window.removeEventListener("scroll", hideTip, { capture: true });
       observer.disconnect();
       instance.dispose();
       chart.current = null;
@@ -183,18 +169,6 @@ export function EChart({
       aria-label={label}
     />
   );
-}
-
-/** Shared tooltip chrome, so the two charts do not drift apart. */
-export function tooltipStyle(tokens: ChartTokens) {
-  return {
-    backgroundColor: tokens.surface,
-    borderColor: tokens.line,
-    borderWidth: 1,
-    padding: [8, 10] as [number, number],
-    textStyle: { color: tokens.text, fontSize: 12 },
-    extraCssText: "box-shadow: 0 4px 12px -2px rgba(0,0,0,0.18); border-radius: 8px;",
-  };
 }
 
 export type { EChartsOption };

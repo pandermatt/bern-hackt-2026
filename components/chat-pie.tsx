@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import {
   EChart,
   slotColor,
-  tooltipStyle,
   useChartTokens,
   type ChartTokens,
   type EChartsOption,
@@ -20,26 +19,13 @@ import { formatMoney } from "@/lib/insights";
  * always the neutral fold-in bucket, matching the dashboard's convention.
  *
  * No outside labels: at bubble width they would clip, so identity lives in
- * the legend and the tooltip, and the sr-only table carries every figure.
+ * the legend, and the sr-only table carries every figure.
  */
 const HEIGHT = 210;
 
 function buildOption(chart: ChartSpec, tokens: ChartTokens): EChartsOption {
   return {
     animationDuration: 500,
-    tooltip: {
-      trigger: "item",
-      // Never poke out of the chart box: in a scrolling thread an overflowing
-      // tooltip reads as a label floating over the neighbouring bubbles.
-      confine: true,
-      ...tooltipStyle(tokens),
-      formatter: (params) => {
-        const point = params as { name: string; value: number; percent?: number };
-        return `${point.name}<br/><strong>${formatMoney(point.value)}</strong> · ${
-          point.percent?.toFixed(1) ?? "0"
-        }%`;
-      },
-    },
     legend: {
       type: "scroll",
       bottom: 0,

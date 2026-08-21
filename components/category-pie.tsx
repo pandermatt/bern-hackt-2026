@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import {
   EChart,
   slotColor,
-  tooltipStyle,
   useChartTokens,
   withAlpha,
   type ChartTokens,
@@ -35,16 +34,6 @@ const LABEL_THRESHOLD = 0.04;
 function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
   return {
     animationDuration: 600,
-    tooltip: {
-      trigger: "item",
-      ...tooltipStyle(tokens),
-      formatter: (params) => {
-        const point = params as { name: string; value: number; percent?: number };
-        return `${point.name}<br/><strong>${formatMoney(point.value)}</strong> · ${
-          point.percent?.toFixed(1) ?? "0"
-        }%`;
-      },
-    },
     legend: {
       type: "scroll",
       bottom: 0,
