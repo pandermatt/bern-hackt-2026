@@ -34,7 +34,10 @@ import {
 } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
-import { TransactionPagination } from "@/components/transaction-pagination";
+import {
+  LEDGER_ANCHOR_ID,
+  TransactionPagination,
+} from "@/components/transaction-pagination";
 import type { Transaction } from "@/db/schema";
 import type { AnomalyInsight, AnomalySeverity } from "@/lib/anomaly-engine";
 import { formatDay, formatMoney } from "@/lib/insights";
@@ -214,7 +217,13 @@ export function TransactionList({
   const flaggedInPage = rows.filter((r) => anomaliesByTxId.has(r.id)).length;
 
   return (
-    <section className="card overflow-hidden" aria-labelledby="ledger-heading">
+    /* `scroll-mt-20` clears the sticky h-16 header — without it, paging
+       scrolls the card's top edge underneath the header. */
+    <section
+      id={LEDGER_ANCHOR_ID}
+      className="card scroll-mt-20 overflow-hidden"
+      aria-labelledby="ledger-heading"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-4 py-3 sm:px-5">
         <div className="flex items-center gap-2.5">
           <h2 id="ledger-heading" className="text-[15px] font-semibold text-text">
