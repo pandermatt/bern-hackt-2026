@@ -45,7 +45,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <div className="space-y-4">
         <SummaryCards totals={totals} />
 
-        <MonthlyTrend stack={stack} series={monthly} />
+        <MonthlyTrend series={monthly} />
 
         <CategoryPie stack={stack} />
 

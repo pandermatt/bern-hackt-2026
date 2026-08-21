@@ -101,6 +101,15 @@
      through `useChartTokens`. */
   --chart-ink: #343a3a;
 
+  /* Money has a direction, and the chart that shows it is not categorical —
+     two series, in and out. These take the palette's own stated roles for it:
+     Brand lime is "positive / growth", Muted coral is the contrasting one.
+     Same hexes in both themes; both clear the pair separation check
+     (deuteranopic ΔE 13.1) and read as green/red, so they agree with the
+     summary tiles above the chart without borrowing a categorical slot. */
+  --flow-in: #a5c400;
+  --flow-out: #d66f5c;
+
   --radius: 12px;
 
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
@@ -196,6 +205,10 @@
   --chart-10: #c8d95b;
   --chart-other: #f2f2f2;
   --chart-ink: #f2f2f2;
+
+  /* 8.5:1 and 5.1:1 on this surface — better here than on white. */
+  --flow-in: #a5c400;
+  --flow-out: #d66f5c;
 
   /* Shadows read as noise on a dark ground — a lifted surface is what carries
      elevation here, so these thin out to a hairline. */

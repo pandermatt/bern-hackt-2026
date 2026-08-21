@@ -1,8 +1,7 @@
 "use client";
 
-import { BarChart, PieChart } from "echarts/charts";
+import { LineChart, PieChart } from "echarts/charts";
 import {
-  GraphicComponent,
   GridComponent,
   LegendComponent,
   TooltipComponent,
@@ -11,7 +10,7 @@ import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useHydrated } from "@/lib/use-hydrated";
 
@@ -19,9 +18,8 @@ import { useHydrated } from "@/lib/use-hydrated";
  * The one ECharts boundary in the app.
  *
  * Charting here used to be inline SVG in a server component, and for paired
- * bars that was the right call. A nine-category normalized stack with
- * variation ribbons is not something to hand-roll in SVG, so this is the
- * trade the app now makes: ~330 KB of chart runtime and a hydration boundary,
+ * bars that was the right call. Two gradient areas with a crosshair and a
+ * donut with leader lines are not, so this is the trade the app now makes: ~330 KB of chart runtime and a hydration boundary,
  * against a chart that can actually be interrogated. What it costs is that the
  * figures cross into the client bundle — so what crosses is the *aggregate*
  * (nine numbers a month), never the ledger.
@@ -34,9 +32,8 @@ import { useHydrated } from "@/lib/use-hydrated";
 // Registered once per module, not per mount. Only the pieces the two charts
 // use — the barrel import is the whole library and roughly triples this.
 echarts.use([
-  BarChart,
+  LineChart,
   PieChart,
-  GraphicComponent,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -60,6 +57,9 @@ export type ChartTokens = {
   other: string;
   /** The palette's dark neutral — axis text, connectors, outlines. */
   ink: string;
+  /** Money in / money out. Direction, not identity — never a series slot. */
+  flowIn: string;
+  flowOut: string;
 };
 
 const SERIES_TOKENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `--chart-${n}`);
@@ -76,6 +76,8 @@ function readTokens(): ChartTokens {
     series: SERIES_TOKENS.map(read),
     other: read("--chart-other"),
     ink: read("--chart-ink"),
+    flowIn: read("--flow-in"),
+    flowOut: read("--flow-out"),
   };
 }
 
@@ -121,45 +123,6 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** Plot size in CSS pixels, for options that have to do their own geometry. */
-export type ChartSize = { width: number; height: number };
-
-/**
- * An option, or a builder that needs to know how big the chart is.
- *
- * The builder form exists for `graphic` overlays: ECharts positions those in
- * pixel space, not data space, so anything drawn that way has to be recomputed
- * whenever the canvas changes size. Options that don't do their own geometry
- * should stay plain objects.
- */
-export type OptionSource =
-  | EChartsOption
-  | ((size: ChartSize) => EChartsOption)
-  | null;
-
-/** WCAG relative luminance of a `#rrggbb`. */
-function luminance(hex: string): number {
-  const value = hex.replace("#", "");
-  const channels = [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16) / 255);
-  const [r, g, b] = channels.map((c) =>
-    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
-  );
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/**
- * Ink for a label sitting *on* a fill, picked from the fill's own luminance.
- *
- * A fixed label colour cannot work across this ramp: it spans Primary teal at
- * 2% luminance and Soft yellow at 79%, so white is invisible on one end and
- * near-black on the other. The two candidates are the palette's own neutrals.
- * Theme-independent by design — what the label sits on is the series colour,
- * which does not change with the theme.
- */
-export function inkOn(fill: string): string {
-  return luminance(fill) > 0.42 ? "#343a3a" : "#f2f2f2";
-}
-
 export function EChart({
   option,
   className = "",
@@ -167,29 +130,13 @@ export function EChart({
   /** Announced in place of the canvas, which is opaque to assistive tech. */
   label,
 }: {
-  option: OptionSource;
+  option: EChartsOption | null;
   className?: string;
   height: number;
   label: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
-  // Read by the resize handler, which outlives any single render. Seeded from
-  // the first render and updated in the effect below — never during render.
-  const source = useRef<OptionSource>(option);
-
-  const apply = useCallback((animate: boolean) => {
-    const instance = chart.current;
-    const current = source.current;
-    if (!instance || !current) return;
-    const next =
-      typeof current === "function"
-        ? current({ width: instance.getWidth(), height: instance.getHeight() })
-        : current;
-    // `notMerge` because a filter can change the series count, and a merge
-    // would leave the departed series painted on the canvas.
-    instance.setOption({ ...next, animation: animate }, { notMerge: true });
-  }, []);
 
   useEffect(() => {
     const element = host.current;
@@ -197,17 +144,11 @@ export function EChart({
 
     const instance = echarts.init(element, undefined, { renderer: "canvas" });
     chart.current = instance;
-    apply(true);
 
     // ECharts sizes off the container's client box and does not watch it, so
     // a sidebar collapse or an orientation change would otherwise leave the
-    // canvas at its old width. Re-applying after the resize is what keeps a
-    // pixel-space `graphic` overlay aligned with the bars it belongs to;
-    // without animation, because a resize is not a data change.
-    const observer = new ResizeObserver(() => {
-      instance.resize();
-      apply(false);
-    });
+    // canvas at its old width.
+    const observer = new ResizeObserver(() => instance.resize());
     observer.observe(element);
 
     return () => {
@@ -215,12 +156,14 @@ export function EChart({
       instance.dispose();
       chart.current = null;
     };
-  }, [apply]);
+  }, []);
 
   useEffect(() => {
-    source.current = option;
-    apply(true);
-  }, [option, apply]);
+    if (!chart.current || !option) return;
+    // `notMerge` because a filter can change the series count, and a merge
+    // would leave the departed series painted on the canvas.
+    chart.current.setOption(option, { notMerge: true });
+  }, [option]);
 
   return (
     <div

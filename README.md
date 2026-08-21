@@ -324,9 +324,9 @@ Every other route requires a session.
 - `components/echart.tsx` — the app's single ECharts boundary: module-level
   chart registration, the palette read out of the CSS custom properties, and
   the init / resize / dispose lifecycle. The two charts import from here.
-- `components/monthly-trend.tsx` and `components/category-pie.tsx` — a stacked
-  bar in francs with variation ribbons, and a `padAngle` donut, over the same
-  aggregate. Both are client
+- `components/monthly-trend.tsx` and `components/category-pie.tsx` — an
+  in-versus-out area chart, and a `padAngle` donut of the category split. Both
+  are client
   components; both also render the identical figures as a `<table>` that ships
   in the server HTML, which is what a screen reader, a JS-off browser, or a
   failed chunk actually gets.
