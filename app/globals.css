@@ -278,6 +278,30 @@
 }
 
 @layer components {
+  /*
+   * A fixed-palette island.
+   *
+   * The Supernova CTA band on the landing page keeps its #ffcc00 ground in
+   * both themes — it is the brand colour, not a surface — so the ink on it
+   * must not follow the theme either. In dark mode `--text` is near-white,
+   * which on Supernova is 1.3:1.
+   *
+   * Re-pointing the tokens locally beats hardcoding a colour on each of the
+   * dozen elements inside: `@theme inline` emits `var(--text)` at the use
+   * site, so every `text-text` / `bg-text` / `text-bg` below this class picks
+   * these up instead. `--bg` stays white because the band's filled pill is
+   * `bg-text text-bg` — ink and its inverse, both anchored here.
+   */
+  .on-brand {
+    --text: #1a1a1a;
+    --text-muted: #4a4223;
+    --text-subtle: #57501f;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --line: #e0b900;
+    --line-strong: #c9a600;
+  }
+
   .card {
     background: var(--surface);
     border: 1px solid var(--line);

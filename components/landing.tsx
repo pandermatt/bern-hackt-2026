@@ -90,12 +90,12 @@ const STEPS = [
 ];
 
 const MOCK_CATEGORIES = [
-  { name: "Housing & Utilities", amount: "CHF 2,150.00", pct: 38, color: "bg-[#005b61]" },
-  { name: "Groceries & Daily", amount: "CHF 1,020.40", pct: 24, color: "bg-[#a5c400]" },
-  { name: "Mobility & SBB", amount: "CHF 480.00", pct: 14, color: "bg-[#d6a100]" },
-  { name: "Dining & Social", amount: "CHF 410.50", pct: 12, color: "bg-[#0891b2]" },
-  { name: "Tech & Services", amount: "CHF 260.00", pct: 8, color: "bg-[#7c3aed]" },
-  { name: "Other", amount: "CHF 145.00", pct: 4, color: "bg-[#64748b]" },
+  { name: "Housing & Utilities", amount: "CHF 2,150.00", pct: 38, color: "bg-[var(--chart-1)]" },
+  { name: "Groceries & Daily", amount: "CHF 1,020.40", pct: 24, color: "bg-[var(--chart-2)]" },
+  { name: "Mobility & SBB", amount: "CHF 480.00", pct: 14, color: "bg-[var(--chart-3)]" },
+  { name: "Dining & Social", amount: "CHF 410.50", pct: 12, color: "bg-[var(--chart-4)]" },
+  { name: "Tech & Services", amount: "CHF 260.00", pct: 8, color: "bg-[var(--chart-5)]" },
+  { name: "Other", amount: "CHF 145.00", pct: 4, color: "bg-[var(--chart-other)]" },
 ];
 
 const MOCK_TRANSACTIONS = [
@@ -131,20 +131,20 @@ const MOCK_TRANSACTIONS = [
 
 export function Landing() {
   return (
-    <div className="w-full flex-1 flex flex-col bg-white text-text selection:bg-[#ffcc00]/30 selection:text-neutral-950">
+    <div className="w-full flex-1 flex flex-col bg-bg text-text selection:bg-brand/30 selection:text-text">
       {/* ─────────────────────────────────────────────────────────────
           1. HERO SECTION (Clean White, pandermatt.ch Typographic Style)
          ───────────────────────────────────────────────────────────── */}
-      <section className="relative w-full pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden border-b border-neutral-100">
+      <section className="relative w-full pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden border-b border-line/60">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
-          <h1 className="max-w-[20ch] text-[38px] leading-[1.08] font-bold tracking-tight text-neutral-950 sm:text-[54px] lg:text-[62px]">
+          <h1 className="max-w-[20ch] text-[38px] leading-[1.08] font-bold tracking-tight text-text sm:text-[54px] lg:text-[62px]">
             See where your money{" "}
-            <span className="underline decoration-[#ffcc00] decoration-wavy decoration-from-font underline-offset-6">
+            <span className="underline decoration-brand decoration-wavy decoration-from-font underline-offset-6">
               actually goes.
             </span>
           </h1>
 
-          <p className="mt-6 max-w-[56ch] text-[17px] sm:text-[19px] leading-relaxed text-neutral-600">
+          <p className="mt-6 max-w-[56ch] text-[17px] sm:text-[19px] leading-relaxed text-text-muted">
             {site.name} reads your Swiss bank statements and turns raw transaction rows into
             crystal-clear cash flow graphs, merchant rankings, and category breakdowns.
           </p>
@@ -152,32 +152,32 @@ export function Landing() {
           <div className="mt-8 flex flex-wrap items-center gap-3.5">
             <Link
               href="/register"
-              className="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-neutral-950 px-6 text-[15px] font-semibold text-white transition-all duration-200 hover:bg-neutral-800 hover:shadow-lg active:scale-95"
+              className="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-text px-6 text-[15px] font-semibold text-bg transition-all duration-200 hover:bg-text/85 hover:shadow-lg active:scale-95"
             >
               <span>Get started for free</span>
               <ArrowRight className="size-4.5" />
             </Link>
             <Link
               href="/login"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-neutral-200 bg-white px-6 text-[15px] font-semibold text-neutral-800 transition-all duration-200 hover:bg-neutral-50 hover:border-neutral-300 active:scale-95"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-line bg-surface px-6 text-[15px] font-semibold text-text transition-all duration-200 hover:bg-surface-hover hover:border-line-strong active:scale-95"
             >
               <span>Sign in to vault</span>
-              <ChevronRight className="size-4 text-neutral-400" />
+              <ChevronRight className="size-4 text-text-subtle" />
             </Link>
           </div>
 
           {/* Quick trust highlights */}
-          <div className="mt-10 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-neutral-500 font-medium">
+          <div className="mt-10 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-text-subtle font-medium">
             <div className="flex items-center gap-1.5">
-              <ShieldCheck className="size-4 text-[#005b61]" />
+              <ShieldCheck className="size-4 text-accent" />
               <span>100% Private & User Scoped</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Zap className="size-4 text-[#ffcc00] fill-[#ffcc00]" />
+              <Zap className="size-4 text-brand fill-brand" />
               <span>Zero manual configuration</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <FileSpreadsheet className="size-4 text-[#a5c400]" />
+              <FileSpreadsheet className="size-4 text-positive" />
               <span>Direct PostFinance CSV import</span>
             </div>
           </div>
@@ -187,57 +187,57 @@ export function Landing() {
             2. INTERACTIVE DASHBOARD PREVIEW (Refined pandermatt card aesthetic)
            ───────────────────────────────────────────────────────────── */}
         <div className="mx-auto mt-12 w-full max-w-5xl px-5 sm:px-8">
-          <div className="rounded-2xl border border-neutral-200/90 bg-neutral-50/70 p-4 sm:p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xs">
+          <div className="rounded-2xl border border-line/90 bg-surface-hover/70 p-4 sm:p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xs">
             {/* Mock Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/80 pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/80 pb-4">
               <div className="flex items-center gap-2.5">
-                <span className="flex size-3 rounded-full bg-red-400/80" />
-                <span className="flex size-3 rounded-full bg-amber-400/80" />
-                <span className="flex size-3 rounded-full bg-emerald-400/80" />
-                <span className="ml-2 text-xs font-mono font-medium text-neutral-500">
+                <span className="flex size-3 rounded-full bg-danger/80" />
+                <span className="flex size-3 rounded-full bg-brand/80" />
+                <span className="flex size-3 rounded-full bg-positive/80" />
+                <span className="ml-2 text-xs font-mono font-medium text-text-subtle">
                   postfinance_annual_statement_2025.csv · live dashboard preview
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-2xs border border-neutral-200/60">
-                <Wallet className="size-3.5 text-[#005b61]" />
+              <div className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-text-muted shadow-2xs border border-line/60">
+                <Wallet className="size-3.5 text-accent" />
                 <span>CHF Currency</span>
               </div>
             </div>
 
             {/* Stat Cards Row */}
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-neutral-200/80 bg-white p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-500">
+              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
+                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
                   Total Inflow
                 </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-[#4a5800]">
+                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-positive-hover">
                   + CHF 68,450.00
                 </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-neutral-500">
-                  <span className="text-emerald-700 font-semibold">12 deposits</span> across 2 accounts
+                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-text-subtle">
+                  <span className="text-positive font-semibold">12 deposits</span> across 2 accounts
                 </div>
               </div>
 
-              <div className="rounded-xl border border-neutral-200/80 bg-white p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-500">
+              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
+                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
                   Total Spending
                 </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-neutral-900">
+                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-text">
                   - CHF 42,120.80
                 </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-neutral-500">
+                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-text-subtle">
                   <span>Avg. CHF 3,510.06 / month</span>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-neutral-200/80 bg-white p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-500">
+              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
+                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
                   Net Savings
                 </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-[#005b61]">
+                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-accent">
                   + CHF 26,329.20
                 </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-[#005b61]">
+                <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-accent">
                   <TrendingUp className="size-3.5" />
                   <span>38.5% savings rate</span>
                 </div>
@@ -247,16 +247,16 @@ export function Landing() {
             {/* Split Visual: Breakdown & Recent Rows */}
             <div className="mt-4 grid gap-4 lg:grid-cols-12">
               {/* Category distribution */}
-              <div className="rounded-xl border border-neutral-200/80 bg-white p-5 shadow-2xs lg:col-span-7">
+              <div className="rounded-xl border border-line/80 bg-surface p-5 shadow-2xs lg:col-span-7">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-neutral-500">
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-text-subtle">
                     Spending Distribution
                   </h2>
-                  <span className="text-xs font-medium text-neutral-400">Top Categories</span>
+                  <span className="text-xs font-medium text-text-subtle">Top Categories</span>
                 </div>
 
                 {/* Stacked bar preview */}
-                <div className="mt-3.5 flex h-3.5 w-full overflow-hidden rounded-full bg-neutral-100 p-0.5">
+                <div className="mt-3.5 flex h-3.5 w-full overflow-hidden rounded-full bg-surface-muted p-0.5">
                   {MOCK_CATEGORIES.map((cat) => (
                     <div
                       key={cat.name}
@@ -271,39 +271,39 @@ export function Landing() {
                   {MOCK_CATEGORIES.slice(0, 4).map((cat) => (
                     <div
                       key={cat.name}
-                      className="flex items-center justify-between rounded-lg bg-neutral-50 px-2.5 py-1.5"
+                      className="flex items-center justify-between rounded-lg bg-surface-hover px-2.5 py-1.5"
                     >
                       <div className="flex items-center gap-1.5 truncate">
                         <span className={`size-2.5 rounded-full shrink-0 ${cat.color}`} />
-                        <span className="truncate font-medium text-neutral-700">{cat.name}</span>
+                        <span className="truncate font-medium text-text-muted">{cat.name}</span>
                       </div>
-                      <span className="font-mono text-neutral-500 ml-2">{cat.pct}%</span>
+                      <span className="font-mono text-text-subtle ml-2">{cat.pct}%</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Sample transactions list */}
-              <div className="rounded-xl border border-neutral-200/80 bg-white p-5 shadow-2xs lg:col-span-5">
+              <div className="rounded-xl border border-line/80 bg-surface p-5 shadow-2xs lg:col-span-5">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-neutral-500">
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-text-subtle">
                     Latest Activity
                   </h2>
-                  <span className="text-xs font-semibold text-[#005b61]">Verified</span>
+                  <span className="text-xs font-semibold text-accent">Verified</span>
                 </div>
                 <div className="space-y-2">
                   {MOCK_TRANSACTIONS.map((tx) => (
                     <div
                       key={tx.title}
-                      className="flex items-center justify-between rounded-lg border border-neutral-100 bg-neutral-50/60 px-3 py-2 text-xs"
+                      className="flex items-center justify-between rounded-lg border border-line/60 bg-surface-hover/60 px-3 py-2 text-xs"
                     >
                       <div className="min-w-0 pr-2">
-                        <p className="font-medium text-neutral-900 truncate">{tx.title}</p>
-                        <p className="text-[11px] text-neutral-400 truncate">{tx.date} · {tx.account}</p>
+                        <p className="font-medium text-text truncate">{tx.title}</p>
+                        <p className="text-[11px] text-text-subtle truncate">{tx.date} · {tx.account}</p>
                       </div>
                       <span
                         className={`font-mono font-semibold shrink-0 ${
-                          tx.inflow ? "text-[#4a5800]" : "text-neutral-900"
+                          tx.inflow ? "text-positive-hover" : "text-text"
                         }`}
                       >
                         {tx.amount}
@@ -320,12 +320,12 @@ export function Landing() {
       {/* ─────────────────────────────────────────────────────────────
           3. HOW IT WORKS (3-Step Flow in pandermatt.ch Clean Style)
          ───────────────────────────────────────────────────────────── */}
-      <section className="w-full py-16 sm:py-24 bg-white border-b border-neutral-100">
+      <section className="w-full py-16 sm:py-24 bg-surface border-b border-line/60">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 mb-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle mb-2">
             Seamless Workflow
           </p>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-950">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-text">
             From raw export to complete financial clarity in three steps.
           </h2>
 
@@ -335,20 +335,20 @@ export function Landing() {
               return (
                 <div
                   key={step.number}
-                  className="group relative rounded-2xl border border-neutral-200/80 bg-white p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:border-neutral-300 hover:shadow-md"
+                  className="group relative rounded-2xl border border-line/80 bg-surface p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:border-line-strong hover:shadow-md"
                 >
                   <div className="flex items-center justify-between mb-5">
-                    <div className="flex size-11 items-center justify-center rounded-xl bg-neutral-100 text-neutral-900 group-hover:bg-[#ffcc00] transition-colors">
+                    <div className="flex size-11 items-center justify-center rounded-xl bg-surface-muted text-text group-hover:bg-brand group-hover:text-[#1a1a1a] transition-colors">
                       <Icon className="size-5" />
                     </div>
-                    <span className="font-mono text-xs font-bold text-neutral-400">
+                    <span className="font-mono text-xs font-bold text-text-subtle">
                       {step.number}
                     </span>
                   </div>
-                  <h3 className="text-base font-semibold text-neutral-900">
+                  <h3 className="text-base font-semibold text-text">
                     {step.title}
                   </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+                  <p className="mt-2 text-sm leading-relaxed text-text-muted">
                     {step.description}
                   </p>
                 </div>
@@ -361,14 +361,14 @@ export function Landing() {
       {/* ─────────────────────────────────────────────────────────────
           5. FULL-WIDTH POSTFINANCE YELLOW CONTAINER WITH CALL TO ACTION
          ───────────────────────────────────────────────────────────── */}
-      <section className="relative w-full bg-[#ffcc00] text-neutral-950 py-20 sm:py-28 overflow-hidden border-y border-amber-300">
+      <section className="on-brand relative w-full bg-brand text-text py-20 sm:py-28 overflow-hidden border-y border-brand">
         {/* Subtle geometric background watermark */}
         <div
-          className="pointer-events-none absolute -right-16 -top-24 size-96 rounded-full bg-white/20 blur-2xl"
+          className="pointer-events-none absolute -right-16 -top-24 size-96 rounded-full bg-surface/20 blur-2xl"
           aria-hidden="true"
         />
         <div
-          className="pointer-events-none absolute -left-16 -bottom-24 size-96 rounded-full bg-amber-400/30 blur-2xl"
+          className="pointer-events-none absolute -left-16 -bottom-24 size-96 rounded-full bg-brand/30 blur-2xl"
           aria-hidden="true"
         />
 
@@ -376,24 +376,24 @@ export function Landing() {
           <div className="flex flex-col lg:flex-row items-center justify-between gap-10">
             <div className="max-w-2xl">
               {/* Badge */}
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-neutral-950/10 px-3.5 py-1 text-xs font-semibold text-neutral-950 mb-5">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-text/10 px-3.5 py-1 text-xs font-semibold text-text mb-5">
                 <Sparkles className="size-3.5" />
                 <span className="uppercase tracking-[0.1em] text-[11px]">
                   PostFinance & Swiss Banks Ready
                 </span>
               </div>
 
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-neutral-950 leading-[1.12]">
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-text leading-[1.12]">
                 Ready to take control of your financial story?
               </h2>
 
-              <p className="mt-4 text-base sm:text-lg text-neutral-900 leading-relaxed max-w-xl font-normal">
+              <p className="mt-4 text-base sm:text-lg text-text leading-relaxed max-w-xl font-normal">
                 Join smart Swiss savers who track their cash flow with zero hassle and total privacy.
                 No third-party trackers, no bank credentials stored — just crystal-clear insights.
               </p>
 
               {/* Trust Checkmarks */}
-              <div className="mt-6 flex flex-wrap items-center justify-center sm:justify-start gap-y-2 gap-x-5 text-xs font-semibold text-neutral-950">
+              <div className="mt-6 flex flex-wrap items-center justify-center sm:justify-start gap-y-2 gap-x-5 text-xs font-semibold text-text">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="size-4" />
                   <span>Free forever for individuals</span>
@@ -413,18 +413,18 @@ export function Landing() {
             <div className="w-full sm:w-auto shrink-0 flex flex-col gap-3 min-w-[260px]">
               <Link
                 href="/register"
-                className="inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-full bg-neutral-950 px-8 text-[15px] font-bold text-white shadow-xl transition-all duration-200 hover:bg-neutral-800 hover:scale-[1.02] active:scale-95"
+                className="inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-full bg-text px-8 text-[15px] font-bold text-bg shadow-xl transition-all duration-200 hover:bg-text/85 hover:scale-[1.02] active:scale-95"
               >
                 <span>Get Started Now</span>
                 <ArrowRight className="size-4.5" />
               </Link>
               <Link
                 href="/login"
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-neutral-950 bg-transparent px-6 text-[14px] font-bold text-neutral-950 transition-all duration-200 hover:bg-neutral-950/10 active:scale-95"
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-text bg-transparent px-6 text-[14px] font-bold text-text transition-all duration-200 hover:bg-text/10 active:scale-95"
               >
                 <span>Sign in to Existing Account</span>
               </Link>
-              <p className="text-center font-mono text-[11px] text-neutral-800 mt-1">
+              <p className="text-center font-mono text-[11px] text-text mt-1">
                 Takes less than 30 seconds to begin.
               </p>
             </div>
@@ -435,48 +435,48 @@ export function Landing() {
       {/* ─────────────────────────────────────────────────────────────
           6. ACCORDION / FAQ & COMPATIBILITY DETAILS (pandermatt.ch Style)
          ───────────────────────────────────────────────────────────── */}
-      <section className="w-full py-16 sm:py-24 bg-white">
+      <section className="w-full py-16 sm:py-24 bg-surface">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 mb-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle mb-2">
             Frequently Answered
           </p>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-950 mb-10">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-text mb-10">
             Frequently Asked Questions
           </h2>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/50 p-6">
-              <h3 className="text-sm font-semibold text-neutral-950">
+            <div className="rounded-xl border border-line/80 bg-surface-hover/50 p-6">
+              <h3 className="text-sm font-semibold text-text">
                 Which banks and export formats work?
               </h3>
-              <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+              <p className="mt-2 text-xs leading-relaxed text-text-muted">
                 PostFinance e-finance CSV exports, CAMT.053 XML standards, and standard Swiss banking exports (UBS, Raiffeisen, Neon, ZKB, Kantonalbanken) are parsed seamlessly.
               </p>
             </div>
 
-            <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/50 p-6">
-              <h3 className="text-sm font-semibold text-neutral-950">
+            <div className="rounded-xl border border-line/80 bg-surface-hover/50 p-6">
+              <h3 className="text-sm font-semibold text-text">
                 Do I have to enter my e-banking login or password?
               </h3>
-              <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+              <p className="mt-2 text-xs leading-relaxed text-text-muted">
                 Never. Beyond Money will never ask for your bank login or password. You simply export your statement file from your bank and upload it.
               </p>
             </div>
 
-            <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/50 p-6">
-              <h3 className="text-sm font-semibold text-neutral-950">
+            <div className="rounded-xl border border-line/80 bg-surface-hover/50 p-6">
+              <h3 className="text-sm font-semibold text-text">
                 How does automated categorization work?
               </h3>
-              <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+              <p className="mt-2 text-xs leading-relaxed text-text-muted">
                 Our parser inspects transaction partner names, payment purposes, and Swiss merchant registries to categorize expenses into groceries, rent, mobility, utilities, and more.
               </p>
             </div>
 
-            <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/50 p-6">
-              <h3 className="text-sm font-semibold text-neutral-950">
+            <div className="rounded-xl border border-line/80 bg-surface-hover/50 p-6">
+              <h3 className="text-sm font-semibold text-text">
                 Can I export or purge my data at any time?
               </h3>
-              <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+              <p className="mt-2 text-xs leading-relaxed text-text-muted">
                 Yes. You have total data sovereignty. You can delete transactions, flush statements, or reset your vault whenever you choose.
               </p>
             </div>

@@ -6,8 +6,15 @@ import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { User } from "@/db/schema";
 
+/**
+ * The pill control, in tokens rather than `neutral-*` literals. The redesign
+ * this came from predates the dark theme and hardcoded `bg-white` — which is
+ * a white header slab on a #121212 page. Each literal maps to the token that
+ * renders identically in light mode: `--surface` is #ffffff, `--line` sits
+ * where `neutral-200` did.
+ */
 const CONTROL =
-  "cursor-pointer rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-neutral-800 transition-all hover:bg-neutral-50 hover:border-neutral-300 shadow-2xs active:scale-95";
+  "cursor-pointer rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] font-semibold text-text transition-all hover:bg-surface-muted hover:border-line-strong shadow-2xs active:scale-95";
 
 /**
  * Rendered once by the root layout, so every route gets the same chrome.
@@ -15,73 +22,44 @@ const CONTROL =
  */
 export function AppHeader({ user }: { user: User | null }) {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-neutral-100 bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
         <Logo />
 
-        <div className="flex items-center gap-3">
-          <ThemeToggle />
-
-          {user ? (
-            <>
-              <Link
-                href="/account"
-                aria-label="Account settings"
-                className={`flex shrink-0 items-center gap-1.5 ${CONTROL}`}
-              >
-                <svg viewBox="0 0 16 16" className="size-4 shrink-0" fill="none" aria-hidden>
-                  <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.4" />
-                  <path
-                    d="M2.75 13c.8-2.6 2.9-4 5.25-4s4.45 1.4 5.25 4"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="hidden max-w-[22ch] truncate sm:inline" title={user.email}>
-                  {user.email}
-                </span>
-              </Link>
-              <form action={logout}>
-                <button type="submit" className={CONTROL}>
-                  Sign out
-                </button>
-              </form>
-            </>
-          ) : (
-            <Link href="/login" className={CONTROL}>
-              Sign in
-            </Link>
-          )}
-        </div>
         {user ? (
           <div className="flex items-center gap-2.5">
+            <ThemeToggle />
             <Link
               href="/account"
               aria-label="Account settings"
               className={`flex shrink-0 items-center gap-2 ${CONTROL}`}
             >
-              <UserIcon className="size-3.5 text-neutral-500" />
+              <UserIcon className="size-3.5 text-text-subtle" />
               <span className="hidden max-w-[20ch] truncate sm:inline" title={user.email}>
                 {user.email}
               </span>
             </Link>
             <form action={logout}>
               <button type="submit" className={`flex items-center gap-1.5 ${CONTROL}`}>
-                <LogOut className="size-3.5 text-neutral-400" />
+                <LogOut className="size-3.5 text-text-subtle" />
                 <span>Sign out</span>
               </button>
             </form>
           </div>
         ) : (
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <Link href="/login" className={`flex items-center gap-1.5 ${CONTROL}`}>
-              <LogIn className="size-3.5 text-neutral-500" />
+              <LogIn className="size-3.5 text-text-subtle" />
               <span>Sign in</span>
             </Link>
+            {/* A maximum-contrast pill rather than a brand-coloured one — the
+                redesign's choice, kept. `bg-text`/`text-bg` is that intent
+                expressed in tokens: near-black on white in light, and it
+                inverts with the theme instead of vanishing into it. */}
             <Link
               href="/register"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-neutral-950 px-4 py-1.5 text-[13px] font-semibold text-white shadow-2xs transition-all hover:bg-neutral-800 active:scale-95"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-text px-4 py-1.5 text-[13px] font-semibold text-bg shadow-2xs transition-all hover:opacity-85 active:scale-95"
             >
               <span>Get started</span>
               <ArrowRight className="size-3.5" />

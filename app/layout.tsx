@@ -62,14 +62,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${nunito.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${googleSansFlex.variable} ${plexMono.variable} h-full antialiased`}
       // next-themes' pre-paint script sets `class="dark"` on this element
       // before React hydrates, so the class it finds never matches the one the
       // server rendered. Without this, that mismatch is a console error on
       // every load.
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-bg font-sans">
+      {/* `bg-bg`, not `bg-white`: main set `--bg` to #ffffff, so this renders
+          identically in light mode while still following the dark theme. A
+          literal here would keep the page white on a dark ground. */}
+      <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased">
         <ThemeProvider>
           <AppHeader user={user} />
           {children}
@@ -81,20 +84,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           </Suspense>
           <ServiceWorkerRegistrar />
         </ThemeProvider>
-      className={`${googleSansFlex.variable} ${plexMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-white font-sans text-text antialiased">
-        <AppHeader user={user} />
-        {children}
-        <AppFooter />
-        <Toaster position="bottom-right" />
-        {/* useSearchParams needs a boundary it can suspend against. */}
-        <Suspense fallback={null}>
-          <FlashToaster />
-        </Suspense>
-        <ServiceWorkerRegistrar />
       </body>
     </html>
   );
 }
-
