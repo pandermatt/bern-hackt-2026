@@ -42,6 +42,7 @@ import type {
   AnomalyKind,
   AnomalySeverity,
 } from "@/lib/anomaly-engine";
+import { useAnomalyText } from "@/lib/anomaly-text";
 import { formatMoney, type MonthTotal } from "@/lib/insights";
 
 /**
@@ -189,6 +190,8 @@ function FindingPanel({
   transactionId: number;
 }) {
   const t = useTranslations("Anomalies");
+  const anomalyText = useAnomalyText();
+  const { title, description } = anomalyText(anomaly);
   // Keyed by rule id, so a finding left over from an older engine renders
   // without an explanation rather than throwing.
   const explain = useTranslations("AnomalyRules");
@@ -200,7 +203,7 @@ function FindingPanel({
         <span aria-hidden className="shrink-0 leading-none">
           {anomaly.emoji}
         </span>
-        <span>{anomaly.title}</span>
+        <span>{title}</span>
       </p>
 
       {explanation && (
@@ -210,7 +213,7 @@ function FindingPanel({
       {/* The finding's own words, which carry the numbers — the reason the
           stored evidence blob is not rendered here as well. */}
       <p className="mt-2 border-t border-line pt-2 text-[12.5px] text-text-muted">
-        {anomaly.description}
+        {description}
       </p>
 
       <Link
@@ -269,6 +272,9 @@ function TransactionRow({
   const t = useTranslations("Ledger");
   const tCategories = useTranslations("Categories");
   const tMonths = useTranslations("Months");
+  // A finding is stored as the rule that found it and the values it needs, so
+  // its words are chosen here rather than at scan time — see lib/anomaly-text.ts.
+  const anomalyText = useAnomalyText();
 
   // Booked dates are `YYYY-MM-DD` text, never a `Date` — see the note on
   // `formatDay` in lib/insights.ts. The month name comes from the catalog and
@@ -298,11 +304,16 @@ function TransactionRow({
    * hidden list. The two orderings cannot contradict each other because kind is
    * only ever escalated, never lowered, away from what severity derived.
    */
-  const rankedAnomalies = [...anomalies].sort(
-    (a, b) =>
-      KIND_RANK[b.kind] - KIND_RANK[a.kind] ||
-      SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
-  );
+  const rankedAnomalies = [...anomalies]
+    .sort(
+      (a, b) =>
+        KIND_RANK[b.kind] - KIND_RANK[a.kind] ||
+        SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
+    )
+    // Paired with its words here rather than looked up at each of the three
+    // places that print them, so the badge, the panel and the sentence cannot
+    // end up quoting different sources.
+    .map((anomaly) => ({ anomaly, text: anomalyText(anomaly) }));
 
   /*
    * One kind drives the wash, the first badge and the sentence, so the three
@@ -311,7 +322,7 @@ function TransactionRow({
    * under a combined id — the teal row was, in practice, only reachable when
    * the LLM was switched off.
    */
-  const rowKind = rankedAnomalies[0]?.kind ?? "info";
+  const rowKind = rankedAnomalies[0]?.anomaly.kind ?? "info";
   const shownAnomalies = rankedAnomalies.slice(0, MAX_VISIBLE_BADGES);
   const hiddenAnomalies = rankedAnomalies.slice(MAX_VISIBLE_BADGES);
   const hiddenCount = hiddenAnomalies.length;
@@ -351,7 +362,7 @@ function TransactionRow({
             badge onto the same cramped line. */}
         {hasAnomaly && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {shownAnomalies.map((anomaly, index) => {
+            {shownAnomalies.map(({ anomaly, text }, index) => {
               const Icon = getLucideIcon(anomaly.icon);
               /* Not keyed on `rule_id` alone: one transaction can carry two
                  findings from the same rule — an airline billing two different
@@ -379,7 +390,7 @@ function TransactionRow({
                     {/* The finding's own words. This used to print `rule_id`, so
                         the row read UNUSUAL_FINANCIAL_IMPACT in monospace at a
                         person who wanted to know what happened to their money. */}
-                    <span className="font-medium">{anomaly.title}</span>
+                    <span className="font-medium">{text.title}</span>
                   </button>
 
                   {/* The native title attribute this replaces was unreachable on
@@ -399,7 +410,7 @@ function TransactionRow({
                 </button>
                 <Panel id={`finding-${row.id}-more`}>
                   <ul className="divide-y divide-line">
-                    {hiddenAnomalies.map((anomaly, index) => (
+                    {hiddenAnomalies.map(({ anomaly, text }, index) => (
                       <li key={`${anomaly.rule_id}-${index}`} className="py-2.5 first:pt-0 last:pb-0">
                         <Link
                           href={{
@@ -409,10 +420,10 @@ function TransactionRow({
                           className="block hover:underline"
                         >
                           <span className="text-[13px] font-medium text-text">
-                            {anomaly.emoji} {anomaly.title}
+                            {anomaly.emoji} {text.title}
                           </span>
                           <span className="mt-0.5 block text-[12px] text-text-muted">
-                            {anomaly.description}
+                            {text.description}
                           </span>
                         </Link>
                       </li>
@@ -434,7 +445,7 @@ function TransactionRow({
           >
             {/* `rankedAnomalies`, not `anomalies`: the sentence has to be the
                 same finding the wash and the first badge are showing. */}
-            {rankedAnomalies[0].description}
+            {rankedAnomalies[0].text.description}
           </p>
         )}
 

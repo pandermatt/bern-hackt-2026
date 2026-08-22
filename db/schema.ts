@@ -169,6 +169,27 @@ export const anomalies = sqliteTable(
     emoji: text("emoji").notNull().default(""),
     /** `supporting_metrics`, JSON-encoded — shape varies per rule. */
     metrics: text("metrics").notNull().default("{}"),
+    /**
+     * How this finding is rendered in the reader's language.
+     *
+     * `title` and `description` above are the text as the scan produced it —
+     * English from the engine, or the narrative layer's own words. Those
+     * cannot be re-read in another language, so the deterministic rule and its
+     * values are kept alongside: `base_rule_id` names the `AnomalyFindings`
+     * message (it differs from `rule_id` only when the narrative layer merged
+     * several findings into one) and `params` carries the values it needs.
+     * `narrative_locale` is set only when the stored text came from the model,
+     * and says which language it is in — read in the other one, the row falls
+     * back to the translated rule message rather than showing German to an
+     * English reader.
+     *
+     * All three are nullable: rows written before this existed still render
+     * from `title` / `description`, and a nullable column is what
+     * `drizzle-kit push` can add to a populated table without `--force`.
+     */
+    baseRuleId: text("base_rule_id"),
+    params: text("params"),
+    narrativeLocale: text("narrative_locale"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

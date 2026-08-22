@@ -22,8 +22,43 @@ export function redirectUrl(args: { href: Href; locale: string }): string {
   return search ? `${base}?${search}` : base;
 }
 
-/** The English catalog, as a next-intl-shaped translator. */
+/**
+ * The English catalog, as a next-intl-shaped translator.
+ *
+ * Keys are resolved along the dots, because a namespace is not flat — the
+ * anomaly rules nest a `title` and a `description` under each rule id. A key
+ * that resolves to anything but a string comes back as itself, which is what
+ * next-intl renders for a missing message.
+ */
 export function translator(namespace: string) {
-  const messages = (en as Record<string, Record<string, string>>)[namespace] ?? {};
-  return (key: string) => messages[key] ?? key;
+  const messages = (en as Record<string, unknown>)[namespace];
+
+  const lookup = (key: string): string | undefined => {
+    const value = key.split(".").reduce<unknown>(
+      (node, part) =>
+        node && typeof node === "object"
+          ? (node as Record<string, unknown>)[part]
+          : undefined,
+      messages,
+    );
+    return typeof value === "string" ? value : undefined;
+  };
+
+  /*
+   * Simple `{name}` substitution only. Enough for an error message or a
+   * finding's sentence; ICU plurals and selects are left as they are written,
+   * which is visible in a failing assertion rather than silently wrong.
+   */
+  const t = (key: string, values?: Record<string, string | number>) => {
+    const message = lookup(key);
+    if (message === undefined) return key;
+    if (!values) return message;
+    return message.replace(/\{(\w+)\}/g, (whole, name: string) =>
+      name in values ? String(values[name]) : whole,
+    );
+  };
+
+  t.has = (key: string) => lookup(key) !== undefined;
+
+  return t;
 }
