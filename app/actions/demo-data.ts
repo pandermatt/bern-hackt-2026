@@ -29,8 +29,12 @@ export async function generateSyntheticTransactionsAction(options?: {
       yearsCount,
       targetCount: options?.targetCount,
     });
-    revalidatePath("/");
-    revalidatePath("/account");
+    // Every page sits under `/[locale]`, so the literal "/" and "/account"
+    // these used to name match nothing. The dashboard lives in a `(dashboard)`
+    // route group and its cache tag carries the group, so the pattern has to
+    // as well. Revalidating the pattern covers both languages at once.
+    revalidatePath("/[locale]/(dashboard)", "page");
+    revalidatePath("/[locale]/account", "page");
     const yearsText =
       yearsCount > 1 ? `the last ${yearsCount} years` : "the last 12 months";
 

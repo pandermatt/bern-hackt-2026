@@ -475,32 +475,21 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
           once, so nobody has to operate the stepper to hear the history. */}
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
-      <table className="sr-only" aria-label={t("tableLabel")}>
-        <thead>
-          <tr>
-            <th scope="col">{t("month")}</th>
-            <th scope="col">{t("net")}</th>
-            <th scope="col">{t("balance")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {series.map((point) => (
-            <tr key={point.month}>
-              <th scope="row">{point.month}</th>
-              <td>{signedMoney(point.net)}</td>
-              <td>{signedMoney(point.balance)}</td>
+      <div className="sr-only">
+        <table aria-label={t("tableLabel")}>
+          <thead>
+            <tr>
+              <th scope="col">{t("month")}</th>
+              <th scope="col">{t("net")}</th>
+              <th scope="col">{t("balance")}</th>
             </tr>
           </thead>
           <tbody>
             {series.map((point) => (
               <tr key={point.month}>
                 <th scope="row">{point.month}</th>
-                <td>{formatMoney(point.income)}</td>
-                <td>{formatMoney(point.expense)}</td>
-                <td>
-                  {point.net < 0 ? "−" : ""}
-                  {formatMoney(point.net)}
-                </td>
+                <td>{signedMoney(point.net)}</td>
+                <td>{signedMoney(point.balance)}</td>
               </tr>
             ))}
           </tbody>
