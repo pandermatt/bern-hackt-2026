@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeTransactionAnomalies,
   calculateMAD,
+  canEscalateToAlert,
   calculateMedian,
   calculatePercentile,
   consolidateInsights,
@@ -270,5 +271,129 @@ describe("consolidateInsights", () => {
       rows,
     );
     expect(out).toHaveLength(2);
+  });
+});
+
+describe("the alert gate", () => {
+  /*
+   * `alert` is the only classification the deterministic layer does not assign
+   * on its own — the narrative layer proposes it and `canEscalateToAlert` has
+   * to co-sign. That makes it the one state with no coverage from the shipped
+   * statements, where every finding has an innocent explanation.
+   *
+   * So this builds the account that does not: a year of small transfers to
+   * people already paid before, and then one large payment to a stranger. That
+   * pairing — and only that pairing — is the shape of an authorised-push-payment
+   * scam, which is why neither rule qualifies alone.
+   */
+  function accountWithASuspectTransfer(): TransactionInput[] {
+    const rows: TransactionInput[] = [];
+    let id = 1;
+
+    const known = ["Anna Brunner", "Landlord Zurich", "Marco Rossi"];
+
+    // Twelve months of salary, so the engine has an income baseline to judge
+    // the transfer's size against.
+    for (let month = 1; month <= 12; month++) {
+      rows.push({
+        id: id++,
+        bookedOn: `2025-${String(month).padStart(2, "0")}-25`,
+        kind: "income",
+        amountMinor: 720000,
+        currency: "CHF",
+        account: "Privatkonto",
+        merchant: "Arbeitgeber AG",
+        category: "Salary",
+        description: "salary",
+      });
+    }
+
+    // Ten routine transfers, rotating between three familiar recipients.
+    for (let i = 0; i < 10; i++) {
+      rows.push({
+        id: id++,
+        bookedOn: `2025-${String((i % 10) + 1).padStart(2, "0")}-05`,
+        kind: "transfer",
+        amountMinor: -20000,
+        currency: "CHF",
+        account: "Privatkonto",
+        merchant: known[i % known.length],
+        category: "Transfer",
+        description: "transfer",
+      });
+    }
+
+    // The one that matters: forty times the usual, to a name never seen.
+    rows.push({
+      id: id++,
+      bookedOn: "2025-11-14",
+      kind: "transfer",
+      amountMinor: -800000,
+      currency: "CHF",
+      account: "Privatkonto",
+      merchant: "Stefan Meier",
+      category: "Transfer",
+      description: "transfer",
+    });
+
+    return rows;
+  }
+
+  const insights = analyzeTransactionAnomalies(accountWithASuspectTransfer(), {
+    referenceDate: "2025-12-01",
+  });
+
+  const suspectId = 23;
+
+  it("raises both halves of the pattern against the same transaction", () => {
+    const onSuspect = insights.filter((i) => i.transaction_ids.includes(suspectId));
+    const ruleIds = onSuspect.map((i) => i.rule_id);
+
+    expect(ruleIds).toContain("LARGE_TRANSFER");
+    expect(ruleIds).toContain("NEW_COUNTERPARTY");
+  });
+
+  it("co-signs an escalation for each half", () => {
+    const large = insights.find(
+      (i) => i.rule_id === "LARGE_TRANSFER" && i.transaction_ids.includes(suspectId),
+    )!;
+    const newParty = insights.find(
+      (i) => i.rule_id === "NEW_COUNTERPARTY" && i.transaction_ids.includes(suspectId),
+    )!;
+
+    expect(canEscalateToAlert(large, insights)).toBe(true);
+    expect(canEscalateToAlert(newParty, insights)).toBe(true);
+  });
+
+  it("refuses either half on its own", () => {
+    const large = insights.find(
+      (i) => i.rule_id === "LARGE_TRANSFER" && i.transaction_ids.includes(suspectId),
+    )!;
+    const newParty = insights.find(
+      (i) => i.rule_id === "NEW_COUNTERPARTY" && i.transaction_ids.includes(suspectId),
+    )!;
+
+    // A big transfer to someone already paid before is a rent cheque.
+    expect(canEscalateToAlert(large, [large])).toBe(false);
+    // A first payment to a new person is how you pay a new person.
+    expect(canEscalateToAlert(newParty, [newParty])).toBe(false);
+  });
+
+  it("classifies the pair as an alert, with no model involved", () => {
+    // Escalation is deterministic: `analyzeTransactionAnomalies` runs the gate
+    // itself, so red does not depend on an LLM being reachable.
+    const onSuspect = insights.filter((i) => i.transaction_ids.includes(suspectId));
+
+    expect(onSuspect.map((i) => i.kind)).toContain("alert");
+    expect(
+      onSuspect.filter((i) => i.kind === "alert").map((i) => i.rule_id).sort(),
+    ).toEqual(["LARGE_TRANSFER", "NEW_COUNTERPARTY"]);
+  });
+
+  it("leaves every other finding in the account alone", () => {
+    const elsewhere = insights.filter((i) => !i.transaction_ids.includes(suspectId));
+    for (const insight of elsewhere) {
+      expect(insight.kind).not.toBe("alert");
+    }
   });
 });

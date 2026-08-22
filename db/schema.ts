@@ -147,6 +147,22 @@ export const anomalies = sqliteTable(
     severity: text("severity", {
       enum: ["low", "medium", "high"],
     }).notNull(),
+    /**
+     * How much concern the finding warrants, as opposed to how far from
+     * baseline it sits — see `AnomalyKind` in `lib/anomaly-engine.ts` for why
+     * that is a second axis and not a rename of `severity`.
+     *
+     * The default is not stylistic: SQLite rejects
+     * `ALTER TABLE … ADD COLUMN … NOT NULL` outright when no default is given,
+     * so a column added to a populated table has to have one. It also means
+     * rows written by an earlier scan read `warning` until the account is
+     * re-scanned, which is fine — a scan replaces its predecessor wholesale.
+     */
+    kind: text("kind", {
+      enum: ["info", "warning", "alert"],
+    })
+      .notNull()
+      .default("warning"),
     title: text("title").notNull(),
     description: text("description").notNull(),
     icon: text("icon").notNull(),
