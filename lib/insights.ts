@@ -696,6 +696,69 @@ export function budgetRows(
     }));
 }
 
+/** How many pots the ramp can colour before the neutral takes over. */
+export const SAVINGS_SLOTS = CATEGORY_SLOTS;
+
+/**
+ * A savings goal with its pot filled in.
+ *
+ * `savedMinor` is every allocation ever made to it, not the month's; the pot
+ * is cumulative, which is the whole idea of a pot.
+ */
+export type SavingsPot = {
+  id: number;
+  name: string;
+  targetMinor: number;
+  savedMinor: number;
+  /** Allocated out of the month being viewed, so the row can show it back. */
+  monthMinor: number;
+  /** Palette slot, 1-based. Stable per goal — see `potSlot`. */
+  slot: number;
+};
+
+/**
+ * A pot's colour slot.
+ *
+ * Derived from the goal's row id, not from its position in the list. Colouring
+ * by index would repaint every pot the moment one is deleted, and the app's
+ * rule is that a colour identifies a thing rather than its rank. Goals have no
+ * chart counterpart to agree with, so any stable mapping will do — this one is
+ * stable because ids are.
+ */
+export function potSlot(goalId: number, slots = SAVINGS_SLOTS): number {
+  return ((goalId - 1) % slots) + 1;
+}
+
+/**
+ * How full a pot is, 0…1.
+ *
+ * Clamped at the top: over-funding a goal is allowed — money does not bounce
+ * off a full pot — but a fill of 130% would draw outside the jar.
+ */
+export function potFill(savedMinor: number, targetMinor: number): number {
+  if (targetMinor <= 0) return savedMinor > 0 ? 1 : 0;
+  return Math.min(1, Math.max(0, savedMinor / targetMinor));
+}
+
+/**
+ * What a finished month had left over: income it did not spend.
+ *
+ * `null` while the month is still running, which is a different answer from
+ * zero. A surplus computed on the 8th is a number that shrinks for the rest of
+ * the month, and offering it as money to put away invites allocating rent.
+ * A month that spent more than it earned has nothing spare, which *is* zero.
+ */
+export function monthSurplus(
+  series: MonthPoint[],
+  month: string,
+  ended: boolean,
+): number | null {
+  if (!ended) return null;
+  const point = series.find((entry) => entry.month === month);
+  if (!point) return 0;
+  return Math.max(0, point.net);
+}
+
 /**
  * Which month the budget page opens on: the current one when the statements
  * reach it, otherwise the most recent month there is data for.

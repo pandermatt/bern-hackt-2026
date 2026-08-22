@@ -404,7 +404,11 @@ Every other route requires a session.
   account's own averages, with a radar of the month against them. The rings are
   francs; the limits are a dashed outline and what was spent is a translucent
   fill, so anything poking outside the outline is over budget. Each category
-  name carries its share of that limit as a percentage.
+  name carries its share of that limit as a percentage. Below it, **Sparziele**:
+  savings goals drawn as pots that fill, funded by allocating what a finished
+  month had left over — a month still running has no final surplus to offer.
+- `lib/clock.ts` — the only module that asks what today is. `lib/insights.ts`
+  never constructs a `Date`, so "is this month over" lives here.
 - `app/globals.css` — the design tokens, mapped onto shadcn's token names.
 
 Schema changes go through `npm run db:push`. There is no migrations folder and

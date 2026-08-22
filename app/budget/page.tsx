@@ -2,9 +2,11 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { getBudgetOverview } from "@/app/actions/budget";
+import { getSavingsOverview } from "@/app/actions/savings";
 import { BudgetEditor } from "@/components/budget-editor";
 import { BudgetMonthPicker } from "@/components/budget-month-picker";
 import { BudgetRadar } from "@/components/budget-radar";
+import { SavingsGoals } from "@/components/savings-goals";
 import { getCurrentUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/insights";
 
@@ -20,10 +22,14 @@ export default async function BudgetPage({
   if (!user) redirect("/login");
 
   const { month: rawMonth } = await searchParams;
-  const overview = await getBudgetOverview(
-    typeof rawMonth === "string" ? rawMonth : undefined,
-  );
-  if (!overview) redirect("/login");
+  const requested = typeof rawMonth === "string" ? rawMonth : undefined;
+  // Both halves resolve the same month from the same query string, so the
+  // savings section is never showing a different month than the radar.
+  const [overview, savings] = await Promise.all([
+    getBudgetOverview(requested),
+    getSavingsOverview(requested),
+  ]);
+  if (!overview || !savings) redirect("/login");
 
   const { months, month, rows } = overview;
 
@@ -87,6 +93,8 @@ export default async function BudgetPage({
           {/* Keyed on the month: the editor holds the typed-but-unsaved
               values in state, and switching months has to start it over. */}
           <BudgetEditor key={month} rows={rows} />
+
+          <SavingsGoals overview={savings} />
         </div>
       )}
     </main>

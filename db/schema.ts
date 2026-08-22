@@ -248,6 +248,78 @@ export const budgets = sqliteTable(
   ],
 );
 
+/**
+ * A savings goal — "Holiday, CHF 5'000" — and the pot the UI fills for it.
+ *
+ * Created empty like `budgets`, so `userId` is NOT NULL here too; see the note
+ * on `transactions.userId` for why that column is the exception rather than
+ * this one. The unique index on `(user_id, name)` is what stops an account
+ * ending up with two pots called "Holiday" that each hold half the money.
+ *
+ * `targetMinor` is positive minor units, like every other amount in the
+ * schema. A goal has no deadline column on purpose: nothing in the app can
+ * act on one, and a date that only ever renders is a field that goes stale.
+ */
+export const savingsGoals = sqliteTable(
+  "savings_goals",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Positive minor units — what the pot holds when it is full. */
+    targetMinor: integer("target_minor").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("savings_goals_user_id_idx").on(table.userId),
+    uniqueIndex("savings_goals_user_name_idx").on(table.userId, table.name),
+  ],
+);
+
+/**
+ * Money moved from one month's leftover into one pot.
+ *
+ * Keyed by month rather than appended as a log: the page's question is "how
+ * much of March have I already put away", and with a log that answer changes
+ * meaning the moment someone revises an allocation. One row per (goal, month)
+ * makes revising an upsert and keeps the month's remaining balance a
+ * subtraction rather than a reconciliation.
+ *
+ * Zero is not stored. Unlike a budget — where zero is a real limit of nothing
+ * and `null` means unset — an allocation of zero francs and no allocation are
+ * the same event, so clearing a field deletes the row.
+ */
+export const savingsAllocations = sqliteTable(
+  "savings_allocations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    goalId: integer("goal_id")
+      .notNull()
+      .references(() => savingsGoals.id, { onDelete: "cascade" }),
+    /** `YYYY-MM` — which month's surplus this came out of. */
+    month: text("month").notNull(),
+    /** Positive minor units. */
+    amountMinor: integer("amount_minor").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("savings_allocations_user_month_idx").on(table.userId, table.month),
+    uniqueIndex("savings_allocations_goal_month_idx").on(
+      table.goalId,
+      table.month,
+    ),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
@@ -256,3 +328,5 @@ export type Anomaly = typeof anomalies.$inferSelect;
 export type NewAnomaly = typeof anomalies.$inferInsert;
 export type AnomalyRun = typeof anomalyRuns.$inferSelect;
 export type Budget = typeof budgets.$inferSelect;
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type SavingsAllocation = typeof savingsAllocations.$inferSelect;
