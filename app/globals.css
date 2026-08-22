@@ -625,16 +625,22 @@
 }
 
 /* The liquid's rise or fall when a pot's balance changes — an allocation, a
-   withdrawal, a drag-to-transfer. `SavingsPot` is a server component re-drawn
-   through `router.refresh()`, not a client re-mount, and `key={pot.id}` in
+   withdrawal, a drag-to-transfer, always, even the deposit that tips a pot
+   over its target. `SavingsPot` is a server component re-drawn through
+   `router.refresh()`, not a client re-mount, and `key={pot.id}` in
    `savings-pots-grid.tsx` keeps its DOM nodes alive across that refresh — so
    the `y`/`height`/`cy` attributes below land on the *same* elements and a
    plain CSS transition is enough. No client JS, no hydration, matching why
-   the pot is inline SVG in the first place. Only the wet side of the level —
-   the elements that exist while `fill > 0` — carries this class; a pot
-   crossing to or from exactly empty still pops, because animating that edge
-   would mean keeping the crescent-shaped artefact `SavingsPot` deliberately
-   guards against mounted the whole time. */
+   the pot is inline SVG in the first place.
+
+   Sealing a pot is sequenced *after* this, not skipped: `PotSlot` holds the
+   lid open (`SavingsPot`'s `sealed` prop) for exactly this duration once a
+   pot reaches its target, so the level is seen climbing all the way to the
+   rim before the lid closes over it and the fireworks fire. The one edge
+   that still pops is emptying out entirely — the liquid only exists in the
+   DOM while `fill > 0` (see the guard in `SavingsPot`), so there is nothing
+   mounted to transition from at that boundary. Keep this number in sync with
+   `LIQUID_ANIMATION_MS` in `savings-pots-grid.tsx`. */
 .pot-liquid {
   transition:
     y 650ms ease,

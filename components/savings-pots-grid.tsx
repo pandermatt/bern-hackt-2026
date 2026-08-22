@@ -38,6 +38,15 @@ function toField(minor: number): string {
 /** How long a pot's fireworks-and-glow celebration plays before it clears. */
 const CELEBRATION_MS = 2500;
 
+/**
+ * How long the liquid takes to rise or fall — must match the `.pot-liquid`
+ * transition duration in `globals.css`. `PotSlot` holds the lid open this
+ * long after a pot actually reaches its target, so the level is seen
+ * climbing all the way to the rim before the lid closes over it, rather than
+ * the lid snapping shut over a still-rising fill.
+ */
+const LIQUID_ANIMATION_MS = 650;
+
 /** Sparks in the burst a pot gets the moment it first reaches its target. */
 const SPARK_COUNT = 12;
 
@@ -225,6 +234,12 @@ export function SavingsPotsGrid({
  * "was it full a moment ago" against "is it full now" and fire the pot's
  * celebration only on that crossing, never on an ordinary reload of an
  * already-full pot.
+ *
+ * The crossing is staged in two steps, not one: the liquid animation plays
+ * first (a plain CSS transition inside `SavingsPot`, already running by the
+ * time this effect fires), and only after `LIQUID_ANIMATION_MS` does the lid
+ * close and the fireworks start. `sealed` is what lets this component hold
+ * the lid open that long — see the prop on `SavingsPot`.
  */
 function PotSlot({
   pot,
@@ -247,24 +262,47 @@ function PotSlot({
 }) {
   const full = potFill(pot.savedMinor, pot.targetMinor) >= 1;
   const wasFull = useRef(full);
+  // Starts in sync with the real value: the first render is server-rendered
+  // markup being hydrated, and there is no prior state to sequence against —
+  // only a crossing that happens *while this stays mounted* delays `sealed`.
+  const [sealed, setSealed] = useState(full);
   const [celebration, setCelebration] = useState<Spark[] | null>(null);
   const liRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
-    if (full && !wasFull.current) {
+    if (full === wasFull.current) return;
+    wasFull.current = full;
+    // `clearTimer` is set inside `sealTimer`'s callback, so it has to live in
+    // this outer scope for the cleanup below to ever see it — a `setTimeout`
+    // callback's own return value is not wired to anything.
+    let clearTimer: ReturnType<typeof setTimeout> | undefined;
+    // Let the liquid finish its climb (or its drop) before the lid follows —
+    // closing over a level that is still visibly rising is what this delay
+    // exists to avoid, and it applies symmetrically when a withdrawal drains
+    // a full pot back below target. `globals.css` already collapses the
+    // liquid's own transition to instant under reduced motion; without the
+    // same check here the lid would still wait out the full delay for
+    // nothing left to sequence against.
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const sealTimer = setTimeout(() => {
+      setSealed(full);
+      if (!full) return;
       // Rolled here rather than in `SavingsPot`: `Math.random` is impure, and
-      // this effect already does genuine side-effect work (the timer), which
+      // this effect already does genuine side-effect work (the timers), which
       // is the one place React's stricter rules allow it.
       setCelebration(randomSparks());
       // The action that fills a pot — saving the allocator, confirming a
       // transfer — happens below the pots grid, so without this the burst
       // plays entirely off-screen above whatever the reader is looking at.
       liRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      const timer = setTimeout(() => setCelebration(null), CELEBRATION_MS);
-      wasFull.current = true;
-      return () => clearTimeout(timer);
-    }
-    wasFull.current = full;
+      clearTimer = setTimeout(() => setCelebration(null), CELEBRATION_MS);
+    }, reduceMotion ? 0 : LIQUID_ANIMATION_MS);
+    return () => {
+      clearTimeout(sealTimer);
+      clearTimeout(clearTimer);
+    };
   }, [full]);
 
   return (
@@ -285,7 +323,7 @@ function PotSlot({
         over && "shadow-[0_0_0_2px_var(--accent)]",
       )}
     >
-      <SavingsPot pot={pot} celebrating={celebration !== null} sparks={celebration ?? []} />
+      <SavingsPot pot={pot} celebrating={celebration !== null} sparks={celebration ?? []} sealed={sealed} />
     </li>
   );
 }

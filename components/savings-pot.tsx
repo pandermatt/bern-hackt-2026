@@ -84,10 +84,21 @@ export function SavingsPot({
   pot,
   celebrating = false,
   sparks = [],
+  sealed,
 }: {
   pot: Pot;
   celebrating?: boolean;
   sparks?: Spark[];
+  /**
+   * Whether to draw the lid. Defaults to the pot's real fill — a page load
+   * has nothing to sequence against, so an already-full pot is simply drawn
+   * sealed. `PotSlot` overrides this while a fill is in flight: it holds the
+   * lid open for `LIQUID_ANIMATION_MS` after the pot actually reaches its
+   * target, so the liquid is seen rising all the way to the rim *before* the
+   * lid closes over it and the celebration fires, rather than the lid
+   * snapping shut over a level that is still visibly climbing underneath it.
+   */
+  sealed?: boolean;
 }) {
   // Synchronous server component, so the hook works here — see `SavingsGoals`.
   const t = useTranslations("Savings");
@@ -96,11 +107,7 @@ export function SavingsPot({
   // funded past its target says 133% rather than a flat, less useful 100%.
   const percent = potPercent(pot.savedMinor, pot.targetMinor);
   const full = fill >= 1;
-  // The lid swaps in the instant a pot reaches its target — a hard cut, not a
-  // transition — and it paints over the mouth. Animating the liquid up to
-  // meet it would show the level still visibly rising underneath an already
-  // -sealed lid, so the last stretch into "full" snaps instead of gliding.
-  const liquidClass = full ? undefined : "pot-liquid";
+  const lidVisible = sealed ?? full;
   // Where the liquid's surface sits. Measured between the two ellipse centres,
   // so an empty pot's surface is the base and a full one's is the mouth.
   const surface = BASE_Y - (BASE_Y - MOUTH_Y) * fill;
@@ -183,10 +190,10 @@ export function SavingsPot({
             <path d={BODY} />
           </clipPath>
           <clipPath id={dryClip}>
-            <rect className={liquidClass} x="0" y="0" width="120" height={surface} />
+            <rect className="pot-liquid" x="0" y="0" width="120" height={surface} />
           </clipPath>
           <clipPath id={wetClip}>
-            <rect className={liquidClass} x="0" y={surface} width="120" height={128 - surface} />
+            <rect className="pot-liquid" x="0" y={surface} width="120" height={128 - surface} />
           </clipPath>
         </defs>
 
@@ -215,7 +222,7 @@ export function SavingsPot({
                   in globals.css for why a CSS transition is enough here with
                   no client JS. */}
               <rect
-                className={liquidClass}
+                className="pot-liquid"
                 x="0"
                 y={surface}
                 width="120"
@@ -228,9 +235,9 @@ export function SavingsPot({
                   muted fills start much closer to the body than the chart ramp
                   did, so the wash that used to lift the level was washing it
                   out instead. */}
-              <ellipse className={liquidClass} cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
+              <ellipse className="pot-liquid" cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
               <ellipse
-                className={liquidClass}
+                className="pot-liquid"
                 cx={CX}
                 cy={surface}
                 rx={RX}
@@ -289,7 +296,7 @@ export function SavingsPot({
         {/* Outline last, so the walls read as edges over the fill. */}
         <path d={BODY} fill="none" stroke="var(--line-strong)" strokeWidth="1.6" />
 
-        {full ? (
+        {lidVisible ? (
           // A reached goal gets sealed. The lid is the same material as the
           // pot rather than the goal's colour: it should read as "this one is
           // closed", and a second tinted shape competes with the fill for that.
