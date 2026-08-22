@@ -82,9 +82,11 @@ export default function Loading() {
         <SectionHeading titleWidth="w-[210px]" metaWidth="w-[180px]" />
         <div className="h-[394px] rounded-lg bg-surface-muted" />
 
-        {/* The whole year: the same, without the footnote. */}
-        <SectionHeading titleWidth="w-[170px]" metaWidth="w-[230px]" />
-        <div className="h-[360px] rounded-lg bg-surface-muted" />
+        {/* Top categories, at every width: the period and view badges with
+            the chip strip, 300px of canvas, p-5 either side, plus the
+            footnote line and its margin. */}
+        <SectionHeading titleWidth="w-[220px]" metaWidth="w-[250px]" />
+        <div className="h-[454px] rounded-lg bg-surface-muted" />
 
         {/* Top merchants: eight rows over two columns, so four rows tall. */}
         <SectionHeading titleWidth="w-[190px]" />

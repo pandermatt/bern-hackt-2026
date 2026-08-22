@@ -183,6 +183,14 @@ function nextMonth(month: string): string {
     : `${year}-${String(index + 1).padStart(2, "0")}`;
 }
 
+/** "2026-01" → "2025-12". The median window walks backwards. */
+function prevMonth(month: string): string {
+  const [year, index] = month.split("-").map(Number);
+  return index === 1
+    ? `${year - 1}-12`
+    : `${year}-${String(index - 1).padStart(2, "0")}`;
+}
+
 export function applyFilters(
   rows: Transaction[],
   filters: Filters,
@@ -441,6 +449,171 @@ export function stackByCategory(rows: Transaction[]): CategoryStack {
     bands,
     total: bands.reduce((sum, band) => sum + band.total, 0),
   };
+}
+
+/**
+ * How many merchants the split-on-hover bar names before the tail folds
+ * together. Five segments is where a 300px bar's thinnest slice is still wider
+ * than its own separator; beyond that the split stops being readable.
+ */
+export const MERCHANT_SEGMENTS = 5;
+
+/** The fold-in tail of a bar's merchant split — a label, not a merchant. */
+export const FOLDED_MERCHANTS = "Other merchants";
+
+export type MerchantSegment = { merchant: string; amount: number };
+
+export type CategorySpend = {
+  key: string;
+  /** The period's spend in this category, a positive magnitude. */
+  total: number;
+  /**
+   * The median of this category's monthly totals over the up-to-twelve months
+   * before the running month — months with no spend count as zero, because a
+   * month you spent nothing is a real month, not a gap. `null` when there is
+   * no earlier history at all, so the chart can drop the marker instead of
+   * drawing a median of nothing. The **same figure in both periods**: it is a
+   * per-month statistic, and the YTD view scales it by `monthCount` into a
+   * "median pace" rather than re-deriving a different median.
+   */
+  median: number | null;
+  /** Descending; at most `MERCHANT_SEGMENTS` entries, the tail folded into
+   * `FOLDED_MERCHANTS`. Sums to `total`. */
+  merchants: MerchantSegment[];
+};
+
+export type CategoryPeriod = {
+  /** "YYYY-MM" — the latest month with any expense, which in live use is the
+   * current month. Derived from the rows, never from the clock: this module
+   * constructs no `Date`. The YTD period ends here too. */
+  month: string;
+  /** Months the period spans: 1 for the running month, the month's ordinal
+   * (January = 1 … December = 12) for year-to-date. What turns the per-month
+   * median into a pace on the YTD scale. */
+  monthCount: number;
+  /**
+   * **Every** category with spend in the period, descending by total — not a
+   * top-N. The chart slices its own top five, and having the full ranking is
+   * what lets it promote the next category when the user hides one.
+   */
+  categories: CategorySpend[];
+};
+
+export type CategoryPeriods = {
+  /** The running month alone. */
+  month: CategoryPeriod;
+  /** January of the running month's year through the running month. */
+  ytd: CategoryPeriod;
+};
+
+/**
+ * The split-on-hover bars' aggregate: expense categories ranked over the
+ * running month and over the year-to-date, each carrying its merchant split
+ * for that period and a twelve-month median.
+ *
+ * Meant to be given the **unfiltered** rows, like the other charts: "this
+ * month" and "this year" are fixed questions, and a filter that quietly
+ * changed which months — or which merchants — the bars describe would make
+ * the heading a lie.
+ */
+export function categorySpendPeriods(
+  rows: Transaction[],
+): CategoryPeriods | null {
+  let month = "";
+  let first = "";
+  for (const row of rows) {
+    if (row.kind !== "expense") continue;
+    const key = row.bookedOn.slice(0, 7);
+    if (!month || key > month) month = key;
+    if (!first || key < first) first = key;
+  }
+  if (!month) return null;
+
+  const yearStart = `${month.slice(0, 4)}-01`;
+  const starts = { month, ytd: yearStart } as const;
+
+  /** category → month → spend, whole range — the medians' baseline. */
+  const history = new Map<string, Map<string, number>>();
+  /** Per period: category totals, and the category → merchant split. */
+  const totals = {
+    month: new Map<string, number>(),
+    ytd: new Map<string, number>(),
+  };
+  const splits = {
+    month: new Map<string, Map<string, number>>(),
+    ytd: new Map<string, Map<string, number>>(),
+  };
+
+  for (const row of rows) {
+    if (row.kind !== "expense") continue;
+    const key = row.bookedOn.slice(0, 7);
+    const amount = -row.amountMinor;
+
+    let byMonth = history.get(row.category);
+    if (!byMonth) history.set(row.category, (byMonth = new Map()));
+    byMonth.set(key, (byMonth.get(key) ?? 0) + amount);
+
+    for (const period of ["month", "ytd"] as const) {
+      // Nothing is later than `month` by construction, so the start is the
+      // only bound that matters.
+      if (key < starts[period]) continue;
+      const bucket = totals[period];
+      bucket.set(row.category, (bucket.get(row.category) ?? 0) + amount);
+      let byMerchant = splits[period].get(row.category);
+      if (!byMerchant) splits[period].set(row.category, (byMerchant = new Map()));
+      byMerchant.set(row.merchant, (byMerchant.get(row.merchant) ?? 0) + amount);
+    }
+  }
+
+  // The twelve calendar months before `month`, clipped to where the data
+  // starts — a window padded with months that predate the first statement
+  // would drag every median towards zero.
+  const window: string[] = [];
+  for (let key = prevMonth(month); window.length < 12 && key >= first; key = prevMonth(key)) {
+    window.push(key);
+  }
+
+  const medianOf = (category: string): number | null => {
+    if (window.length === 0) return null;
+    const byMonth = history.get(category);
+    const values = window
+      .map((entry) => byMonth?.get(entry) ?? 0)
+      .sort((a, b) => a - b);
+    const mid = values.length >> 1;
+    return values.length % 2 === 1
+      ? values[mid]
+      : (values[mid - 1] + values[mid]) / 2;
+  };
+
+  const buildPeriod = (period: "month" | "ytd"): CategoryPeriod => ({
+    month,
+    monthCount: period === "month" ? 1 : Number(month.slice(5, 7)),
+    categories: [...totals[period].entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, total]): CategorySpend => {
+        const ranked = [
+          ...(splits[period].get(key) ?? new Map<string, number>()).entries(),
+        ]
+          .map(([merchant, amount]) => ({ merchant, amount }))
+          .sort((a, b) => b.amount - a.amount);
+        const merchants =
+          ranked.length > MERCHANT_SEGMENTS
+            ? [
+                ...ranked.slice(0, MERCHANT_SEGMENTS - 1),
+                {
+                  merchant: FOLDED_MERCHANTS,
+                  amount: ranked
+                    .slice(MERCHANT_SEGMENTS - 1)
+                    .reduce((sum, entry) => sum + entry.amount, 0),
+                },
+              ]
+            : ranked;
+
+        return { key, total, median: medianOf(key), merchants };
+      }),
+  });
+
+  return { month: buildPeriod("month"), ytd: buildPeriod("ytd") };
 }
 
 /**

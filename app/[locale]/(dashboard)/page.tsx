@@ -3,11 +3,12 @@ import { Suspense } from "react";
 
 import { getDashboard } from "@/app/actions/transactions";
 import { BreakdownList } from "@/components/breakdown-list";
-import { CategoryPie } from "@/components/category-pie";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { Landing } from "@/components/landing";
 import { MonthlyTrend } from "@/components/monthly-trend";
+import { ScrollDebug } from "@/components/scroll-debug";
 import { SummaryCards } from "@/components/summary-cards";
+import { TopCategoryBars } from "@/components/top-category-bars";
 import { AnomalySuggestion } from "@/components/anomaly-suggestion";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
@@ -68,7 +69,12 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
 
           <MonthlyTrend series={monthly} />
 
-          <CategoryPie stack={stack} />
+          {/* The page's one category story, at every width. It opens as the
+              donut on a phone — eight labelled bars have no room there — and
+              as the split-on-hover bars on desktop; the view toggle then
+              morphs between the two either way. This replaced the year donut
+              (`CategoryPie`) that used to fill the phone slot. */}
+          <TopCategoryBars data={dashboard.topCategories} stack={stack} />
 
           <BreakdownList
             heading={tm("heading")}
@@ -115,6 +121,11 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
       </main>
 
       <ChatSidebar />
+
+      {/* Temporary: the ledger's "jumps back to the top" report does not
+          reproduce on a desk, so this reports from the device it happens on.
+          Remove with `components/scroll-debug.tsx`. */}
+      {query.debug === "scroll" && <ScrollDebug />}
     </>
   );
 }
