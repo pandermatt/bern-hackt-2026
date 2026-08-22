@@ -370,6 +370,38 @@
   }
 }
 
+/*
+ * iOS Safari zooms the page in when you focus a control whose text is under
+ * 16px — and it does not zoom back out when you leave the field. One tap on a
+ * budget limit and the rest of the app is stranded at 1.3×, with the header
+ * cropped and horizontal scroll on every page after it.
+ *
+ * 16px is Safari's threshold, not a design choice, so this is the whole fix:
+ * touch devices get the threshold, pointer devices keep the size the design
+ * asks for. `pointer: coarse` rather than a `max-width` breakpoint, because
+ * the zoom is a property of the *input method*, not the viewport — an iPad in
+ * portrait is 768px wide and zooms exactly like a phone. Three components had
+ * already reached for `text-[16px] sm:text-[14px]` against this; that pairing
+ * misses the iPad for precisely that reason, and it is why the bug kept coming
+ * back one field at a time.
+ *
+ * Deliberately outside every `@layer`: Tailwind's utilities live in a layer,
+ * and unlayered rules beat layered ones no matter how the two specificities
+ * compare. A `text-[13px]` on a field has to lose here, or the field zooms.
+ * Nothing in the app sets an input above 16px, so clamping to it takes nothing
+ * away.
+ *
+ * Range, checkbox and radio carry no text and never trigger the zoom; they are
+ * excluded so the slider in `demo-data-controls.tsx` keeps its own metrics.
+ */
+@media (pointer: coarse) {
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Logo hover: the arrow's stem draws itself, the way a balance ticks up.
    `pathLength={1}` in components/logo.tsx normalizes the stroke so these
    keyframes work without knowing its real length. Resting state is untouched —
