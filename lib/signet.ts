@@ -1,14 +1,130 @@
 /**
- * The PostFinance signet, lifted verbatim from the supplied brand SVG
- * (`PostFinance/PostFinance_Logo_0.svg`). It is drawn in a 17.08 × 18 box, so
- * every consumer scales it with a viewBox rather than editing the path.
+ * The Beyond Money mark: a dragon coiled into a ring, its tail closing on its
+ * own head. Traced verbatim from `res/logos/beyond-money-icon.svg`, which is
+ * the supplied artwork and the thing to re-trace from if it ever changes.
  *
- * Kept in one module because it is needed in three places that cannot share a
- * component: `components/logo.tsx` (JSX), `app/opengraph-image.tsx` (a data
- * URI, because Satori renders SVG reliably only through an <img>), and
- * `app/icon.svg` (a static file, which holds its own copy).
+ * This replaced the PostFinance signet — one Blue Stone path on a Supernova
+ * tile — which was the mark of a palette rather than of an app. Three
+ * consequences of the swap are worth knowing before editing anything here:
+ *
+ * - **It is 61 flat paths in ten fills, not one path.** Every consumer that
+ *   used to interpolate a single `d` had to change shape: `components/logo.tsx`
+ *   (JSX), `app/[locale]/opengraph-image.tsx` (a data URI, because Satori
+ *   renders SVG reliably only through an <img>), and `public/icon.svg` (a
+ *   static file, which holds its own copy).
+ * - **`SIGNET_PATHS` is in paint order and must stay in it.** The traced
+ *   shapes overlap, so sorting them — by colour, by size, into groups — is a
+ *   silent redraw. The animation's ordering lives in `SIGNET_FLAME_ORDER`
+ *   below precisely so this array never has to move.
+ * - **These hexes are artwork, not palette.** The rule that no component
+ *   hardcodes a colour is about tokens that follow the theme; these are the
+ *   opposite — a logo whose greens turned grey in dark mode would be a
+ *   different logo. That is also why every consumer sets the mark on a fixed
+ *   white ground (`--logo-tile`) rather than on the theme's surface.
  */
-export const SIGNET_PATH =
-  "M16.8641 6.30447C16.6127 6.2861 16.3602 6.2861 16.1089 6.2861C13.6969 6.2861 11.5741 6.80892 9.85516 7.82518C11.2948 5.91388 12.0182 3.4063 11.9731 0.467724V0H6.50138L6.5087 0.539964C6.54408 2.53697 6.07682 4.03075 5.124 4.94783C3.88326 6.1355 1.87026 6.31549 0.395281 6.24325L0 6.22243V11.6821L0.215941 11.6955C0.467261 11.7139 0.719801 11.7139 0.971121 11.7139C3.38306 11.7139 5.50586 11.1911 7.22484 10.1748C5.78524 12.0861 5.06178 14.5937 5.10692 17.5323V18H10.5786L10.5713 17.46C10.5359 15.463 11.0032 13.9693 11.956 13.0522C13.1967 11.8645 15.2097 11.6845 16.6847 11.7568L17.08 11.7776V6.31794L16.8641 6.30447Z";
 
-export const SIGNET_VIEWBOX = "0 0 17.08 18";
+/** The artwork's own box. The drawing occupies x 59–433, y 35–455 inside it. */
+export const SIGNET_VIEWBOX = "0 0 512 512";
+
+export type SignetPath = {
+  d: string;
+  /** The traced fill, verbatim. See the note above: artwork, not palette. */
+  fill: string;
+};
+
+/** Paint order — see the note above. Do not sort. */
+export const SIGNET_PATHS: readonly SignetPath[] = [
+  { fill: "#025865", d: "M 250,177 L 243,172 L 222,163 L 207,160 L 196,162 L 179,172 L 164,185 L 152,200 L 142,220 L 165,199 L 200,181 L 219,176 Z" },
+  { fill: "#025865", d: "M 168,128 L 156,130 L 149,134 L 151,136 L 152,142 L 158,145 L 161,148 L 160,150 L 143,153 L 115,165 L 96,178 L 81,192 L 83,193 L 93,184 L 114,172 L 128,167 L 134,167 L 103,188 L 90,201 L 75,222 L 66,242 L 66,245 L 70,250 L 78,254 L 69,282 L 67,299 L 69,299 L 75,279 L 80,269 L 83,267 L 84,269 L 77,295 L 77,327 L 80,330 L 78,333 L 81,333 L 84,336 L 101,336 L 103,352 L 107,365 L 112,368 L 117,364 L 116,339 L 117,329 L 119,328 L 126,345 L 138,366 L 151,379 L 181,401 L 198,410 L 202,410 L 204,408 L 204,395 L 200,392 L 185,388 L 166,379 L 149,367 L 138,356 L 145,350 L 145,345 L 126,333 L 108,315 L 96,295 L 90,272 L 91,249 L 99,226 L 113,205 L 139,181 L 166,166 L 197,155 L 208,153 L 232,153 L 251,157 L 235,145 L 214,135 L 189,129 Z" },
+  { fill: "#049193", d: "M 145,375 L 145,377 L 155,390 L 171,406 L 183,415 L 185,406 Z" },
+  { fill: "#049193", d: "M 139,355 L 149,366 L 170,380 L 172,379 L 177,364 L 176,358 L 149,348 Z" },
+  { fill: "#049193", d: "M 79,334 L 80,343 L 86,360 L 99,383 L 108,394 L 123,408 L 151,426 L 138,412 L 138,410 L 135,408 L 130,398 L 128,397 L 121,382 L 122,379 L 119,376 L 117,365 L 112,369 L 107,367 L 102,352 L 100,336 L 84,337 Z" },
+  { fill: "#049193", d: "M 118,329 L 117,348 L 120,350 L 122,348 L 125,348 L 125,343 L 121,336 L 120,330 Z" },
+  { fill: "#049193", d: "M 65,247 L 60,265 L 59,289 L 63,312 L 68,323 L 66,318 L 66,295 L 70,274 L 76,256 L 68,248 Z" },
+  { fill: "#049193", d: "M 201,213 L 195,213 L 176,225 L 160,242 L 150,260 L 146,278 L 147,294 L 152,308 L 154,308 L 156,313 L 158,314 L 162,307 L 162,304 L 169,295 L 169,289 L 171,286 L 171,269 L 176,252 L 183,238 L 196,222 Z" },
+  { fill: "#049193", d: "M 207,188 L 201,188 L 200,186 L 193,187 L 173,195 L 156,207 L 142,222 L 135,242 L 134,252 L 132,253 L 132,276 L 137,295 L 139,296 L 139,300 L 141,270 L 147,252 L 152,243 L 174,219 L 192,207 L 200,204 L 200,202 L 204,200 L 204,193 L 206,192 Z" },
+  { fill: "#049193", d: "M 198,160 L 196,159 L 184,161 L 166,167 L 146,178 L 141,183 L 139,188 L 146,188 L 151,192 L 155,192 L 179,171 Z" },
+  { fill: "#049193", d: "M 149,132 L 132,138 L 119,145 L 96,163 L 82,180 L 75,192 L 70,206 L 80,192 L 104,171 L 129,157 L 153,150 L 158,147 L 151,142 L 150,136 L 148,135 Z" },
+  { fill: "#049193", d: "M 145,134 L 148,135 L 146,138 L 143,137 Z" },
+  { fill: "#f95c03", d: "M 365,234 L 359,231 L 358,227 L 352,223 L 347,232 L 339,237 L 347,240 L 356,240 L 364,238 Z" },
+  { fill: "#f95c03", d: "M 250,201 L 265,201 L 294,211 L 307,211 L 319,208 L 340,211 L 340,209 L 336,208 L 334,199 L 330,196 L 330,194 L 326,192 L 317,194 L 305,194 L 294,191 L 287,200 L 265,197 Z" },
+  { fill: "#f95c03", d: "M 405,182 L 408,186 L 407,191 L 413,202 L 414,213 L 417,205 L 417,196 L 413,187 L 409,183 Z" },
+  { fill: "#f95c03", d: "M 240,145 L 240,147 L 245,151 L 248,150 Z" },
+  { fill: "#f95c03", d: "M 301,100 L 302,111 L 311,120 L 327,129 L 334,131 L 320,119 L 314,110 L 310,99 Z" },
+  { fill: "#f95c03", d: "M 282,96 L 284,120 L 291,139 L 306,157 L 319,165 L 318,167 L 313,166 L 298,159 L 310,174 L 317,179 L 327,183 L 333,183 L 342,176 L 347,177 L 352,174 L 352,171 L 333,167 L 323,160 L 313,145 L 311,140 L 313,138 L 329,148 L 346,154 L 365,176 L 372,179 L 361,167 L 357,157 L 353,152 L 344,147 L 330,144 L 317,139 L 305,131 L 293,117 Z" },
+  { fill: "#f95c03", d: "M 142,59 L 151,77 L 162,89 L 182,101 L 216,112 L 244,131 L 260,139 L 281,146 L 265,117 L 259,110 L 256,110 L 253,114 L 250,115 L 228,103 L 184,91 L 181,89 L 181,83 L 178,80 L 157,71 Z" },
+  { fill: "#4fba5f", d: "M 185,408 L 184,413 L 187,419 L 208,433 L 226,442 L 229,442 L 229,429 L 203,417 L 188,407 Z" },
+  { fill: "#4fba5f", d: "M 322,387 L 319,388 L 314,383 L 311,383 L 295,394 L 274,404 L 290,402 L 306,397 L 322,389 Z" },
+  { fill: "#4fba5f", d: "M 178,360 L 177,369 L 173,381 L 188,388 L 201,391 L 205,395 L 205,408 L 203,409 L 203,411 L 209,414 L 211,417 L 226,423 L 255,430 L 283,431 L 306,426 L 303,421 L 297,420 L 279,426 L 259,428 L 255,412 L 252,410 L 251,405 L 231,402 L 210,395 L 211,393 L 224,393 L 226,391 L 225,381 L 220,371 L 210,369 L 195,362 Z" },
+  { fill: "#96ce2b", d: "M 230,430 L 230,443 L 236,446 L 244,447 L 246,444 L 246,435 Z" },
+  { fill: "#96ce2b", d: "M 253,406 L 253,410 L 256,412 L 258,418 L 259,427 L 274,426 L 282,424 L 284,422 L 279,406 Z" },
+  { fill: "#96ce2b", d: "M 356,381 L 351,380 L 326,403 L 308,415 L 302,417 L 302,420 L 305,422 L 305,424 L 307,426 L 314,424 L 326,418 L 338,409 L 351,394 Z" },
+  { fill: "#96ce2b", d: "M 223,372 L 227,387 L 227,391 L 225,393 L 233,393 L 234,391 L 237,393 L 238,391 L 242,390 L 240,386 L 240,378 L 231,376 L 229,373 Z" },
+  { fill: "#96ce2b", d: "M 349,298 L 349,317 L 345,333 L 346,336 L 339,351 L 336,352 L 326,367 L 313,380 L 319,387 L 324,387 L 331,384 L 342,372 L 351,355 L 356,335 L 356,319 Z" },
+  { fill: "#96ce2b", d: "M 356,252 L 370,273 L 374,284 L 377,300 L 377,312 L 372,335 L 372,354 L 368,372 L 369,374 L 373,370 L 375,370 L 375,367 L 380,363 L 389,346 L 394,326 L 394,308 L 390,292 L 380,273 L 369,261 Z" },
+  { fill: "#f49902", d: "M 374,399 L 355,400 L 335,424 L 310,443 L 319,445 L 338,445 L 359,440 L 376,432 L 377,429 L 383,426 L 384,421 L 380,422 L 379,420 L 364,423 L 355,423 L 349,421 L 351,418 L 353,418 L 352,415 L 369,404 Z" },
+  { fill: "#f49902", d: "M 392,373 L 387,371 L 362,392 L 379,384 Z" },
+  { fill: "#f49902", d: "M 330,192 L 331,196 L 337,203 L 336,206 L 341,209 L 339,213 L 347,220 L 349,224 L 352,222 L 359,227 L 359,230 L 363,231 L 366,234 L 366,237 L 376,233 L 390,221 L 376,220 L 370,217 L 352,198 L 343,194 Z" },
+  { fill: "#f49902", d: "M 248,201 L 265,196 L 286,199 L 291,195 L 292,189 L 283,186 L 265,176 L 260,177 L 257,179 L 263,181 L 264,184 L 272,187 L 273,189 L 271,191 L 257,194 Z" },
+  { fill: "#f49902", d: "M 329,183 L 332,185 L 352,188 L 358,191 L 372,204 L 377,204 L 385,200 L 383,194 L 384,192 L 395,194 L 403,199 L 409,199 L 409,195 L 406,191 L 406,184 L 398,188 L 381,184 L 379,182 L 380,176 L 376,172 L 376,169 L 372,164 L 369,163 L 368,159 L 363,156 L 359,156 L 362,167 L 370,176 L 377,179 L 377,182 L 355,173 L 354,175 L 351,175 L 347,178 L 342,177 L 333,184 Z" },
+  { fill: "#f49902", d: "M 241,130 L 248,140 L 251,141 L 258,149 L 266,148 L 283,159 L 287,166 L 288,176 L 296,183 L 296,191 L 305,193 L 317,193 L 325,191 L 324,189 L 319,190 L 317,188 L 318,184 L 294,156 L 284,147 L 265,143 L 262,140 Z" },
+  { fill: "#f49902", d: "M 208,118 L 209,121 L 205,127 L 207,131 L 237,145 L 244,145 L 240,139 L 224,124 L 216,119 Z" },
+  { fill: "#f49902", d: "M 237,100 L 236,104 L 238,107 L 250,114 L 254,112 L 256,107 L 243,97 Z" },
+  { fill: "#f49902", d: "M 251,88 L 250,92 L 262,103 L 268,111 L 274,127 L 276,127 L 278,131 L 286,133 L 287,131 L 283,120 L 282,102 L 279,89 L 275,84 L 268,82 L 260,85 L 255,89 Z" },
+  { fill: "#f49902", d: "M 182,82 L 182,87 L 187,91 L 209,97 L 216,96 L 217,90 L 215,87 Z" },
+  { fill: "#f49902", d: "M 275,64 L 282,69 L 292,80 L 297,89 L 300,99 L 308,98 L 309,95 L 302,82 L 292,72 L 278,64 Z" },
+  { fill: "#2bc8b9", d: "M 122,349 L 118,353 L 121,374 L 125,386 L 138,409 L 159,431 L 180,442 L 185,443 L 163,422 L 156,413 L 142,389 L 136,373 L 134,360 L 128,350 Z" },
+  { fill: "#2bc8b9", d: "M 170,290 L 171,295 L 163,304 L 160,314 L 156,315 L 160,315 L 161,317 L 159,319 L 169,329 L 179,336 L 199,345 L 203,343 L 204,346 L 208,347 L 194,335 L 183,322 L 175,308 Z" },
+  { fill: "#2bc8b9", d: "M 210,208 L 203,211 L 205,212 Z" },
+  { fill: "#2bc8b9", d: "M 205,201 L 238,192 L 219,186 L 207,186 L 208,189 L 205,193 Z" },
+  { fill: "#2bc8b9", d: "M 138,184 L 136,187 L 132,188 L 112,208 L 102,223 L 96,236 L 92,251 L 91,267 L 93,281 L 95,282 L 99,294 L 101,288 L 116,288 L 120,286 L 119,259 L 122,247 L 124,244 L 134,239 L 142,215 L 154,196 L 153,193 L 146,189 L 140,190 L 138,188 Z" },
+  { fill: "#fac802", d: "M 429,372 L 408,387 L 391,395 L 377,398 L 369,405 L 354,414 L 355,418 L 351,419 L 350,421 L 364,422 L 380,419 L 381,421 L 386,420 L 387,425 L 412,402 L 422,388 Z" },
+  { fill: "#fac802", d: "M 431,294 L 429,294 L 425,311 L 411,338 L 393,362 L 383,372 L 384,373 L 389,369 L 393,374 L 379,385 L 361,394 L 373,393 L 393,386 L 405,378 L 419,363 L 428,346 L 432,332 L 433,306 Z" },
+  { fill: "#fac802", d: "M 357,250 L 378,269 L 385,279 L 391,292 L 395,308 L 395,326 L 393,337 L 386,355 L 376,369 L 377,371 L 396,351 L 407,333 L 412,313 L 411,299 L 402,278 L 390,265 L 374,255 Z" },
+  { fill: "#fac802", d: "M 376,205 L 376,209 L 380,211 L 392,212 L 399,217 L 400,226 L 398,231 L 408,223 L 412,212 L 412,205 L 408,200 L 401,199 L 401,204 L 388,200 Z" },
+  { fill: "#fac802", d: "M 380,179 L 381,183 L 389,186 L 398,187 L 403,184 L 403,180 L 400,183 L 394,183 L 383,176 L 381,176 Z" },
+  { fill: "#fac802", d: "M 295,186 L 295,183 L 291,181 L 287,176 L 286,166 L 284,165 L 282,159 L 266,149 L 261,149 L 258,152 L 277,171 L 276,173 L 256,164 L 240,159 L 227,157 L 203,158 L 217,160 L 235,166 L 254,179 L 263,174 L 290,188 L 293,188 Z" },
+  { fill: "#fac802", d: "M 277,132 L 281,142 L 291,153 L 302,160 L 309,162 L 309,160 L 294,146 L 288,135 Z" },
+  { fill: "#fac802", d: "M 133,126 L 155,123 L 175,127 L 200,129 L 204,128 L 208,120 L 205,115 L 196,112 L 169,111 L 149,116 Z" },
+  { fill: "#fac802", d: "M 217,88 L 217,96 L 219,99 L 234,104 L 236,100 L 241,97 L 233,92 Z" },
+  { fill: "#fac802", d: "M 284,66 L 292,71 L 303,82 L 308,90 L 319,116 L 329,126 L 339,131 L 340,133 L 338,134 L 331,132 L 312,122 L 301,112 L 290,97 L 281,89 L 291,111 L 298,122 L 308,132 L 316,137 L 345,146 L 351,149 L 356,154 L 363,155 L 370,160 L 371,152 L 366,142 L 359,137 L 354,136 L 341,129 L 327,114 L 312,85 L 301,74 L 289,67 Z" },
+  { fill: "#fac802", d: "M 194,35 L 197,49 L 203,61 L 210,70 L 222,80 L 244,91 L 248,91 L 251,87 L 255,88 L 267,81 L 270,82 L 264,78 L 240,71 L 223,63 L 213,56 Z" },
+  { fill: "#d2e841", d: "M 233,453 L 234,455 L 256,455 L 279,451 L 294,446 L 310,438 L 310,435 L 316,431 L 319,432 L 324,427 L 302,434 L 282,435 L 258,432 L 231,426 L 231,429 L 249,435 L 247,439 L 247,448 L 244,449 L 236,447 Z" },
+  { fill: "#d2e841", d: "M 297,366 L 285,371 L 266,375 L 235,375 L 241,378 L 241,386 L 243,389 L 241,392 L 272,384 L 289,374 Z" },
+  { fill: "#d2e841", d: "M 351,298 L 350,299 L 353,304 L 357,319 L 357,335 L 355,346 L 348,364 L 339,377 L 325,389 L 302,400 L 282,404 L 282,413 L 286,422 L 304,416 L 318,408 L 344,384 L 347,384 L 351,379 L 355,380 L 355,378 L 358,376 L 359,378 L 354,387 L 355,388 L 366,360 L 367,331 L 362,314 Z" },
+  { fill: "#81e9c6", d: "M 200,413 L 203,416 L 226,427 L 230,426 Z" },
+  { fill: "#81e9c6", d: "M 136,368 L 143,389 L 151,404 L 164,422 L 177,435 L 193,447 L 210,452 L 232,454 L 232,451 L 235,449 L 235,447 L 208,434 L 180,415 L 160,397 L 147,382 L 138,368 Z" },
+  { fill: "#81e9c6", d: "M 127,243 L 123,247 L 120,259 L 121,286 L 111,290 L 110,288 L 101,289 L 101,298 L 104,307 L 122,328 L 140,341 L 164,353 L 192,361 L 174,348 L 158,332 L 139,303 L 133,287 L 130,271 L 130,254 L 132,245 L 130,243 Z" },
+];
+
+/**
+ * The ten fills again, this time in **coil order, tail to head**: the teal
+ * body, round through the greens along the bottom, up the yellows on the
+ * right, and out at the orange head.
+ *
+ * This is the order the hover animation staggers on, and it is deliberately
+ * not the order `SIGNET_PATHS` is in — that one is fixed by the drawing, this
+ * one by the anatomy, and neither can be derived from the other. A fill added
+ * to the artwork but not to this list simply never lights up, which is what
+ * `tests/logo-mark.test.ts` is watching for.
+ */
+export const SIGNET_FLAME_ORDER: readonly string[] = [
+  "#025865",
+  "#049193",
+  "#2bc8b9",
+  "#81e9c6",
+  "#4fba5f",
+  "#96ce2b",
+  "#d2e841",
+  "#fac802",
+  "#f49902",
+  "#f95c03",
+];
+
+/** Where a fill sits in the flame, for the per-path `animation-delay`. */
+export function flameIndex(fill: string): number {
+  const index = SIGNET_FLAME_ORDER.indexOf(fill);
+  // An untracked fill lights with the tail rather than not at all — the test
+  // is what should fail here, not the drawing.
+  return index === -1 ? 0 : index;
+}

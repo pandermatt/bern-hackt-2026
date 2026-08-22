@@ -79,8 +79,12 @@ Everything that names the app lives in `lib/site.ts`. To rebrand a clone:
    Icons below).
 4. **`LICENSE`** — the copyright holder.
 5. `components/landing.tsx` — the three selling points are still hardcoded.
-6. `lib/signet.ts` and `app/globals.css` — the PostFinance mark and palette.
-   Swap the signet path and the `:root` tokens; no component hardcodes a colour.
+6. `lib/signet.ts` and `app/globals.css` — the logo artwork and the palette.
+   `lib/signet.ts` is generated from `res/logos/beyond-money-icon.svg`: replace
+   that file, re-derive the paths, and update `SIGNET_FLAME_ORDER` to the new
+   drawing's colours. The palette is the `:root` tokens; no component hardcodes
+   one of *those* — the mark's own hexes are artwork and deliberately do not
+   follow the theme, which is why it sits on the fixed `--logo-tile` white.
 
 ### Palette
 
@@ -89,7 +93,7 @@ The five PostFinance brand colours, and what each one is allowed to do:
 | Hex | Name | Used for |
 | --- | --- | --- |
 | `#005B61` | Blue Stone | `--accent` — every interactive surface, links, focus rings. The only brand colour that passes a text contrast threshold (7.9:1 on white) |
-| `#FFCC00` | Supernova | `--brand` — the signet tile, and nothing else |
+| `#FFCC00` | Supernova | `--brand` — the landing's CTA band, the `warning` anomaly badges, the assistant's tile. A fill, never type: 1.5:1 on white |
 | `#A5C400` | Pistachio | `--pistachio` — inflow bars, always with a `--pistachio-edge` stroke |
 | `#F2F2F2` | Concrete | `--bg`, the page ground |
 | `#FFFFFF` | White | `--surface`, cards |
@@ -127,6 +131,10 @@ Nothing else hardcodes the product name.
 ### Icons
 
 `public/icon.svg` is the source of truth; everything else is rasterized from it.
+It holds its own copy of the mark — the one place that duplicates
+`lib/signet.ts`, because a static file cannot import anything — over a **white**
+rounded tile rather than a coloured one: the dragon is multicolour, and a
+Supernova tile swallowed its whole yellow half.
 
 All of these are **root paths under `public/`**, and have to be. Next's metadata
 file convention emits an icon's `<link>` relative to the segment the file sits
@@ -146,10 +154,12 @@ rsvg-convert -w 512 -h 512 /tmp/maskable.svg -o public/icon-maskable-512.png
 ```
 
 `apple-icon.png` drops the rounded corners because iOS applies its own mask.
-`public/icon-maskable-512.png` is square-cornered *and* scales the signet to
-78%, keeping it inside the circular safe zone Android crops to — at full size
-the arms graze the edge. Build its source SVG by taking `public/icon.svg`, dropping
-the `rx`, and multiplying the group's `scale` by `0.78`.
+`public/icon-maskable-512.png` is square-cornered *and* scales the mark to 78%,
+keeping it inside the circular safe zone Android crops to — at full size the
+coil grazes the edge. Build its source SVG by taking `public/icon.svg`, dropping
+the `rx`, and re-fitting the group: the `translate` centres the artwork's
+bounding box (x 59–433, y 35–455 of its own 512 box) at the new scale, so
+multiplying the `scale` alone leaves the drawing off-centre.
 
 Rasterizing needs `librsvg2-bin` and `imagemagick`:
 

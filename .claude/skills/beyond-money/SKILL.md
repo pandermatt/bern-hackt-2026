@@ -701,8 +701,10 @@ Unchanged from the template this app grew out of, and still exactly true.
 - **Only Blue Stone works as text.** It is `--accent` and carries every
   interactive surface, in both directions (white-on-teal buttons included).
   Supernova and Pistachio are under 2:1 on white and are **fills only** —
-  `--brand` is the signet tile in `components/logo.tsx`. Never set type in
-  either. (On the dark ground both clear AA, which is why `--positive` is
+  `--brand` carries the landing's CTA band, the `warning` anomaly badges and
+  the assistant's tile. It is *not* the logo tile any more: the mark is the
+  multicolour dragon, and Supernova swallowed its whole yellow half. Never set
+  type in either. (On the dark ground both clear AA, which is why `--positive` is
   Pistachio itself there rather than the darkened step.)
 - **A Pistachio fill needs `--pistachio-edge` as a stroke.** At 2:1 the fill
   alone does not make a shape perceptible against white; the edge brings it to
@@ -780,10 +782,25 @@ Unchanged from the template this app grew out of, and still exactly true.
   diagrams' text, connectors and outlines.
 - Neutrals are **untinted**. Concrete is a pure neutral (HSL 0, 0, 95) and a
   teal-tinted grey scale fights it.
-- The signet path lives once in `lib/signet.ts` and is consumed by
-  `components/logo.tsx`, `app/opengraph-image.tsx` (as a data URI — Satori only
-  renders SVG reliably through an `<img>`), and `app/icon.svg` (its own copy,
-  being a static file).
+- **The logo is artwork, not palette, and it lives once in `lib/signet.ts`** —
+  61 flat paths in ten fills, generated from `res/logos/beyond-money-icon.svg`.
+  Consumed by `components/logo.tsx` (JSX), `app/[locale]/opengraph-image.tsx`
+  (as a data URI — Satori only renders SVG reliably through an `<img>`), and
+  `public/icon.svg` (its own copy, being a static file).
+  Three things about it are load-bearing:
+  - `SIGNET_PATHS` is in **paint order**; the traced shapes overlap, so sorting
+    them is a silent redraw. The hover animation's ordering lives separately in
+    `SIGNET_FLAME_ORDER` — the ten fills tail-to-head — exactly so the paths
+    never have to move. `tests/logo-mark.test.ts` holds both.
+  - Its hexes **must not follow the theme**. That is why every consumer sets it
+    on `--logo-tile`, the fixed white the merchant marks use, rather than on
+    the theme's surface: a constant drawing needs a constant ground, the same
+    trade `.on-brand` makes in the other direction.
+  - The mark is **inline SVG, never an `<img>`**, in `components/logo.tsx`: the
+    hover staggers `animation-delay` per path, which nothing outside the
+    document can reach. The reduced-motion block in `app/globals.css` therefore
+    flattens `animation-delay` as well as duration — without that, "no motion"
+    still means ten staggered flicks.
 - **Two themes.** `:root` is light, `.dark` is dark, and `next-themes` puts the
   class on `<html>` — which is why `<html>` needs `suppressHydrationWarning`
   and why `color-scheme` is set alongside each (without it, a native

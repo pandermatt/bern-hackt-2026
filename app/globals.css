@@ -477,18 +477,26 @@
   }
 }
 
-/* Logo hover: the arrow's stem draws itself, the way a balance ticks up.
-   `pathLength={1}` in components/logo.tsx normalizes the stroke so these
-   keyframes work without knowing its real length. Resting state is untouched —
-   the animation only exists while the hover class applies it. */
-@keyframes trend-draw {
+/* Logo hover: a flame runs round the coil, tail to head.
+   Every path in `components/logo.tsx` runs these same keyframes and differs
+   only in `animation-delay`, which comes from the colour's place in
+   `SIGNET_FLAME_ORDER` — so the dragon dims and re-lights in anatomical order
+   rather than all at once. The paths scale about the *mark's* centre, not
+   their own; that is what the `transform-box: view-box` on each of them is
+   for. Resting state is untouched — the animation only exists while the hover
+   class applies it. */
+@keyframes logo-ignite {
   0% {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
+    opacity: 0.3;
+    transform: scale(0.9);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.06);
   }
   100% {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 0;
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -584,6 +592,11 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* The logo's flame is sixty-one paths that differ *only* in their delay,
+       so flattening the duration alone would leave a reader who asked for no
+       motion with three quarters of a second of staggered flicking. A
+       collapsed duration needs a collapsed delay to actually be still. */
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
