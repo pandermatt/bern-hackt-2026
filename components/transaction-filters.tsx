@@ -185,7 +185,19 @@ export function TransactionFilters({
         <button
           type="button"
           onClick={() => update("anomaly", "")}
-          className="inline-flex h-10 items-center gap-2 rounded-full border border-accent bg-accent-soft pl-4 pr-3 text-[13px] font-medium text-accent transition-colors hover:bg-surface-muted"
+          /* `min-w-0` is what makes the `truncate` below do anything. A flex
+             item's automatic minimum size is its min-content width, and the
+             span sets `white-space: nowrap`, so min-content is the whole
+             title — the chip could not shrink and simply pushed out of the
+             page instead of ellipsing. The engine's own titles reach 311px
+             ("Charged the same amount more than once") against the 280px a
+             320px screen has, and the chip is reached by clicking a finding
+             on /anomalies, so this was a live path.
+
+             `h-11 sm:h-10` to match `CONTROL` and Clear either side of it:
+             the row is `items-end`, so a 40px chip beside two 44px pills sat
+             a notch low on a phone. */
+          className="inline-flex h-11 min-w-0 items-center gap-2 rounded-full border border-accent bg-accent-soft pl-4 pr-3 text-[13px] font-medium text-accent transition-colors hover:bg-surface-muted sm:h-10"
         >
           <span className="truncate">{anomalyLabel ?? filters.anomaly}</span>
           <X aria-hidden className="size-3.5 shrink-0" />
@@ -196,8 +208,18 @@ export function TransactionFilters({
       {/* Not a `<select>`: two options with icons are read at a glance, and the
           pair doubles as a picture of what each view is. `aria-pressed` rather
           than radio inputs, because these are buttons that act rather than a
-          value being edited. */}
-      <div className="min-w-0 flex-1 sm:flex-none">
+          value being edited.
+
+          **`min-w-fit`, not `min-w-0`.** This wrapper is `flex-1`, so it takes
+          whatever the two 13rem dropdowns leave on the line — which on a phone
+          is 60–170px against the ~195px the labelled pair actually measures.
+          With `min-w-0` the wrapper was free to resolve below its own contents
+          and the group simply painted out the side of the page: 62px past the
+          edge of a 390px screen, 132px on a 320px one, in the default view
+          with no filter set at all. `min-w-fit` puts the group's width back
+          into both the line-breaking and the grow steps, so it wraps to a line
+          of its own instead of overflowing. */}
+      <div className="min-w-fit flex-1 sm:flex-none">
         <span className="mb-1.5 block pl-1 text-[12px] font-medium text-text-muted">
           {t("view")}
         </span>
@@ -212,6 +234,12 @@ export function TransactionFilters({
               type="button"
               aria-pressed={view === value}
               onClick={() => update("view", value === "calendar" ? "" : value)}
+              /* The visible word is the accessible name from `sm` up; below
+                 that it is hidden and this is all a screen reader has. Same
+                 arrangement, for the same reason, as `header-nav.tsx` — and
+                 the two names are identical, so WCAG 2.5.3 holds at every
+                 width. */
+              aria-label={t(key)}
               /* `calendar` writes an empty value, which `update` turns into a
                  delete — the default view leaves no trace in the URL. */
               className={`flex h-full cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[14px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
@@ -221,7 +249,11 @@ export function TransactionFilters({
               }`}
             >
               <Icon aria-hidden className="size-4 shrink-0" />
-              {t(key)}
+              {/* Words from `sm`, icons below it. Labelled, the pair is ~195px
+                  in both languages — more than a phone has to spare beside a
+                  208px dropdown. The icons are the one thing here that was
+                  always meant to carry the meaning on its own. */}
+              <span className="hidden sm:inline">{t(key)}</span>
             </button>
           ))}
         </div>
