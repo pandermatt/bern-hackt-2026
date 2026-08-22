@@ -424,7 +424,8 @@
     "stateResolved": "Resolved",
     "stateOpen": "Not resolved",
     "allResolvedTitle": "You're all caught up",
-    "allResolvedBody": "{count, plural, one {# kind of finding is} other {# kinds of finding are}} resolved and hidden. Show them again to look back over what you ticked off."
+    "allResolvedBody": "{count, plural, one {# kind of finding is} other {# kinds of finding are}} resolved and hidden. Show them again to look back over what you ticked off.",
+    "allResolvedRuleBody": "{count, plural, one {# finding of this kind is} other {All # findings of this kind are}} resolved and hidden. Show them again to look back over what you ticked off."
   },
   "AnomalyErrors": {
     "notSignedIn": "Sign in to resolve a finding.",
