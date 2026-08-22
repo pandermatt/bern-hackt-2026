@@ -330,26 +330,29 @@ Unchanged from the template this app grew out of, and still exactly true.
   `sr-only` box — Safari paints it as a stray line of text under the chart.
   `aria-label` gives a screen reader the identical name and renders nothing
   anywhere. Don't reintroduce `<caption>` on a visually hidden table.
-- **One chat body, two shells — and the state lives in the shell that never
-  unmounts.** `components/chat-panel.tsx` exports `useAssistantChat()` beside
-  `<ChatPanel>`; `ChatSidebar` is the slide-over and `HomeChat` is the inline
-  panel on `/home`. The split is a hook plus a component rather than one
-  component for a specific reason: `ChatSidebar` renders a launcher when
-  closed, so it never unmounts, and holding the transcript at *its* level is
-  the only thing that makes a conversation survive closing the panel. Move the
-  hook call inside the `open &&` branch and every close silently discards the
-  chat. `<ChatSidebar />` stays props-free, so the dashboard's mount is the
-  canary: if that file needs editing, the contract moved.
+- **The assistant lives on `/home` and nowhere else, and its state lives in
+  the shell.** `components/chat-panel.tsx` exports `useAssistantChat()` beside
+  `<ChatPanel>`; `HomeChat` is the one shell around it, inline and already
+  open at the top of `/home`. The dashboard used to mount a second copy as a
+  slide-over (`ChatSidebar`) — that is gone, along with the `Chat.openLabel`,
+  `panelLabel`, `resizeLabel` and `close` strings that only it used. Don't put
+  the assistant back on the dashboard; that page is the ledger. The hook and
+  the component stay split rather than merged: the shell holds the transcript
+  above whatever branch hides the panel — the debug toggle today — so a
+  conversation survives being toggled away from. Merge them and every toggle
+  silently discards the chat.
 - **`ChatPanel` carries `min-h-0` in its own base classes.** It is a new flex
   item between a full-height shell and a scrolling transcript, and it has no
   `overflow` of its own, so without it a long conversation resolves to
   `min-content` and pushes the input form off the bottom of the screen. The
   shell owns the height through two className seams (`className`,
-  `scrollClassName`) — not a `variant` prop, which would bake each page's
+  `scrollClassName`) — not a `variant` prop, which would bake the page's
   layout into the shared component.
 - **The inline panel does not autofocus.** Focusing an input near the top of a
   phone page raises the keyboard on arrival and shoves away what the reader
-  came for. Only the slide-over passes an `inputRef`.
+  came for, so `HomeChat` passes no `inputRef`. The prop survives on
+  `ChatPanel` for a shell that opens the chat on demand; nothing passes it
+  today.
 - **Nothing sets type on the pistachio.** `/home` fades to `--pistachio` at the
   bottom *because* that is where the dragon is, and the bottom of that page is
   now where the nudges are too; Pistachio is 2:1 on white and is a fill, never a

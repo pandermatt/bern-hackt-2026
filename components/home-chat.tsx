@@ -8,14 +8,15 @@ import { ChatDebug } from "@/components/chat-debug";
 import { ChatPanel, useAssistantChat } from "@/components/chat-panel";
 
 /**
- * The assistant, inline and already open, at the top of the entry page.
+ * The assistant, inline and already open, at the top of the entry page — and
+ * the only place it lives. The dashboard used to carry a slide-over copy of it;
+ * that one is gone, so this is the whole assistant.
  *
  * The page itself is a server component and cannot call a hook, so this thin
- * client wrapper owns the conversation and hands it to the shared panel. It is
- * the second shell around `components/chat-panel.tsx`; the first is the
- * slide-over on the dashboard.
+ * client wrapper owns the conversation and hands it to the shared panel in
+ * `components/chat-panel.tsx`.
  *
- * Two deliberate differences from that slide-over:
+ * Two deliberate choices, both inherited from the slide-over's mistakes:
  *
  * - **No `inputRef`, so nothing is focused on arrival.** Autofocusing an input
  *   near the top of a phone page raises the keyboard immediately, collapses the
