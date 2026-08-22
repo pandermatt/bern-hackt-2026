@@ -140,15 +140,23 @@
   "Trend": {
     "heading": "Monat für Monat",
     "meta": "Balken: Netto pro Monat · Linie: Kontostand",
+    "metaSplit": "Balken: Geld ein und Geld aus · Linie: Kontostand",
     "yearAria": "Angezeigtes Jahr",
     "prevYear": "Vorheriges Jahr",
     "nextYear": "Nächstes Jahr",
+    "viewAria": "Ansicht",
+    "viewNet": "Netto",
+    "viewSplit": "Ein & Aus",
     "chartLabel": "Jeder Monat des Jahres {year} in Schweizer Franken — Balken über der Nulllinie sind Monate mit Überschuss, Balken darunter Monate mit Mehrausgaben, und die Linie zeigt den laufenden Kontostand. Die Tabelle unter dem Diagramm enthält die Zahlen aller Jahre.",
-    "tableLabel": "Netto und Kontostand nach Monat",
+    "chartLabelSplit": "Jeder Monat des Jahres {year} in Schweizer Franken — Balken über der Nulllinie sind der Geldeingang des Monats, Balken darunter der Geldausgang, und die Linie zeigt den laufenden Kontostand. Die Tabelle unter dem Diagramm enthält die Zahlen aller Jahre.",
+    "tableLabel": "Geld ein, Geld aus, Netto und Kontostand nach Monat",
     "month": "Monat",
+    "moneyIn": "Geld ein",
+    "moneyOut": "Geld aus",
     "net": "Netto",
     "balance": "Kontostand",
-    "footnote": "Beträge in CHF. Netto ist Geldeingang minus Geldausgang; die Linie ist der laufende Kontostand über die gesamte Historie."
+    "footnote": "Beträge in CHF. Netto ist Geldeingang minus Geldausgang; die Linie ist der laufende Kontostand über die gesamte Historie.",
+    "footnoteSplit": "Beträge in CHF. Balken über der Nulllinie sind der Geldeingang, darunter der Geldausgang; ihre Differenz ist das Netto, und die Linie ist der laufende Kontostand über die gesamte Historie."
   },
   "TopCategories": {
     "heading": "Top-Kategorien",

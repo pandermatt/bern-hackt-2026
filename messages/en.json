@@ -140,15 +140,23 @@
   "Trend": {
     "heading": "Month by month",
     "meta": "Bars: net per month · line: account balance",
+    "metaSplit": "Bars: money in and money out · line: account balance",
     "yearAria": "Shown year",
     "prevYear": "Previous year",
     "nextYear": "Next year",
+    "viewAria": "View",
+    "viewNet": "Net",
+    "viewSplit": "In & out",
     "chartLabel": "Each month of {year} in Swiss francs — bars above the zero line are months that kept money, bars below are months that overspent, and the line carries the running account balance. The table below the chart carries every year's figures.",
-    "tableLabel": "Net and account balance, by month",
+    "chartLabelSplit": "Each month of {year} in Swiss francs — bars above the zero line are the month's money in, bars below are its money out, and the line carries the running account balance. The table below the chart carries every year's figures.",
+    "tableLabel": "Money in, money out, net and account balance, by month",
     "month": "Month",
+    "moneyIn": "Money in",
+    "moneyOut": "Money out",
     "net": "Net",
     "balance": "Balance",
-    "footnote": "Amounts in CHF. Net is money in minus money out; the line is the account balance running over the whole history."
+    "footnote": "Amounts in CHF. Net is money in minus money out; the line is the account balance running over the whole history.",
+    "footnoteSplit": "Amounts in CHF. Bars above the zero line are money in, bars below are money out; their difference is the net, and the line is the account balance running over the whole history."
   },
   "TopCategories": {
     "heading": "Top categories",

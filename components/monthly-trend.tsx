@@ -34,6 +34,12 @@ import { useIsNarrow } from "@/lib/use-hydrated";
  * whose, and only the bars' axis draws gridlines so the plot carries one
  * ruler, not two.
  *
+ * A second toggle splits that net back into the two flows that made it: money
+ * in above the zero line, money out below, both columns on the month's own
+ * tick. It is the same encoding read at a different grain — the net view
+ * answers "did this month keep money", the split view answers "on what scale"
+ * — which is why it is a mode of this chart rather than a second one.
+ *
  * A stepper pages between the years the statements cover, and hovering a
  * column widens it and hangs its amount off the data end — the hover feedback
  * *is* the tooltip, so there is no second floating box saying the same thing.
@@ -51,9 +57,10 @@ import { useIsNarrow } from "@/lib/use-hydrated";
  * `transition: ["shape"]` is what animates the growth.
  *
  * Deliberately **not** broken down by category (the donut below owns that
- * story), and deliberately balance-only: the sign carries the reading twice —
- * position against the zero line and the in/out direction pair. One series, so
- * no legend box; the heading names it.
+ * story): the sign carries the reading twice — position against the zero line
+ * and the in/out direction pair — and the split view is that same pair, not a
+ * second dimension. One series, so no legend box; the heading and the meta
+ * line name it.
  *
  * `--flow-in` / `--flow-out` because a balance is a direction, not a category.
  * The positive bars are Pistachio *fills*, so they wear `--pistachio-edge` —
@@ -81,6 +88,12 @@ const GRID_NARROW = { left: 40, right: 40, top: 24, bottom: 26 };
 const BAR = { base: 26, hover: 40 };
 const BAR_NARROW = { base: 14, hover: 22 };
 
+/**
+ * `net` draws the month's balance as one column; `split` draws the money in
+ * and the money out that produced it, diverging from the same zero line.
+ */
+type TrendMode = "net" | "split";
+
 /** Rounds a rappen amount up to a tidy gridline so the axis reads cleanly. */
 function niceCeiling(value: number): number {
   if (value <= 0) return 100;
@@ -105,12 +118,23 @@ function buildOption(
   narrow: boolean,
   hovered: number | null,
   monthLabel: (index: number) => string,
+  mode: TrendMode,
 ): EChartsOption {
-  const nets = months.flatMap((point) => (point ? [point.net] : []));
+  // Both views diverge from the same zero line: the net view draws one column
+  // per month, the split view draws the two flows that made it — money in
+  // above the line, money out below — so the net stays readable as the
+  // difference between them.
+  const split = mode === "split";
+  const ups = months.flatMap((point) =>
+    point ? [split ? point.income : point.net] : [],
+  );
+  const downs = months.flatMap((point) =>
+    point ? [split ? -point.expense : point.net] : [],
+  );
   // 8% of headroom past the nice gridline, so the hovered bar's amount label
   // never leaves the plot even on the year's tallest bar.
-  const peak = niceCeiling(Math.max(1, ...nets) * 1.08);
-  const lowest = Math.min(0, ...nets);
+  const peak = niceCeiling(Math.max(1, ...ups) * 1.08);
+  const lowest = Math.min(0, ...downs);
   const floor = lowest < 0 ? -niceCeiling(-lowest * 1.08) : 0;
   // The balance axis, zero-aligned with the bars': both axes give the same
   // *fraction* of their range to the region below zero, so the two zeros land
@@ -126,6 +150,11 @@ function buildOption(
     floor < 0 ? -floor / peak : 0,
     balLo < 0 ? -balLo / balMax : 0,
   );
+  // The split view spends far more of the plot below zero than the net view
+  // does, so the balance line gets squeezed into the upper half with it. That
+  // is the price of the shared zero, and the shared zero is what makes the
+  // overlay readable — the line keeps its own scale and its own axis labels,
+  // so it loses height, not resolution.
   const barMin = -Math.round(below * peak);
   const balMin = -Math.round(below * balMax);
   const bar = narrow ? BAR_NARROW : BAR;
@@ -139,7 +168,9 @@ function buildOption(
   const plotHeight = HEIGHT - grid.top - grid.bottom;
   const labelCollides = months.map((point) => {
     if (!point) return false;
-    const yEnd = ((peak - point.net) / (peak - barMin)) * plotHeight;
+    // Only the upper column can reach the line's airspace.
+    const top = split ? point.income : point.net;
+    const yEnd = ((peak - top) / (peak - barMin)) * plotHeight;
     const yVertex = ((balMax - point.balance) / (balMax - balMin)) * plotHeight;
     return Math.abs(yEnd - yVertex) < 30;
   });
@@ -160,26 +191,28 @@ function buildOption(
 
   const renderItem: CustomSeriesRenderItem = (params, api) => {
     const { dataIndex } = params;
-    const net = api.value(1) as number;
-    if (!Number.isFinite(net)) return null;
+    const point = months[dataIndex];
+    if (!point) return null;
 
-    const [x, yEnd] = api.coord([dataIndex, net]);
-    const [, yZero] = api.coord([dataIndex, 0]);
-    const positive = net >= 0;
+    const [x, yZero] = api.coord([dataIndex, 0]);
     const isHovered = hovered === dataIndex;
     const width = isHovered ? bar.hover : bar.base;
-    const top = Math.min(yEnd, yZero);
-    // A near-zero month still gets a perceptible sliver to hover.
-    const height = Math.max(2, Math.abs(yZero - yEnd));
-    const fill = positive
-      ? { fill: tokens.flowIn, stroke: tokens.flowInEdge, lineWidth: 1 }
-      : { fill: tokens.flowOut };
 
-    // Cast because the graphic-element option types don't narrow from this
-    // literal; the shape is the documented rect/text group.
-    return {
-      type: "group" as const,
-      children: [
+    // One rounded column from the zero line out to `value`, plus the amount
+    // hanging off its data end. In the split view the two columns share the
+    // month's tick and grow in opposite directions, so they meet at zero
+    // rather than crowd each other sideways.
+    const column = (value: number, labelGap: number) => {
+      const [, yEnd] = api.coord([dataIndex, value]);
+      const positive = value >= 0;
+      const top = Math.min(yEnd, yZero);
+      // A near-zero month still gets a perceptible sliver to hover.
+      const height = Math.max(2, Math.abs(yZero - yEnd));
+      const fill = positive
+        ? { fill: tokens.flowIn, stroke: tokens.flowInEdge, lineWidth: 1 }
+        : { fill: tokens.flowOut };
+
+      return [
         {
           type: "rect" as const,
           shape: {
@@ -201,27 +234,38 @@ function buildOption(
         },
         // The amount, hanging off the data end. When the balance vertex's
         // label wants the same airspace, this one steps further out so the
-        // two stack — net above balance — instead of overprinting; inside the
-        // bar is no refuge, the colliding line crosses exactly there. Always
-        // in the tree with empty text when idle, so hover updates morph the
-        // rect instead of replacing a lone rect with a rect-plus-label group.
-        (() => {
-          const gap = isHovered && labelCollides[dataIndex] ? 24 : 6;
-          return {
-            type: "text" as const,
-            silent: true,
-            style: {
-              x,
-              y: positive ? top - gap : top + height + gap,
-              text: isHovered ? signedFrancs(net) : "",
-              align: "center" as const,
-              verticalAlign: positive ? ("bottom" as const) : ("top" as const),
-              fill: tokens.ink,
-              fontSize: 11,
-            },
-          };
-        })(),
-      ],
+        // two stack — amount above balance — instead of overprinting; inside
+        // the bar is no refuge, the colliding line crosses exactly there.
+        // Always in the tree with empty text when idle, so hover updates morph
+        // the rect instead of replacing a lone rect with a rect-plus-label
+        // group.
+        {
+          type: "text" as const,
+          silent: true,
+          style: {
+            x,
+            y: positive ? top - labelGap : top + height + labelGap,
+            text: isHovered ? signedFrancs(value) : "",
+            align: "center" as const,
+            verticalAlign: positive ? ("bottom" as const) : ("top" as const),
+            fill: tokens.ink,
+            fontSize: 11,
+          },
+        },
+      ];
+    };
+
+    // Only the upper column can collide with the balance label; the lower one
+    // hangs into empty airspace under the zero line either way.
+    const gap = isHovered && labelCollides[dataIndex] ? 24 : 6;
+
+    // Cast because the graphic-element option types don't narrow from these
+    // literals; the shape is the documented rect/text group.
+    return {
+      type: "group" as const,
+      children: split
+        ? [...column(point.income, gap), ...column(-point.expense, 6)]
+        : [...column(point.net, gap)],
     } as unknown as CustomSeriesRenderItemReturn;
   };
 
@@ -285,7 +329,10 @@ function buildOption(
         // padding; the rects themselves cannot leave the plot, because the
         // axis extents are derived from the same values they draw.
         clip: false,
-        data: months.map((point, index) => [index, point ? point.net : NaN]),
+        data: months.map((point, index) => [
+          index,
+          point ? (split ? point.income : point.net) : NaN,
+        ]),
       },
       // The running balance, on the right-hand axis. No symbols — the hovered
       // month's vertex grows a value label instead, the same interrogation
@@ -366,6 +413,7 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   const year = chosenYear ?? years[years.length - 1];
   const yearIndex = years.indexOf(year);
 
+  const [mode, setMode] = useState<TrendMode>("net");
   const [hovered, setHovered] = useState<number | null>(null);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -427,8 +475,11 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   );
 
   const option = useMemo(
-    () => (tokens ? buildOption(months, tokens, narrow, hovered, monthLabel) : null),
-    [months, tokens, narrow, hovered, monthLabel],
+    () =>
+      tokens
+        ? buildOption(months, tokens, narrow, hovered, monthLabel, mode)
+        : null,
+    [months, tokens, narrow, hovered, monthLabel, mode],
   );
 
   if (series.length === 0) return null;
@@ -443,15 +494,23 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   const stepButton =
     "flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-text-muted transition-colors hover:text-text disabled:cursor-default disabled:opacity-40 disabled:hover:text-text-muted";
 
+  // The same pill idiom the top-categories controls use.
+  const pill = (active: boolean) =>
+    `h-8 cursor-pointer rounded-full px-3 text-[12.5px] font-medium transition-colors ${
+      active ? "bg-primary text-primary-foreground" : "text-text-muted hover:text-text"
+    }`;
+
   return (
     <Section
       id="trend"
       heading={t("heading")}
-      meta={t("meta")}
+      meta={t(mode === "split" ? "metaSplit" : "meta")}
       panelClassName="p-4 sm:p-5"
     >
-      {/* The year pager — same pill idiom as the top-categories controls. */}
-      <div className="flex items-center pb-3">
+      {/* The year pager and the view toggle — same pill idiom as the
+          top-categories controls. Wrapping, because the two groups together
+          are wider than a 375px card. */}
+      <div className="flex flex-wrap items-center gap-2 pb-3">
         <div
           role="group"
           aria-label={t("yearAria")}
@@ -482,6 +541,27 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
             <ChevronRight className="size-4" aria-hidden />
           </button>
         </div>
+
+        <div
+          role="group"
+          aria-label={t("viewAria")}
+          className="flex rounded-full border border-line-strong bg-surface p-0.5"
+        >
+          {(["net", "split"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={mode === key}
+              onClick={() => {
+                setHovered(null);
+                setMode(key);
+              }}
+              className={pill(mode === key)}
+            >
+              {t(key === "net" ? "viewNet" : "viewSplit")}
+            </button>
+          ))}
+        </div>
       </div>
 
       <EChart
@@ -489,12 +569,14 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
         height={HEIGHT}
         notMerge={false}
         onEvents={events}
-        label={t("chartLabel", { year })}
+        label={t(mode === "split" ? "chartLabelSplit" : "chartLabel", { year })}
       />
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. Also the relief a sub-3:1 fill requires. Every year at
-          once, so nobody has to operate the stepper to hear the history. */}
+          once, so nobody has to operate the stepper to hear the history — and
+          both flows in every row, so it answers for either view without
+          anyone having to find the toggle first. */}
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
       <div className="sr-only">
@@ -502,6 +584,8 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
           <thead>
             <tr>
               <th scope="col">{t("month")}</th>
+              <th scope="col">{t("moneyIn")}</th>
+              <th scope="col">{t("moneyOut")}</th>
               <th scope="col">{t("net")}</th>
               <th scope="col">{t("balance")}</th>
             </tr>
@@ -510,6 +594,8 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
             {series.map((point) => (
               <tr key={point.month}>
                 <th scope="row">{point.month}</th>
+                <td>{signedMoney(point.income)}</td>
+                <td>{signedMoney(-point.expense)}</td>
                 <td>{signedMoney(point.net)}</td>
                 <td>{signedMoney(point.balance)}</td>
               </tr>
@@ -519,7 +605,7 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
       </div>
 
       <p className="mt-3 font-mono text-[11.5px] text-text-subtle">
-        {t("footnote")}
+        {t(mode === "split" ? "footnoteSplit" : "footnote")}
       </p>
     </Section>
   );
