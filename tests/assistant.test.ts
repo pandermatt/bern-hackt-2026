@@ -356,7 +356,6 @@ describe("savingsGoalsToolResult", () => {
     savedMinor,
     monthMinor: 0,
     targetOn: null,
-    monthlyMinor: null,
     icon: null,
     slot: 0,
   });
@@ -439,8 +438,8 @@ describe("buildAllocationProposal", () => {
     allocatedMinor: 20_000,
     freeMinor: 100_000,
     pots: [
-      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 0 },
-      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
+      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, icon: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, targetOn: null, icon: null, slot: 1 },
     ],
     ...patch,
   });
@@ -701,8 +700,8 @@ describe("defaultAllocationSplit", () => {
     allocatedMinor: 0,
     freeMinor: 100_000,
     pots: [
-      { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 0 },
-      { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
+      { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, icon: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, icon: null, slot: 1 },
     ],
     ...patch,
   });
@@ -715,25 +714,11 @@ describe("defaultAllocationSplit", () => {
     ]);
   });
 
-  it("prefers the holder's own monthly plan when any pot declares one", () => {
-    const planned = overview({
-      pots: [
-        { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: 30_000, icon: null, slot: 0 },
-        { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
-      ],
-    });
-    // The Dauersparauftrag wins outright; the unplanned pot gets nothing and
-    // the surplus beyond the plan stays free.
-    expect(defaultAllocationSplit(planned)).toEqual([
-      { goal: "Ferien", amountMinor: 30_000 },
-    ]);
-  });
-
   it("falls back to equal parts when every goal is already full", () => {
     const full = overview({
       pots: [
-        { id: 1, name: "A", targetMinor: 100, savedMinor: 100, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 0 },
-        { id: 2, name: "B", targetMinor: 100, savedMinor: 200, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
+        { id: 1, name: "A", targetMinor: 100, savedMinor: 100, monthMinor: 0, targetOn: null, icon: null, slot: 0 },
+        { id: 2, name: "B", targetMinor: 100, savedMinor: 200, monthMinor: 0, targetOn: null, icon: null, slot: 1 },
       ],
     });
     expect(defaultAllocationSplit(full)).toEqual([

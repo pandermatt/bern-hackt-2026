@@ -911,11 +911,6 @@ export type SavingsPot = {
   /** `YYYY-MM-DD`, or null for a goal with no deadline. */
   targetOn: string | null;
   /**
-   * The Dauersparauftrag: what the holder means to put in monthly. A
-   * suggestion for splitting a surplus — it never moves money on its own.
-   */
-  monthlyMinor: number | null;
-  /**
    * A lucide name from `GOAL_ICONS`, or null for a goal nobody named one for.
    * Only set where the keyword rules missed and the model was asked instead —
    * see `lib/goal-icon.ts`.

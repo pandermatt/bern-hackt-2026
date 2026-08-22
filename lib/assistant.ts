@@ -758,7 +758,7 @@ export function savingsGoalsToolResult(overview: SavingsOverview | null): unknow
     notes.push("Nothing is left to allocate from this month.");
   } else if (overview.pots.length > 0) {
     notes.push(
-      "To split the free amount across the goals call propose_allocation — follow each goal's monthly_plan_chf where set, otherwise favor the goals further from target; the customer gets an Apply button. You cannot move money yourself.",
+      "To split the free amount across the goals call propose_allocation — favor the goals further from target; the customer gets an Apply button. You cannot move money yourself.",
     );
   }
   return {
@@ -773,9 +773,6 @@ export function savingsGoalsToolResult(overview: SavingsOverview | null): unknow
       saved_chf: chf(pot.savedMinor),
       still_missing_chf: chf(Math.max(0, pot.targetMinor - pot.savedMinor)),
       allocated_this_month_chf: chf(pot.monthMinor),
-      // The holder's own standing intent — the strongest hint a proposed
-      // split can follow. Null when the goal has none.
-      monthly_plan_chf: pot.monthlyMinor === null ? null : chf(pot.monthlyMinor),
       target_date: pot.targetOn,
     })),
     note: notes.join(" "),
@@ -1000,17 +997,14 @@ export function buildAllocationProposal(
 /**
  * The deterministic split the proposal safety net offers when the customer
  * asked to allocate and the model never made a valid propose_allocation call.
- * Two sources, in order of how much they say about intent:
  *
- * 1. **The holder's own monthly plan.** A pot's `monthlyMinor` is the
- *    Dauersparauftrag — literally "what the holder means to put in monthly, a
- *    suggestion for splitting a surplus" — so when any pot declares one, the
- *    proposal IS those amounts (the shared validator scales them down if the
- *    month's free surplus cannot cover them; a surplus beyond the plan stays
- *    free rather than being force-distributed).
- * 2. Otherwise the free surplus is spread proportional to each goal's
- *    remaining gap (equal parts when every goal is already full), floored to
- *    whole francs.
+ * The free surplus is spread proportional to each goal's remaining gap (equal
+ * parts when every goal is already full), floored to whole francs.
+ *
+ * This used to consult a first source ahead of the gaps — the pot's
+ * Dauersparauftrag, which said outright what the holder meant to put in each
+ * month. That feature is gone, and with it the only stored statement of intent
+ * the split could read; what remains is inferred from the goals themselves.
  *
  * Expressed as RawAllocations so `buildAllocationProposal` stays the single
  * validator for everything that becomes an Apply card.
@@ -1021,14 +1015,6 @@ export function defaultAllocationSplit(
   if (!overview || !overview.monthEnded || overview.freeMinor <= 0) return [];
   const pots = overview.pots;
   if (pots.length === 0) return [];
-
-  const planned = pots.filter((pot) => (pot.monthlyMinor ?? 0) > 0);
-  if (planned.length > 0) {
-    return planned.map((pot) => ({
-      goal: pot.name,
-      amountMinor: pot.monthlyMinor as number,
-    }));
-  }
 
   const gaps = pots.map((pot) => Math.max(0, pot.targetMinor - pot.savedMinor));
   const gapTotal = gaps.reduce((sum, gap) => sum + gap, 0);

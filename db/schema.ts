@@ -348,14 +348,19 @@ export const savingsGoals = sqliteTable(
      */
     targetOn: text("target_on"),
     /**
-     * A Dauersparauftrag: what the account holder means to put in each month.
+     * Dead column, deliberately still declared.
      *
-     * **It never moves money.** Nothing reads this column to create an
-     * allocation; it seeds the split when a finished month has a surplus, and
-     * that is all. A standing order that quietly filled pots would invent
-     * savings out of months that never had the income.
+     * This was the Dauersparauftrag — a stated monthly intention that seeded
+     * the allocator's fields and never moved money. The feature is gone and
+     * nothing reads this, but the column stays in the schema because
+     * production boots with `drizzle-kit push` and no `--force`: dropping a
+     * column that holds data is a data-loss statement, and push stops on it
+     * with `Interactive prompts require a TTY terminal`, which fails the
+     * deploy. The same constraint that keeps `transactions.userId` nullable.
      *
-     * Nullable — most pots have no standing order — and positive when set.
+     * Removing it for real means clearing the values first and pushing from a
+     * terminal, which is a deliberate migration rather than a side effect of
+     * deleting a feature. Until then it is inert.
      */
     monthlyMinor: integer("monthly_minor"),
     /**

@@ -646,7 +646,6 @@ describe("byTargetDate", () => {
     savedMinor: 0,
     monthMinor: 0,
     targetOn,
-    monthlyMinor: null,
     icon: null,
     slot: 1,
   });

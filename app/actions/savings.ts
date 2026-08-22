@@ -147,21 +147,6 @@ function toTargetOn(value: string): string | null | { key: "notADate" } {
   return isCalendarDate(trimmed) ? trimmed : { key: "notADate" };
 }
 
-/**
- * A Dauersparauftrag as typed, `null` for none, or an amount problem.
- *
- * Zero and blank collapse to `null` here, unlike a budget limit where zero is
- * a real limit of nothing. A standing order is only ever a suggestion, and a
- * suggestion of nothing is no suggestion.
- */
-function toMonthly(value: string): number | null | AmountProblem {
-  const cleaned = value.trim().replace(/[’'\s]/g, "").replace(",", ".");
-  if (cleaned === "") return null;
-  const minor = toMinor(cleaned);
-  if (typeof minor !== "number") return minor;
-  return minor === 0 ? null : minor;
-}
-
 /** Rows this account owns. Scoped by `userId` like every other query here. */
 async function ownedRows(userId: number): Promise<Transaction[]> {
   return db
@@ -241,7 +226,6 @@ export async function getSavingsOverview(
         savedMinor: saved.get(goal.id) ?? 0,
         monthMinor: thisMonth.get(goal.id) ?? 0,
         targetOn: goal.targetOn,
-        monthlyMinor: goal.monthlyMinor,
         icon: goal.icon,
         slot: potSlot(goal.id),
       }))
@@ -343,7 +327,6 @@ export async function updateSavingsGoal(
   goalId: number,
   amount: string,
   targetOn = "",
-  monthly = "",
 ): Promise<SavingsResult> {
   const user = await getCurrentUser();
   if (!user) return savingsError("notSignedInEdit");
@@ -358,12 +341,9 @@ export async function updateSavingsGoal(
   const due = toTargetOn(targetOn);
   if (typeof due === "object" && due !== null) return savingsError(due.key);
 
-  const order = toMonthly(monthly);
-  if (typeof order === "object" && order !== null) return amountError(order);
-
   const changed = await db
     .update(savingsGoals)
-    .set({ targetMinor: target, targetOn: due, monthlyMinor: order })
+    .set({ targetMinor: target, targetOn: due })
     // Scoped by owner as well as id: the id alone would let anyone retarget
     // anyone's goal by guessing a number.
     .where(and(eq(savingsGoals.id, goalId), eq(savingsGoals.userId, user.id)))
@@ -372,42 +352,6 @@ export async function updateSavingsGoal(
   if (changed.length === 0) {
     return savingsError("goalGone");
   }
-
-  revalidatePath("/[locale]/budget", "page");
-  return { ok: true };
-}
-
-/**
- * Sets or clears one pot's Dauersparauftrag.
- *
- * Its own action rather than a corner of `updateSavingsGoal`, because the
- * section-level dialog knows a pot and an amount and nothing else — making it
- * post a target and a date it never asked about would be inventing values.
- *
- * **It moves no money.** The amount seeds the split when a finished month has
- * a surplus; allocations are still only ever created by `allocateSurplus`.
- */
-export async function setStandingOrder(
-  goalId: number,
-  monthly: string,
-): Promise<SavingsResult> {
-  const user = await getCurrentUser();
-  if (!user) return savingsError("notSignedInEdit");
-
-  const parsed = amountSchema.safeParse(monthly);
-  if (!parsed.success) return savingsError("malformedTarget");
-
-  const order = toMonthly(parsed.data);
-  if (typeof order === "object" && order !== null) return amountError(order);
-
-  const changed = await db
-    .update(savingsGoals)
-    .set({ monthlyMinor: order })
-    // Scoped by owner as well as id, like every other write here.
-    .where(and(eq(savingsGoals.id, goalId), eq(savingsGoals.userId, user.id)))
-    .returning({ id: savingsGoals.id });
-
-  if (changed.length === 0) return savingsError("goalGone");
 
   revalidatePath("/[locale]/budget", "page");
   return { ok: true };
