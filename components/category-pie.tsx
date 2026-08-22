@@ -143,8 +143,12 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
         </div>
       </div>
 
-      <table className="sr-only">
-        <caption>Share of spending by category, whole range</caption>
+      {/* No <caption>: the caption box lives outside the table's clipped box,
+          so it escapes sr-only's 1px clip and floats visibly on the page. */}
+      <table
+        className="sr-only"
+        aria-label="Share of spending by category, whole range"
+      >
         <thead>
           <tr>
             <th scope="col">Category</th>

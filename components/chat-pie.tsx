@@ -101,8 +101,10 @@ export function ChatPie({ chart }: { chart: ChartSpec }) {
         </div>
       </div>
 
-      <table className="sr-only">
-        <caption>{chart.title}</caption>
+      {/* No <caption>: the caption box lives outside the table's clipped box,
+          so it escapes sr-only's 1px clip and floats visibly on the page.
+          The aria-label names the table without rendering anything. */}
+      <table className="sr-only" aria-label={chart.title}>
         <thead>
           <tr>
             <th scope="col">Slice</th>
