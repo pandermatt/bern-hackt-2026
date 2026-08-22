@@ -592,6 +592,22 @@
     "light": "Light",
     "dark": "Dark"
   },
+  "Install": {
+    "heading": "Install",
+    "title": "Add to home screen",
+    "note": "Install Beyond Money as an app. It opens in its own window, without browser chrome.",
+    "action": "Install",
+    "installed": "Installed",
+    "installedNote": "You are already running Beyond Money as an installed app.",
+    "browserMenuNote": "Your browser offers this from its own menu — look for “Install app” or “Add to Home Screen”.",
+    "iosNote": "On iPhone and iPad this is done from the Share menu in Safari.",
+    "iosAction": "Show me how",
+    "iosTitle": "Add to Home Screen",
+    "iosIntro": "Safari installs apps from its Share menu rather than from the page itself.",
+    "iosStep1": "Tap the Share button in Safari’s toolbar.",
+    "iosStep2": "Scroll down the list and choose “Add to Home Screen”.",
+    "iosStep3": "Tap “Add”. Beyond Money appears on your home screen."
+  },
   "DangerZone": {
     "trigger": "Delete account",
     "title": "Delete your account?",
