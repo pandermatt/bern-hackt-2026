@@ -7,6 +7,7 @@ import { CategoryPie } from "@/components/category-pie";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { Landing } from "@/components/landing";
 import { MonthlyTrend } from "@/components/monthly-trend";
+import { ScrollDebug } from "@/components/scroll-debug";
 import { SummaryCards } from "@/components/summary-cards";
 import { AnomalySuggestion } from "@/components/anomaly-suggestion";
 import { TransactionFilters } from "@/components/transaction-filters";
@@ -115,6 +116,11 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
       </main>
 
       <ChatSidebar />
+
+      {/* Temporary: the ledger's "jumps back to the top" report does not
+          reproduce on a desk, so this reports from the device it happens on.
+          Remove with `components/scroll-debug.tsx`. */}
+      {query.debug === "scroll" && <ScrollDebug />}
     </>
   );
 }
