@@ -126,7 +126,7 @@ export function DemoDataControls() {
               type="button"
               onClick={handleGenerateFaker}
               disabled={isBusy}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-[13px] font-medium text-accent-contrast shadow-sm hover:opacity-90 disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all shrink-0 max-sm:w-full sm:h-9 sm:self-start"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-[13px] font-medium text-primary-foreground shadow-sm hover:opacity-90 disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all shrink-0 max-sm:w-full sm:h-9 sm:self-start"
             >
               {isFakerPending ? (
                 <>
