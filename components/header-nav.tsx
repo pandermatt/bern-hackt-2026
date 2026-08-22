@@ -1,8 +1,8 @@
 "use client";
 
-import { ChartColumn, House, TriangleAlert, Wallet } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { TABS } from "@/components/nav-tabs";
 import { Link, usePathname } from "@/i18n/navigation";
 
 /**
@@ -29,20 +29,25 @@ import { Link, usePathname } from "@/i18n/navigation";
    used to be Anomalies' private arrangement, because "Auffälligkeiten" is 14
    characters and three text tabs plus the account cluster already overflowed a
    375px phone. Adding Home as a fourth made it everyone's problem: four labels
-   do not fit at any phone width. Icons below `sm`, words from `sm` up. */
-const TABS = [
-  { href: "/home", key: "home", icon: House },
-  { href: "/dashboard", key: "dashboard", icon: ChartColumn },
-  { href: "/budget", key: "budget", icon: Wallet },
-  { href: "/anomalies", key: "anomalies", icon: TriangleAlert },
-] as const;
+   do not fit at any phone width. Icons below `sm`, words from `sm` up.
+
+   The list itself now lives in `components/nav-tabs.ts`, shared with
+   `components/tab-bar.tsx` — the installed app moves these same four routes
+   into a bottom bar, and two copies of the list would drift. */
 
 export function HeaderNav() {
   const t = useTranslations("AppHeader");
   const pathname = usePathname();
 
   return (
-    <nav aria-label={t("mainNav")} className="flex items-center gap-1">
+    // Hidden in the installed app on a phone: the same four routes are in the
+    // bottom bar there, and offering both would be two navs for one set of
+    // pages. `display: none` also takes it out of the accessibility tree, so
+    // nothing announces them twice.
+    <nav
+      aria-label={t("mainNav")}
+      className="flex items-center gap-1 app-shell:hidden"
+    >
       {TABS.map((tab) => {
         const Icon = tab.icon;
         /* Every tab owns its subtree — `/anomalies/AMOUNT_SPIKE` is still the

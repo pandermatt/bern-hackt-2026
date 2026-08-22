@@ -11,6 +11,7 @@ import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
 import { LocaleSync } from "@/components/locale-sync";
 import { ServiceWorkerRegistrar } from "@/components/sw-register";
+import { TabBar } from "@/components/tab-bar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { routing } from "@/i18n/routing";
@@ -106,6 +107,34 @@ export const viewport: Viewport = {
   ],
 };
 
+/**
+ * Marks `<html>` as the installed app before anything paints.
+ *
+ * Whether the app is running standalone is only knowable in the browser, and
+ * deciding it in React would mean every load renders the browser chrome first
+ * and swaps to the app chrome after hydration — the nav visibly jumping from
+ * the header to the bottom of the screen, on every navigation. A blocking
+ * script settles it before the first frame instead.
+ *
+ * The same trick, for the same reason, as next-themes' pre-paint script — and
+ * it relies on the same `suppressHydrationWarning` on `<html>` below, since
+ * this also mutates an attribute the server just rendered.
+ *
+ * `navigator.standalone` is the second clause because it is the only signal
+ * older iOS gives for a home-screen launch; `display-mode` covers everything
+ * else. Wrapped in a try/catch: this runs before React and an exception here
+ * would take the rest of the page's scripts with it.
+ *
+ * `app/globals.css` reads what this writes, as the `app-shell:` variant.
+ *
+ * `components/install-app.tsx` asks the same question a second time, through
+ * `useStandalone()`, and the duplication is deliberate: that one has to be
+ * React state, because the install row also has to react to `appinstalled`
+ * firing while the page is open. This one has to run before React exists at
+ * all. Neither can be expressed as the other.
+ */
+const STANDALONE_SCRIPT = `try{if(matchMedia('(display-mode: standalone)').matches||navigator.standalone===true)document.documentElement.dataset.standalone=''}catch(e){}`;
+
 // Every locale in `routing` gets a shell at build time; anything else 404s
 // below rather than rendering an untranslated page.
 export function generateStaticParams() {
@@ -139,13 +168,21 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[lo
     >
       {/* `bg-bg`, not `bg-white`: main set `--bg` to #ffffff, so this renders
           identically in light mode while still following the dark theme. A
-          literal here would keep the page white on a dark ground. */}
-      <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased">
+          literal here would keep the page white on a dark ground.
+
+          `app-shell:pb-28` reserves the height of the fixed tab bar. The bar
+          floats out of the flow, so without this the last row of every page
+          ends up behind the glass. */}
+      <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased app-shell:pb-28">
+        <script dangerouslySetInnerHTML={{ __html: STANDALONE_SCRIPT }} />
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>
             <AppHeader user={user} />
             {children}
             <AppFooter user={user} />
+            {/* Gated on `user` for the same reason `HeaderNav` is — signed-out
+                visitors have nothing to navigate between. */}
+            {user && <TabBar />}
             <Toaster position="bottom-right" />
             {/* useSearchParams needs a boundary it can suspend against. */}
             <Suspense fallback={null}>

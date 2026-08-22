@@ -38,7 +38,12 @@ export function AppFooter({ user }: { user: User | null }) {
   const t = useTranslations("AppFooter");
 
   return (
-    <footer className="w-full border-t border-line bg-surface py-8 sm:py-12">
+    /* Gone in the installed app on a phone. This is the marketing footer — a
+       tagline, a privacy badge, a version string and, signed out, the only
+       sign-in links there are. An app opened from a home screen has no use for
+       any of it, and it is the one thing the fixed tab bar would otherwise
+       cover. Untouched at every other width and in every browser tab. */
+    <footer className="w-full border-t border-line bg-surface py-8 app-shell:hidden sm:py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-6 px-5 sm:flex-row sm:px-8">
         <div className="flex flex-col items-center gap-1.5 text-center sm:items-start sm:text-left">
           {/* Stacked on a phone, one line from `sm`. The separator goes with

@@ -2,6 +2,32 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+ * "The installed app, on a phone" — the one condition the bottom tab bar and
+ * everything that moves out of its way hang off.
+ *
+ * `data-standalone` is stamped on `<html>` by the blocking script in
+ * `app/[locale]/layout.tsx`, before first paint. Both halves matter: installed
+ * on a tablet or a desktop there is room for the header nav and it stays, and
+ * in a browser tab at phone width the page is still a page.
+ *
+ * A variant rather than a hand-written selector in each component, so the
+ * definition of "app shell" lives in one place and the components stay in
+ * Tailwind: `app-shell:hidden`, `app-shell:flex`.
+ *
+ * `639.98px` and not `639px` for the reason `useIsNarrow` in
+ * `lib/use-hydrated.ts` already spells out — viewport widths are fractional on
+ * plenty of devices, and an integer leaves a sliver where neither this nor
+ * Tailwind's `sm:` applies.
+ */
+@custom-variant app-shell {
+  @media (max-width: 639.98px) {
+    &:where(html[data-standalone] *) {
+      @slot;
+    }
+  }
+}
+
 /* ───────────────────────────────────────────────────────────────
    The PostFinance brand palette:
 
@@ -131,6 +157,15 @@
   --shadow-lg:
     0 8px 24px -4px rgb(0 0 0 / 0.08), 0 2px 6px -1px rgb(0 0 0 / 0.04);
 
+  /* The glass the installed app's tab bar is made of. Mixed from `--surface`
+     and `--line` rather than written as hexes, so a rebrand that moves those
+     carries the bar with it — the same reason nothing else here hardcodes a
+     colour. The highlight is the thin specular line along the top edge that
+     makes a pane read as glass rather than as a translucent rectangle. */
+  --glass-bg: color-mix(in srgb, var(--surface) 72%, transparent);
+  --glass-border: color-mix(in srgb, var(--line) 70%, transparent);
+  --glass-highlight: rgb(255 255 255 / 0.55);
+
   /* shadcn token mapping */
   --background: var(--bg);
   --foreground: var(--text);
@@ -236,6 +271,14 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
   --shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.5);
   --shadow-lg: 0 4px 12px -2px rgb(0 0 0 / 0.6);
+
+  /* Glass on a dark ground. Less surface in the mix, because a dark pane needs
+     to let more through before it reads as transparent at all, and the
+     highlight drops to a whisper — at 0.55 it is a white pinstripe on #1c1c1c,
+     which reads as a border rather than as a reflection. */
+  --glass-bg: color-mix(in srgb, var(--surface) 62%, transparent);
+  --glass-border: color-mix(in srgb, var(--line) 80%, transparent);
+  --glass-highlight: rgb(255 255 255 / 0.1);
 
   /* White on a light teal is 1.8:1 — the button ink has to flip with it. */
   --primary-foreground: #00272a;
@@ -367,6 +410,38 @@
     border: 1px solid var(--line);
     border-radius: var(--radius);
     box-shadow: var(--shadow-md);
+  }
+
+  /*
+   * Liquid glass: a pane that samples what is behind it rather than covering
+   * it. Used by the installed app's tab bar, which floats over scrolling
+   * content and has to stay legible against whatever passes underneath.
+   *
+   * `saturate(180%)` is the half that does the work. Blur alone gives frosted
+   * plastic — greyed and flat; pushing saturation back up is what makes the
+   * colours behind bloom through and reads as glass. The inset highlight is
+   * the specular line along the top edge, and the border keeps the pane's
+   * shape when what is behind it happens to match the surface.
+   *
+   * The fallback is not decoration: `backdrop-filter` is the whole effect, and
+   * without it `--glass-bg` is a 72%-opaque pane with the page legible through
+   * it — text over text. Anywhere the filter is unsupported the pane goes
+   * fully opaque instead, the same guard `components/ui/dialog.tsx` uses.
+   */
+  .glass {
+    background: var(--surface);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-highlight),
+      var(--shadow-lg);
+  }
+
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .glass {
+      background: var(--glass-bg);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+    }
   }
 }
 
