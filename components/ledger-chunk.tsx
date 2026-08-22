@@ -347,8 +347,25 @@ function MonthGroup({
           rather than over it (that header is `z-50`). `bg-bg` — the page's own
           ground, not `--surface` — because there is no card behind this any
           more; it still has to be opaque or the rows would show through it as
-          they scroll past. */}
-      <div className="sticky top-16 z-10 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 bg-bg pt-6 pb-2.5">
+          they scroll past.
+
+          **Every heading in the ledger is pinned at this same offset, all at
+          once.** They are siblings of one another and of the panels — a month
+          can span chunks, so no month can own a wrapper to be sticky within —
+          which means their shared containing block is the whole ledger
+          section. Nothing releases August when September arrives; September
+          simply paints over it, being later in the DOM, and the illusion holds
+          only for as long as every one of these boxes is exactly as tall as
+          the last.
+
+          That is what `flex-col` below `sm` is for. Wrapping made the height
+          depend on the month's *name*: "September 2025" pushed the figures
+          onto a second line where "August 2025" kept them beside the heading,
+          so the taller September box showed a sliver of itself below the
+          shorter August one that was supposed to be covering it. Two lines
+          always, on every month, and the boxes agree. From `sm` there is room
+          for one line and they agree that way instead. */}
+      <div className="sticky top-16 z-10 flex flex-col items-start gap-y-0.5 bg-bg pt-6 pb-2.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-3">
         {/* The month is what you scan for; the year only disambiguates it, so
             it rides along at the body size. `leading-none` keeps the big type
             sitting on the same baseline as the figures opposite. */}
@@ -362,17 +379,21 @@ function MonthGroup({
           </span>
         </h3>
 
-        {totals && (
-          <p className="flex items-baseline gap-3 font-mono text-[12px] tabular-nums">
-            <span className="text-positive">
-              {/* Named for anyone who cannot see the colour or the sign. */}
-              <span className="sr-only">{t("moneyIn")} </span>+{formatMoney(totals.income)}
-            </span>
-            <span className="text-text-muted">
-              <span className="sr-only">{t("moneyOut")} </span>−{formatMoney(totals.expense)}
-            </span>
-          </p>
-        )}
+        {/* Unconditional, where this used to be `totals &&`. `monthTotals`
+            skips transfers, so a month whose only line is a credit-card
+            payment has no entry at all — and a heading that quietly drops its
+            second line is the height mismatch above, back again. Zero is also
+            the honest figure: these two exclude transfers by definition,
+            exactly as the trend chart's do. */}
+        <p className="flex items-baseline gap-3 font-mono text-[12px] tabular-nums">
+          <span className="text-positive">
+            {/* Named for anyone who cannot see the colour or the sign. */}
+            <span className="sr-only">{t("moneyIn")} </span>+{formatMoney(totals?.income ?? 0)}
+          </span>
+          <span className="text-text-muted">
+            <span className="sr-only">{t("moneyOut")} </span>−{formatMoney(totals?.expense ?? 0)}
+          </span>
+        </p>
       </div>
 
       </>
