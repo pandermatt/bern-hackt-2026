@@ -333,16 +333,45 @@ Unchanged from the template this app grew out of, and still exactly true.
   phone page raises the keyboard on arrival and shoves away what the reader
   came for. Only the slide-over passes an `inputRef`.
 - **Nothing sets type on the pistachio.** `/home` fades to `--pistachio` at the
-  bottom *because* that is where the dragon is and there is no text there;
-  Pistachio is 2:1 on white and is a fill, never a ground for words. Every
-  string on that page sits on `bg-surface` — the cards, and the all-clear line,
-  which wears a surface pill for exactly this reason.
+  bottom *because* that is where the dragon is, and the bottom of that page is
+  now where the nudges are too; Pistachio is 2:1 on white and is a fill, never a
+  ground for words. Every string down there carries its own ground — the cards
+  on `bg-surface`, and the all-clear line and the "show all" toggle on surface
+  pills, for exactly this reason.
 - **Nudges are ranked in `lib/nudges.ts`, which is pure.** No DB import, no
   i18n call — anomaly nudges arrive already translated from
   `app/actions/anomalies.ts` and this module only orders them. `isOverBudget`
   lives there too: the comparison used to be inline in both `budget-editor` and
   `budget-radar` and exported from neither. Capped at three, warnings before
-  the tip, because an entry page is not an inbox.
+  the tip, because an entry page is not an inbox — and that cap is now also
+  what keeps the deck legible, since a deck of eight is a pile.
+- **The nudges are what the dragon is saying, so one component owns both.**
+  `components/nudge-stack.tsx` holds the deck, the toggle *and* the mascot. The
+  toggle cannot sit under the deck: a trail of nubs runs from the dragon's head
+  up to the bubble's bottom corner, and a pill parked in that channel breaks the
+  one thing the arrangement exists to say. Hence the `speaker` prop. The trail
+  is circles rather than a triangular tail because a tail would have the card's
+  own 1px bottom border drawn straight across its neck, and because circles do
+  not care that the bubble changes height when it unfolds. With nothing to
+  report the page passes the all-clear line as the stack's only child, so a
+  quiet day is the same arrangement saying one short thing rather than a second
+  layout to keep in step.
+- **The deck ships collapsed and unfolds with `0fr → 1fr`.** Collapsed is the
+  SSR state, so the page arrives readable and stays that way with JS off — the
+  no-shell-animation rule below, honoured by animating between two visible
+  states rather than in from nothing. `grid-template-rows: 0fr → 1fr`
+  interpolates natively, which is what lets a card of unknown height open with
+  no measuring and no `ResizeObserver`; the inner `overflow-hidden` is required,
+  because the row is what shrinks and content does not clip itself. **Do not
+  give the collapsed row a small px peek** (`10px → 1fr`) to make the hidden
+  cards themselves show an edge — a length and a flex fraction are different
+  types and CSS will not interpolate between them, so it snaps. That is why the
+  deck's depth is two decorative strips behind the front card that fade as the
+  real ones unfold, and why they use ordinary `z-0`/`z-10` and never a negative
+  z-index: `main` paints the pistachio gradient, and anything behind the local
+  stacking order would be behind that too. A folded card carries `inert` —
+  clipped to nothing is not the same as gone, and without it the link inside
+  keeps its place in the tab order.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.
