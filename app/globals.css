@@ -624,6 +624,24 @@
   animation: pot-glow-pulse 2.1s ease-out 350ms both;
 }
 
+/* The liquid's rise or fall when a pot's balance changes — an allocation, a
+   withdrawal, a drag-to-transfer. `SavingsPot` is a server component re-drawn
+   through `router.refresh()`, not a client re-mount, and `key={pot.id}` in
+   `savings-pots-grid.tsx` keeps its DOM nodes alive across that refresh — so
+   the `y`/`height`/`cy` attributes below land on the *same* elements and a
+   plain CSS transition is enough. No client JS, no hydration, matching why
+   the pot is inline SVG in the first place. Only the wet side of the level —
+   the elements that exist while `fill > 0` — carries this class; a pot
+   crossing to or from exactly empty still pops, because animating that edge
+   would mean keeping the crescent-shaped artefact `SavingsPot` deliberately
+   guards against mounted the whole time. */
+.pot-liquid {
+  transition:
+    y 650ms ease,
+    height 650ms ease,
+    cy 650ms ease;
+}
+
 /* The Unallocated tile's alarm: loops for as long as the month is overspent,
    unlike the one-shot pot celebration above. Reduced motion collapses this to
    its resting (no-ring) frame via the block below, rather than a stuck ring —

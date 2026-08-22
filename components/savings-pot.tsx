@@ -178,10 +178,10 @@ export function SavingsPot({
             <path d={BODY} />
           </clipPath>
           <clipPath id={dryClip}>
-            <rect x="0" y="0" width="120" height={surface} />
+            <rect className="pot-liquid" x="0" y="0" width="120" height={surface} />
           </clipPath>
           <clipPath id={wetClip}>
-            <rect x="0" y={surface} width="120" height={128 - surface} />
+            <rect className="pot-liquid" x="0" y={surface} width="120" height={128 - surface} />
           </clipPath>
         </defs>
 
@@ -204,16 +204,28 @@ export function SavingsPot({
               crescent along the floor. */}
           {fill > 0 && (
             <>
-              {/* Money, from the surface down. */}
-              <rect x="0" y={surface} width="120" height={BASE_Y + RY} fill={colour} />
+              {/* Money, from the surface down. `pot-liquid` is what makes a
+                  deposit or a withdrawal read as the level actually rising or
+                  falling rather than the card just redrawing — see the class
+                  in globals.css for why a CSS transition is enough here with
+                  no client JS. */}
+              <rect
+                className="pot-liquid"
+                x="0"
+                y={surface}
+                width="120"
+                height={BASE_Y + RY}
+                fill={colour}
+              />
               {/* The surface itself, lifted with a white wash — the same trick
                   the light catches on a real liquid, and it is what turns a
                   flat block into a level. Lighter-handed than it was: the
                   muted fills start much closer to the body than the chart ramp
                   did, so the wash that used to lift the level was washing it
                   out instead. */}
-              <ellipse cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
+              <ellipse className="pot-liquid" cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
               <ellipse
+                className="pot-liquid"
                 cx={CX}
                 cy={surface}
                 rx={RX}
@@ -359,7 +371,7 @@ export function SavingsPot({
         aria-hidden
       >
         <div
-          className="h-full rounded-full"
+          className="h-full rounded-full transition-[width] duration-[650ms] ease-out"
           style={{ width: `${Math.max(fill * 100, fill > 0 ? 3 : 0)}%`, background: colour }}
         />
       </div>
