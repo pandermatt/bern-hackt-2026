@@ -5,9 +5,12 @@
  *
  * The schema import is **type-only** on purpose. A value import would pull
  * drizzle into the client bundle the moment a `"use client"` file reaches for
- * `formatMoney`, and only `npm run build` would catch it.
+ * `formatMoney`, and only `npm run build` would catch it. `AnomalyKind` is
+ * imported the same way and for the same reason — the engine beside it is a
+ * thousand lines this module has no business shipping.
  */
 import type { Transaction } from "@/db/schema";
+import type { AnomalyKind } from "@/lib/anomaly-engine";
 
 export type Filters = {
   from?: string;
@@ -944,4 +947,167 @@ export function paginate<T>(
     pageCount,
     totalCount: rows.length,
   };
+}
+
+/* ------------------------------------------------------------------------- *
+ * Calendar
+ * ------------------------------------------------------------------------- */
+
+/**
+ * How many dots a day cell shows before the rest collapse into "+N".
+ *
+ * Five is what fits two rows of a 48px cell on a 375px phone. Past that the
+ * dots stop being countable anyway, and a number is the honest encoding.
+ */
+export const MAX_DAY_DOTS = 5;
+
+/** One transaction's mark in a day cell. */
+export type DayDot = {
+  category: string;
+  /** 1-based palette slot from `slotsOf`; 0 is the neutral fold-in bucket. */
+  slot: number;
+  kind: Transaction["kind"];
+};
+
+export type CalendarDay = {
+  /** `YYYY-MM-DD`. */
+  date: string;
+  /** Every transaction booked that day, dots shown or not. */
+  count: number;
+  /** Minor units, positive. Transfers excluded, exactly as `monthTotals`. */
+  income: number;
+  /** Minor units, positive magnitude. Transfers excluded. */
+  expense: number;
+  dots: DayDot[];
+  /** `count - dots.length`, so the cell can render "+N" without arithmetic. */
+  hiddenDots: number;
+  /**
+   * The most concerning finding on the day, or `null` when the scan flagged
+   * nothing. Ordered by kind, exactly as the ledger's badges are — kind is what
+   * carries the colour, and a day tinted on a different axis from the row
+   * inside it would be two classifications of one event.
+   */
+  kind: AnomalyKind | null;
+};
+
+/** One month of the calendar. `days` ascending, gaps included as empty cells
+ * by the renderer — this carries only the days that exist in the month. */
+export type CalendarMonth = { month: string; days: CalendarDay[] };
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * How many days a `YYYY-MM` has.
+ *
+ * A table and the Gregorian leap rule rather than `new Date(y, m, 0)`: this
+ * file never constructs a `Date`, because a booking date is a date and not an
+ * instant, and the moment one appears here the whole calendar starts shifting
+ * by a day for anyone west of UTC.
+ */
+export function daysInMonth(month: string): number {
+  const year = Number(month.slice(0, 4));
+  const index = Number(month.slice(5, 7)) - 1;
+  if (index !== 1) return DAYS_IN_MONTH[index] ?? 30;
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+}
+
+/** Sakamoto's day-of-week table. */
+const SAKAMOTO = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+
+/**
+ * Which column the 1st of `month` falls in, **Monday-indexed** (0 = Monday).
+ *
+ * Sakamoto's algorithm, for the same no-`Date` reason as `daysInMonth`. It
+ * yields 0 = Sunday, so the result is rotated: Swiss calendars start the week
+ * on Monday, and so does the weekday catalog in `messages/*.json`.
+ */
+export function firstWeekdayOf(month: string): number {
+  let year = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  if (m < 3) year -= 1;
+  const sunday =
+    (year +
+      Math.floor(year / 4) -
+      Math.floor(year / 100) +
+      Math.floor(year / 400) +
+      SAKAMOTO[m - 1] +
+      1) %
+    7;
+  return (sunday + 6) % 7;
+}
+
+const KIND_ORDER: Record<AnomalyKind, number> = { info: 1, warning: 2, alert: 3 };
+
+/**
+ * Per-day aggregates for the calendar view — one cell's worth of everything.
+ *
+ * Fed the **filtered** rows, like `monthTotals` and unlike the charts: the
+ * calendar is the ledger's other face, so it shows exactly what the ledger
+ * would. `slots` on the other hand comes from the whole-range ranking, so a
+ * category keeps the colour its wedge already has however the view is narrowed.
+ *
+ * Months come back newest-first and days oldest-first. Rows arrive
+ * `desc(bookedOn), asc(id)`, so both orders fall out of one pass with no sort:
+ * a month is a contiguous run, and a day within it is too.
+ *
+ * A month with no surviving rows gets no entry at all — the same rule the
+ * ledger's headings follow. Filtering to one merchant should not render twelve
+ * empty grids.
+ */
+export function calendarMonths(
+  rows: Transaction[],
+  slots: Map<string, number>,
+  kindByTx: Map<number, AnomalyKind>,
+): CalendarMonth[] {
+  const months: CalendarMonth[] = [];
+  const byDate = new Map<string, CalendarDay>();
+
+  for (const row of rows) {
+    const month = row.bookedOn.slice(0, 7);
+    let group = months[months.length - 1];
+    if (group?.month !== month) {
+      group = { month, days: [] };
+      months.push(group);
+    }
+
+    let day = byDate.get(row.bookedOn);
+    if (!day) {
+      day = {
+        date: row.bookedOn,
+        count: 0,
+        income: 0,
+        expense: 0,
+        dots: [],
+        hiddenDots: 0,
+        kind: null,
+      };
+      byDate.set(row.bookedOn, day);
+      // Newest first on the way in, so the month's days come out ascending.
+      group.days.unshift(day);
+    }
+
+    day.count += 1;
+    // Transfers move money between your own accounts, so they are neither
+    // income nor spending — the same exclusion `summarize` and `monthTotals`
+    // make. They still get a dot when `?includeTransfers` puts them on screen.
+    if (row.kind === "income") day.income += row.amountMinor;
+    else if (row.kind === "expense") day.expense -= row.amountMinor;
+
+    if (day.dots.length < MAX_DAY_DOTS) {
+      day.dots.push({
+        category: row.category,
+        slot: slots.get(row.category) ?? 0,
+        kind: row.kind,
+      });
+    } else {
+      day.hiddenDots += 1;
+    }
+
+    const found = kindByTx.get(row.id);
+    if (found && (!day.kind || KIND_ORDER[found] > KIND_ORDER[day.kind])) {
+      day.kind = found;
+    }
+  }
+
+  return months;
 }

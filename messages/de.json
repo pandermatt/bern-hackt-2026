@@ -191,7 +191,10 @@
     "all": "Alle Transaktionen",
     "credits": "Gutschriften (Geld ein)",
     "debits": "Belastungen (Geld aus)",
-    "clear": "Zurücksetzen"
+    "clear": "Zurücksetzen",
+    "view": "Ansicht",
+    "viewList": "Liste",
+    "viewCalendar": "Kalender"
   },
   "Ledger": {
     "sectionLabel": "Transaktionen",
@@ -572,5 +575,37 @@
     "offline": "Offline",
     "anomalies": "Auffälligkeiten",
     "budget": "Budget"
+  },
+  "Weekdays": {
+    "short1": "Mo",
+    "short2": "Di",
+    "short3": "Mi",
+    "short4": "Do",
+    "short5": "Fr",
+    "short6": "Sa",
+    "short7": "So",
+    "long1": "Montag",
+    "long2": "Dienstag",
+    "long3": "Mittwoch",
+    "long4": "Donnerstag",
+    "long5": "Freitag",
+    "long6": "Samstag",
+    "long7": "Sonntag"
+  },
+  "Calendar": {
+    "sectionLabel": "Transaktionen nach Tag",
+    "dayLabel": "{date}, {count, plural, one {# Transaktion} other {# Transaktionen}}, {moneyOut} aus, {moneyIn} ein. {finding}",
+    "kindNone": "Nichts auffällig",
+    "kindInfo": "Zur Kenntnis",
+    "kindWarning": "Achtung",
+    "kindAlert": "Alarm",
+    "legendOut": "Geld aus, nach Kategorie eingefärbt",
+    "legendIn": "Geld ein",
+    "tableCaption": "Alle Tage dieses Monats mit Transaktionen",
+    "colDate": "Datum",
+    "colCount": "Transaktionen",
+    "colIn": "Geld ein",
+    "colOut": "Geld aus",
+    "colFinding": "Befund"
   }
 }

@@ -10,6 +10,7 @@ import { ScrollDebug } from "@/components/scroll-debug";
 import { SummaryCards } from "@/components/summary-cards";
 import { TopCategoryBars } from "@/components/top-category-bars";
 import { AnomalySuggestion } from "@/components/anomaly-suggestion";
+import { TransactionCalendar } from "@/components/transaction-calendar";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
 import { getCurrentUser } from "@/lib/auth";
@@ -115,15 +116,32 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
             </Suspense>
           </div>
 
-          <TransactionList
-            rows={dashboard.transactions}
-            anomalies={dashboard.anomalies}
-            monthTotals={dashboard.monthTotals}
-            nextOffset={dashboard.nextOffset}
-            continuesInto={dashboard.continuesInto}
-            totalCount={dashboard.totalCount}
-            filters={query}
-          />
+          {/* One set of transactions, two faces. The ledger is where you read a
+              row; the calendar is where you see when the money moved and which
+              days the scan flagged. `calendar` is only ever non-null in
+              calendar view — see getDashboard. */}
+          {dashboard.calendar ? (
+            <TransactionCalendar
+              // Without a key from the filters, an open day would survive a
+              // filter change that removed it — the same reason the ledger's
+              // feed is keyed.
+              key={JSON.stringify(query)}
+              months={dashboard.calendar}
+              monthTotals={dashboard.monthTotals}
+              totalCount={dashboard.totalCount}
+              filters={query}
+            />
+          ) : (
+            <TransactionList
+              rows={dashboard.transactions}
+              anomalies={dashboard.anomalies}
+              monthTotals={dashboard.monthTotals}
+              nextOffset={dashboard.nextOffset}
+              continuesInto={dashboard.continuesInto}
+              totalCount={dashboard.totalCount}
+              filters={query}
+            />
+          )}
         </div>
       </main>
 
