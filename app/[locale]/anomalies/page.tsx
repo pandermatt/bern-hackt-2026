@@ -29,28 +29,25 @@ const SEVERITY_CLASSES: Record<AnomalySeverity, string> = {
 };
 
 /**
- * One kind of finding, as a row you can click into the ledger.
+ * One kind of finding, as a row you can click for the explanation.
  *
- * Two details that look incidental and are not:
+ * It opens the rule's own page rather than the filtered ledger. This page is a
+ * list of *kinds* of thing, so clicking a kind should say what that kind means;
+ * dropping straight into the ledger skipped the explanation and landed on a
+ * view that explains nothing. The ledger is still one hop on, from the link the
+ * rule page carries — which is also where the note about `includeTransfers`
+ * now lives, since that flag matters only on the way to the ledger.
  *
- *  - `includeTransfers=true` rides on every link. `applyFilters` drops transfers
- *    unless asked, and some rules — `LARGE_TRANSFER` most obviously — attach
- *    *only* to transfer rows, so without it those links land on an empty
- *    ledger. Carrying it unconditionally also means one counting rule serves
- *    every group, so the number here always matches the ledger's own footer.
- *  - The description is the finding's own words, not a template. For the
- *    absence-shaped rules it is the only place the finding actually is: a
- *    missed salary can only link to the last salary that *did* arrive, which on
- *    its own explains nothing.
+ * The description is the finding's own words, not a template. For the
+ * absence-shaped rules it is the only place the finding actually is: a missed
+ * salary can only link to the last salary that *did* arrive, which on its own
+ * explains nothing.
  */
 function GroupRow({ group, countLabel }: { group: AnomalyGroup; countLabel: string }) {
   return (
     <li>
       <Link
-        href={{
-          pathname: "/",
-          query: { anomaly: group.ruleId, includeTransfers: "true" },
-        }}
+        href={`/anomalies/${group.ruleId}`}
         className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover sm:px-5"
       >
         <span aria-hidden className="shrink-0 text-[20px] leading-none">
