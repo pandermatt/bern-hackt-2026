@@ -1,8 +1,13 @@
 "use client";
 
-import { LineChart, PieChart } from "echarts/charts";
-import { GridComponent, LegendComponent } from "echarts/components";
+import { BarChart, LineChart, PieChart, ScatterChart } from "echarts/charts";
+import {
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+} from "echarts/components";
 import * as echarts from "echarts/core";
+import { UniversalTransition } from "echarts/features";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import { useTheme } from "next-themes";
@@ -25,13 +30,19 @@ import { useHydrated } from "@/lib/use-hydrated";
  * what anyone with JS off, a screen reader, or a failed chunk actually gets.
  */
 
-// Registered once per module, not per mount. Only the pieces the two charts
-// use — the barrel import is the whole library and roughly triples this.
+// Registered once per module, not per mount. Only the pieces the dashboard's
+// charts use — the barrel import is the whole library and roughly triples this.
 echarts.use([
+  BarChart,
   LineChart,
   PieChart,
+  ScatterChart,
   GridComponent,
   LegendComponent,
+  TooltipComponent,
+  // The bar ↔ donut morph: series sharing a `seriesKey` hand their shapes to
+  // each other across a `replaceMerge` update instead of fading out and in.
+  UniversalTransition,
   CanvasRenderer,
 ]);
 
@@ -128,14 +139,48 @@ export function EChart({
   height,
   /** Announced in place of the canvas, which is opaque to assistive tech. */
   label,
+  notMerge = true,
+  replaceMerge,
+  onEvents,
 }: {
   option: EChartsOption | null;
   className?: string;
   height: number;
   label: string;
+  /**
+   * `true` (the default) replaces the option wholesale on every update — a
+   * filter can change the series count, and a merge would leave the departed
+   * series painted on the canvas. A chart whose structure is fixed and whose
+   * option changes on *hover* passes `false`: a merged update is what lets
+   * ECharts animate a style change in place instead of replaying the entrance
+   * animation.
+   */
+  notMerge?: boolean;
+  /**
+   * With `notMerge` false, the component types listed here are *replaced* on
+   * each update instead of merged: whatever the new option does not declare
+   * is removed. `["series"]` is what lets a chart swap its series set (bars →
+   * pie) and still animate — removal is what triggers a universal transition,
+   * where a plain merge would leave the departed series painted. Series kept
+   * across updates need stable `id`s so they merge by identity, not index.
+   * Pass a module-scope constant — a fresh array each render re-runs the
+   * update effect.
+   */
+  replaceMerge?: string | string[];
+  /**
+   * ECharts events ("mouseover", "globalout", …) → handler. The set of event
+   * names is read once, at init; the handlers themselves are read through a
+   * ref, so they may close over fresh state each render.
+   */
+  onEvents?: Record<string, (params: unknown) => void>;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
+
+  const events = useRef(onEvents);
+  useEffect(() => {
+    events.current = onEvents;
+  });
 
   useEffect(() => {
     const element = host.current;
@@ -143,6 +188,10 @@ export function EChart({
 
     const instance = echarts.init(element, undefined, { renderer: "canvas" });
     chart.current = instance;
+
+    for (const name of Object.keys(events.current ?? {})) {
+      instance.on(name, (params: unknown) => events.current?.[name]?.(params));
+    }
 
     // ECharts sizes off the container's client box and does not watch it, so
     // a sidebar collapse or an orientation change would otherwise leave the
@@ -159,10 +208,11 @@ export function EChart({
 
   useEffect(() => {
     if (!chart.current || !option) return;
-    // `notMerge` because a filter can change the series count, and a merge
-    // would leave the departed series painted on the canvas.
-    chart.current.setOption(option, { notMerge: true });
-  }, [option]);
+    chart.current.setOption(
+      option,
+      notMerge ? { notMerge: true } : replaceMerge ? { replaceMerge } : {},
+    );
+  }, [option, notMerge, replaceMerge]);
 
   return (
     <div

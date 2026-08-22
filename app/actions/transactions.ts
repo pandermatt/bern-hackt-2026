@@ -31,9 +31,11 @@ import {
   ledgerChunk,
   monthlySeries,
   monthTotals,
+  categorySpendPeriods,
   stackByCategory,
   summarize,
   topMerchants,
+  type CategoryPeriods,
   type CategoryStack,
   type Facets,
   type Filters,
@@ -103,6 +105,11 @@ export type Dashboard = {
   monthTotals: Record<string, MonthTotal>;
   /** Whole-range spending per category per month — the chart pair upstairs. */
   stack: CategoryStack;
+  /** Category rankings over the running month and the year-to-date, with
+   * merchant splits and twelve-month medians — the split-on-hover bars.
+   * Unfiltered, like the other charts, and `null` when no expenses exist at
+   * all. */
+  topCategories: CategoryPeriods | null;
   /** Whole-range spending per category. No longer rendered on the dashboard —
    * the donut is the only category breakdown now — but the chat assistant reads
    * it to answer category questions; see `lib/assistant.ts`. */
@@ -220,6 +227,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     view: facetsOf(filtered),
     monthly: monthlySeries(rows),
     stack: stackByCategory(rows),
+    topCategories: categorySpendPeriods(rows),
     totals: summarize(filtered),
     monthTotals: monthTotals(filtered),
     categories: byCategory(filtered),
