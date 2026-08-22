@@ -7,12 +7,9 @@ import { useEffect, useRef, useState, useTransition } from "react";
 
 import { askAssistant } from "@/app/actions/chat";
 import { applyAllocationAdds } from "@/app/actions/savings";
-import { ChatEChart } from "@/components/chat-echart";
-import { ChatPie } from "@/components/chat-pie";
 import {
   SUGGESTION_KEYS,
   type AllocationProposal,
-  type ChartSpec,
   type ChatRole,
 } from "@/lib/assistant";
 import { formatMoney } from "@/lib/insights";
@@ -37,7 +34,6 @@ import { formatMoney } from "@/lib/insights";
 export type PanelMessage = {
   role: ChatRole;
   content: string;
-  chart?: ChartSpec;
   /** A validated surplus split, rendered as a card with an Apply button. */
   proposal?: AllocationProposal;
   /** Apply state lives on the message, not the panel: the panel unmounts
@@ -98,7 +94,7 @@ export function useAssistantChat(): AssistantChat {
 
     startTransition(async () => {
       try {
-        // Charts are client-side decoration; the action only wants the words.
+        // Cards are client-side decoration; the action only wants the words.
         const turn = await askAssistant(
           history.map(({ role, content }) => ({ role, content })),
         );
@@ -107,7 +103,6 @@ export function useAssistantChat(): AssistantChat {
           {
             role: "assistant",
             content: turn.reply,
-            chart: turn.chart,
             proposal: turn.proposal,
             error: turn.error,
           },
@@ -278,15 +273,6 @@ export function ChatPanel({
               }`}
             >
               {message.content}
-              {message.chart && message.chart.kind === "echarts" ? (
-                <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
-                  <ChatEChart chart={message.chart} />
-                </div>
-              ) : message.chart && (
-                <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
-                  <ChatPie chart={message.chart} />
-                </div>
-              )}
               {message.proposal && (
                 <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
                   <p className="text-[12px] font-semibold text-text">

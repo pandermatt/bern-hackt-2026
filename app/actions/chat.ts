@@ -8,36 +8,27 @@ import { getDashboard, listTransactions } from "@/app/actions/transactions";
 import {
   anomaliesToolResult,
   buildAllocationProposal,
-  chartToolForSource,
   defaultAllocationSplit,
-  composeEChart,
-  defaultChartSource,
   defaultPeriod,
   extractFollowUps,
-  extractJsonAfter,
   extractSql,
   formatSwissNumbers,
   looksLikeStall,
   parseAllocationArgs,
-  parseChartRequest,
   parsePeriod,
   parseToolCalls,
   periodFromQuestion,
   resolvePeriod,
   routeTool,
   runTool,
-  sanitizeEChartsOption,
   savingsGoalsToolResult,
-  shouldDefaultChart,
   stripModelMarkup,
   subscriptionsToolResult,
   systemPromptFor,
-  wantsNonPieChart,
   SUGGESTION_KEYS,
   TOOL_DEFINITIONS,
   type AllocationProposal,
   type AssistantTurn,
-  type ChartSpec,
   type Period,
   type WireMessage,
 } from "@/lib/assistant";
@@ -58,7 +49,7 @@ const APERTUS_URL =
 
 /** API requests per turn. Tools are offered on all but the last, which forces
  * an answer so a fetch-happy model cannot loop forever. Five, not four: a
- * SQL-then-chart answer legitimately takes three tool rounds. */
+ * goals-then-proposal answer legitimately takes three tool rounds. */
 const MAX_ROUNDS = 5;
 
 /**
@@ -100,15 +91,14 @@ const DASHBOARD_TOOLS = new Set<string>([
   "get_income_breakdown",
   "get_monthly_series",
   "get_savings_potential",
-  "display_chart",
 ]);
 
 /**
  * One turn of the chat, as a tool-calling loop. The model starts with no
  * figures at all: it requests data through the tools in `lib/assistant.ts`,
- * each request is answered from the account's real aggregates, and the pie
- * chart is formed from the data the model actually fetched — never parsed
- * out of model prose. Raw transaction rows never leave the server.
+ * and each request is answered from the account's real aggregates. Raw
+ * transaction rows never leave the server, and the assistant draws nothing —
+ * the dashboard's own charts carry the visuals.
  *
  * The endpoint accepts OpenAI `tools` but leaves Apertus's native call
  * syntax in the content instead of populating `tool_calls`, so calls are
@@ -182,10 +172,6 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     // Older turns only pad the context window of an 8B model.
     ...history.slice(-8),
   ];
-  let chart: ChartSpec | undefined;
-  // An explicit display_chart call outranks the auto-attach fallback that
-  // fires when the model fetched chartable data but never asked for a chart.
-  let chartExplicit = false;
   // A validated surplus split from propose_allocation, if the model made one.
   let proposal: AllocationProposal | undefined;
   let reply: string | undefined;
@@ -206,9 +192,9 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   // was shown — re-deriving from that round's period let a June fetch be
   // followed by a proposal silently validated against July.
   let goalsMonth: string | undefined;
-  // The window the last tool round resolved, for the post-loop chart safety
-  // net: the net must scope its chart the way the answer's figures were
-  // scoped, not re-derive a window of its own.
+  // The window the last tool round resolved, for the post-loop proposal
+  // safety net: the net must aim at the month the tool rounds actually used,
+  // not re-derive one of its own.
   let lastPeriod: Period | undefined;
   // Which month the savings tools are about: a single-month period picks it;
   // otherwise the newest COMPLETED month — the newest statement month when it
@@ -223,14 +209,13 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     if (anchor && monthHasEnded(anchor)) return anchor;
     return resolvePeriod("last_month", dashboard.facets.last)?.from.slice(0, 7);
   };
-  // A turn that already produced something to show must not die to a late
-  // upstream hiccup: the chart and the proposal are the app's own figures, so
-  // a short localized caption carries them out where failure() would have
-  // thrown them away with the error.
+  // A turn that already produced a proposal must not die to a late upstream
+  // hiccup: the split is the app's own figures, so a short localized caption
+  // carries it out where failure() would have thrown it away with the error.
   const salvage = async (): Promise<AssistantTurn | undefined> => {
-    if (!chart && !proposal) return undefined;
+    if (!proposal) return undefined;
     const t = await getTranslations("Chat");
-    return { reply: t("partialReply"), chart, proposal };
+    return { reply: t("partialReply"), proposal };
   };
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
@@ -240,7 +225,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       messages,
       // MAX_TOKENS caps the visible answer; the +80 is the budget for the
       // FOLLOWUP: lines parsed out of it. Tool rounds get a higher floor —
-      // a truncated ECharts option or SQL statement is an unusable one.
+      // a truncated SQL statement or allocation array is an unusable one.
       // Without MAX_TOKENS the key is omitted and the endpoint decides.
       ...(maxTokens !== undefined
         ? {
@@ -412,17 +397,6 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
           })) ?? dashboard)
         : dashboard;
 
-    // Presentation choices for a display_chart call; the source falls back
-    // to what the question is about when the argument didn't survive.
-    let chartRequest;
-    if (calls.includes("display_chart")) {
-      chartRequest = parseChartRequest(content);
-      chartRequest.source ??= defaultChartSource(question.content);
-      // "just the top 3" in the question stands in for a lost top_n arg.
-      chartRequest.topN ??=
-        Number(/\btop\s+(\d{1,2})\b/i.exec(question.content)?.[1]) || undefined;
-    }
-
     messages.push({ role: "assistant", content });
     for (const name of calls) {
       // The SQL escape hatch: the model's SELECT runs in a throwaway
@@ -462,47 +436,6 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
             result,
           }),
         });
-        continue;
-      }
-
-      // The model composed a chart itself. Only presentation is trusted:
-      // the option is sanitized (JSON-only, size-capped, graphic/image/
-      // tooltip stripped) before it is stored or rendered.
-      if (name === "display_echart") {
-        const args = extractJsonAfter(content, "display_echart");
-        const argObject =
-          args && typeof args === "object" && !Array.isArray(args)
-            ? (args as Record<string, unknown>)
-            : undefined;
-        const option = sanitizeEChartsOption(
-          argObject && "option" in argObject ? argObject.option : argObject,
-        );
-        let result;
-        if (!option) {
-          result = {
-            error:
-              'No usable ECharts option found — pass {"display_echart": {"option": {…}}} as pure JSON with a "series" array.',
-          };
-        } else {
-          chart = {
-            kind: "echarts",
-            title:
-              typeof argObject?.title === "string"
-                ? argObject.title.slice(0, 60)
-                : undefined,
-            option,
-          };
-          chartExplicit = true;
-          result = {
-            displayed: true,
-            note: "The chart is now shown. Answer with its takeaway.",
-          };
-        }
-        messages.push({
-          role: "tool",
-          content: JSON.stringify({ tool: name, result }),
-        });
-        toolRan = true;
         continue;
       }
 
@@ -585,20 +518,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         continue;
       }
 
-      const tool = runTool(
-        name,
-        scoped,
-        period,
-        name === "display_chart" ? chartRequest : undefined,
-      );
-      if (tool.chart) {
-        if (name === "display_chart") {
-          chart = tool.chart;
-          chartExplicit = true;
-        } else if (!chartExplicit) {
-          chart = tool.chart;
-        }
-      }
+      const tool = runTool(name, scoped, period);
       messages.push({
         role: "tool",
         content: JSON.stringify({ tool: name, result: tool.result }),
@@ -614,44 +534,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     );
   }
 
-  // Chart safety net — the assistant leans visual. Two cases, both only when
-  // the model didn't compose a chart itself (an explicit chart is never
-  // overridden; it may have deliberately chosen its shape):
-  //   1. the user named a bar/line chart → compose it from real aggregates;
-  //   2. no chart came out but the question is about the shape or size of the
-  //      customer's money → attach a pie from real aggregates by default.
-  // Both draw only figures the tools produced, scoped to the window the tool
-  // rounds actually used — re-deriving one from the question alone let the
-  // net chart a different window than the figures in the answer.
-  const wantedType = wantsNonPieChart(question.content);
-  const wantsDefaultChart = !chart && shouldDefaultChart(question.content);
-  if (!chartExplicit && (wantedType || wantsDefaultChart)) {
-    const window =
-      lastPeriod ??
-      resolvePeriod(
-        periodFromQuestion(question.content) ?? defaultPeriod(question.content),
-        dashboard.facets.last,
-      );
-    const scopedForChart = window
-      ? ((await getDashboard({
-          from: window.from,
-          to: window.to,
-          view: "list",
-        })) ?? dashboard)
-      : dashboard;
-    if (wantedType) {
-      chart =
-        composeEChart(wantedType, question.content, scopedForChart, window) ??
-        chart;
-    } else {
-      const source = defaultChartSource(question.content);
-      chart =
-        runTool(chartToolForSource(source), scopedForChart, window).chart ??
-        chart;
-    }
-  }
-
-  // Proposal safety net — the allocation twin of the chart one. The customer
+  // Proposal safety net. The customer
   // explicitly asked to split a month's surplus, but no valid
   // propose_allocation call materialized (the model stalled after fetching
   // the goals, or mangled its arguments past saving). The app then proposes
@@ -689,7 +572,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     followUps = SUGGESTION_KEYS.map((key) => t(key)).filter(notAsked);
   }
 
-  return { reply, chart, proposal, followUps };
+  return { reply, proposal, followUps };
 }
 
 /** The current user's recent assistant calls, newest first. */

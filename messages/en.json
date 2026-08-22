@@ -718,10 +718,6 @@
     "proposalApplying": "Moving…",
     "proposalApplied": "Moved into the pots",
     "partialReply": "The connection hiccuped before the answer arrived — here is what I found.",
-    "chartFallback": "Chart from the assistant",
-    "chartFailed": "The assistant sent a chart this browser could not draw.",
-    "pieTotal": "total",
-    "pieSlice": "Slice",
     "pieAmount": "Amount",
     "pieShare": "Share",
     "pieChartLabel": "Pie chart: {title}. The figures are listed in the table after the chart."

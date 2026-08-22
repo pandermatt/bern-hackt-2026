@@ -46,33 +46,6 @@ export type WireMessage = {
   content: string;
 };
 
-export type PieSlice = {
-  label: string;
-  amountMinor: number;
-  /** 0–100, of the chart's own total — recomputed after folding into "Other". */
-  share: number;
-};
-
-export type PieChartSpec = {
-  kind: "pie";
-  title: string;
-  totalMinor: number;
-  slices: PieSlice[];
-};
-
-/**
- * A chart the model composed itself: a full Apache ECharts option as pure
- * JSON, sanitized by `sanitizeEChartsOption` before it is ever stored. The
- * escape hatch for everything the pie tool cannot draw.
- */
-export type EChartsChartSpec = {
-  kind: "echarts";
-  title?: string;
-  option: Record<string, unknown>;
-};
-
-export type ChartSpec = PieChartSpec | EChartsChartSpec;
-
 /**
  * A validated split of a month's free surplus, awaiting the user's Apply tap.
  * Built by `buildAllocationProposal` from a propose_allocation call — never
@@ -91,7 +64,6 @@ export type AllocationProposal = {
 
 export type AssistantTurn = {
   reply: string;
-  chart?: ChartSpec;
   /** A surplus split awaiting the user's Apply tap, rendered as a card. */
   proposal?: AllocationProposal;
   /** Ready-to-send follow-up questions, shown as chips above the input. */
@@ -108,12 +80,11 @@ export const SYSTEM_PROMPT = [
   'Every tool accepts an optional period argument for time-scoped questions, e.g. [{"get_spending_by_category": {"period": "ytd"}}]. Accepted values: ytd, a year like 2025, a month like 2025-03, a range like 2025-01-01..2025-03-31, last_month, or last_3_months. When you omit it the app scopes to the current year (year-to-date) by default; pass an explicit range, or the user must say "all time", for the full history.',
   "Be concise: 2–3 short sentences, plain text, no markdown, no lists.",
   "All amounts are Swiss francs. Write them exactly as the tools format them, e.g. CHF 1'234.55 — apostrophe as thousands separator, two decimals.",
-  'Default to showing a chart — the answer should almost always include one. For any question about spending, merchants, income, an overview, or how money is split, call display_chart with a source, e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie from the customer\'s real data and hands you the same figures for your caption, so display_chart alone answers most questions. Only skip the chart for a single specific number, a date, or a yes/no answer.',
-  "When a chart will be shown, your text is its caption: one or two sentences naming the biggest item and the takeaway. Never describe chart shapes and never list many figures the chart already shows.",
+  "Name only the figures that answer the question — the biggest item and the takeaway — rather than listing everything a tool returned.",
   "When the tools cannot answer — a specific transaction, a day of week, a count, a comparison they don't cover — call run_sql with one SQLite SELECT over the transactions table; the schema is in the tool description.",
   "Four tools carry the advice questions: get_savings_potential for where the customer could save (advise only on its flexible categories — fixed costs like housing, insurance and taxes cannot be cut); get_recent_anomalies for anything suspicious or unusual (stay calm — most findings are the customer's own legitimate spending); get_subscriptions for recurring subscriptions; get_savings_goals for the saving goals and a month's unallocated surplus.",
   "To allocate a month's surplus: call get_savings_goals first, then propose_allocation with one amount per goal from the free amount. The app validates the split and shows it to the customer with an Apply button; caption the final split the tool returns and invite the tap. Only that tap moves money — never claim it already moved.",
-  "For a visual that is not a pie — bars over months, a line, a scatter — call display_echart with a complete Apache ECharts option as pure JSON, built only from figures you already fetched with the tools or run_sql. When the user names a chart type that is not a pie, display_echart is the only right tool.",
+  "You cannot draw charts or graphs. When one is asked for, answer with the figures themselves and mention that the dashboard's own charts carry the visual.",
   "After your answer, propose 2 or 3 short follow-up questions the user could ask next, each on its own line starting with FOLLOWUP: — nothing else on those lines.",
 ].join("\n");
 
@@ -146,25 +117,10 @@ export const TOOL_NAMES = [
   "get_recent_anomalies",
   "get_savings_goals",
   "propose_allocation",
-  "display_chart",
   "run_sql",
-  "display_echart",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
-
-export type ChartSource = "categories" | "merchants" | "income";
-
-/**
- * What the model may choose about a chart — all of it presentation, none of
- * it data. `source` and `period` are references the server resolves against
- * the real aggregates; the model never supplies a number.
- */
-export type ChartRequest = {
-  source?: ChartSource;
-  topN?: number;
-  title?: string;
-};
 
 /**
  * The one argument every tool shares. A single constrained string instead of
@@ -190,58 +146,31 @@ const EMPTY_PARAMETERS = {
   properties: {},
 };
 
-/**
- * The chart tool's own schema: the shared period plus presentation choices.
- * Enum-valued references only — the server assembles the slices.
- */
-const CHART_PARAMETERS = {
-  type: "object" as const,
-  properties: {
-    source: {
-      type: "string" as const,
-      enum: ["categories", "merchants", "income"],
-      description:
-        "Which data the chart shows: spending by category, top merchants, or income (salary vs refunds).",
-    },
-    ...PERIOD_PARAMETERS.properties,
-    top_n: {
-      type: "integer" as const,
-      description:
-        "How many slices to show before the rest folds into 'Other'. Default 5, maximum 8.",
-    },
-    title: {
-      type: "string" as const,
-      description: "Optional chart title. Omit for a sensible default.",
-    },
-  },
-  required: ["source"],
-};
-
 /** OpenAI-style declarations. Enum-valued references, never free-form data —
  * a small model emits names and enums far more reliably than argument JSON. */
 export const TOOL_DEFINITIONS = [
   {
     name: "get_overview",
     description:
-      "Accounts, statement date range, and the year's totals: salary, refunds, total income, total spending, net saved. Figures only — prefer display_chart when the question allows a chart.",
+      "Accounts, statement date range, and the year's totals: salary, refunds, total income, total spending, net saved.",
     parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_spending_by_category",
     description:
-      "Spending broken down by category, largest first. Figures only — call display_chart to show it as a pie chart.",
+      "Spending broken down by category, largest first.",
     parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_top_merchants",
     description:
-      "The merchants the customer spent the most at. Figures only — call display_chart to show it as a pie chart.",
+      "The merchants the customer spent the most at.",
     parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_income_breakdown",
     description:
-      "Where the incoming money came from: salary versus merchant refunds. Figures only — call display_chart to show it as a pie chart.",
+      "Where the incoming money came from: salary versus merchant refunds.",
     parameters: PERIOD_PARAMETERS,
   },
   {
@@ -305,12 +234,6 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "display_chart",
-    description:
-      "Show the user a pie chart assembled by the app from their real statements, and get the same figures back for your caption. The preferred way to answer questions about spending, merchants, or income. Pies only — when the user asks for a bar, line, or any other shape, use display_echart instead.",
-    parameters: CHART_PARAMETERS,
-  },
-  {
     name: "run_sql",
     description: [
       "Escape hatch when the other tools cannot answer: run one read-only SQLite SELECT over the customer's transactions.",
@@ -332,28 +255,6 @@ export const TOOL_DEFINITIONS = [
       required: ["sql"],
     },
   },
-  {
-    name: "display_echart",
-    description: [
-      "Show any Apache ECharts chart (bar, line, scatter, heatmap, radar, …) by providing the full ECharts option as pure JSON — no functions.",
-      "Only for visuals display_chart's pies cannot express. Build every data array from figures you fetched with the other tools or run_sql — never invent numbers. Keep the option compact.",
-      'Example: {"display_echart": {"title": "Spending per month", "option": {"xAxis": {"type": "category", "data": ["Jan", "Feb"]}, "yAxis": {"type": "value"}, "series": [{"type": "bar", "data": [6250.30, 5890.10]}]}}}',
-    ].join(" "),
-    parameters: {
-      type: "object" as const,
-      properties: {
-        title: {
-          type: "string" as const,
-          description: "Short title shown above the chart.",
-        },
-        option: {
-          type: "object" as const,
-          description: "The complete ECharts option, as JSON only.",
-        },
-      },
-      required: ["option"],
-    },
-  },
 ].map(({ name, description, parameters }) => ({
   type: "function" as const,
   function: { name, description, parameters },
@@ -370,27 +271,6 @@ function chf(minor: number): string {
   const [units, cents] = (Math.abs(minor) / 100).toFixed(2).split(".");
   const grouped = units.replace(/\B(?=(\d{3})+(?!\d))/g, "'");
   return `${minor < 0 ? "-" : ""}${grouped}.${cents}`;
-}
-
-/** Top slices plus an "Other" catch-all, shares recomputed over the total. */
-function toPie(title: string, slices: Slice[], max = 5): PieChartSpec | undefined {
-  const positive = slices.filter((s) => s.amount > 0);
-  if (positive.length === 0) return undefined;
-
-  const total = positive.reduce((sum, s) => sum + s.amount, 0);
-  const top = positive.slice(0, max);
-  const rest = positive.slice(max).reduce((sum, s) => sum + s.amount, 0);
-
-  const pie = top.map((s) => ({
-    label: s.key,
-    amountMinor: s.amount,
-    share: (s.amount / total) * 100,
-  }));
-  if (rest > 0) {
-    pie.push({ label: "Other", amountMinor: rest, share: (rest / total) * 100 });
-  }
-
-  return { kind: "pie", title, totalMinor: total, slices: pie };
 }
 
 function sliceRows(slices: Slice[]) {
@@ -419,24 +299,16 @@ export const FIXED_EXPENSE_CATEGORIES = new Set([
  * play, the caller hands in a dashboard whose aggregates were already scoped
  * to that window (`getDashboard({from, to})`) — this function only slices the
  * monthly series itself, since that series is always computed unfiltered.
- * Returns the JSON the model gets to read, plus the chart the app shows when
- * this data is the kind a pie can carry — so every figure on screen is one
- * the model also saw.
+ * Returns the JSON the model gets to read — figures only; the assistant
+ * draws nothing.
  */
 export function runTool(
   name: ToolName,
   dashboard: Dashboard,
   period?: Period,
-  chartRequest?: ChartRequest,
-): { result: unknown; chart?: PieChartSpec } {
+): { result: unknown } {
   const { facets, totals, categories, merchants, monthly } = dashboard;
   const scope = period?.label ?? "all statements";
-  const titled = (title: string) =>
-    period ? `${title} — ${period.label}` : title;
-  const incomeSlices = (): Slice[] => [
-    { key: "Salary", amount: totals.salary, count: 0, share: 0 },
-    { key: "Refunds", amount: totals.refunds, count: 0, share: 0 },
-  ];
 
   switch (name) {
     case "get_overview":
@@ -461,12 +333,10 @@ export function runTool(
           total_spending_chf: chf(totals.expense),
           categories: sliceRows(categories),
         },
-        chart: toPie(titled("Spending by category"), categories),
       };
     case "get_top_merchants":
       return {
         result: { period: scope, merchants: sliceRows(merchants) },
-        chart: toPie(titled("Top merchants by spending"), merchants),
       };
     case "get_income_breakdown":
       return {
@@ -477,7 +347,6 @@ export function runTool(
           total_income_chf: chf(totals.income),
           note: "Refunds are merchant credits, not earnings.",
         },
-        chart: toPie(titled("Where the money came from"), incomeSlices()),
       };
     case "get_monthly_series": {
       // The monthly series is computed from the unfiltered rows by design,
@@ -501,41 +370,6 @@ export function runTool(
         },
       };
     }
-    case "display_chart": {
-      // The model chose presentation (source, size, title, window); every
-      // number still comes from the aggregates it points at.
-      const source = chartRequest?.source ?? "categories";
-      const slices =
-        source === "merchants"
-          ? merchants
-          : source === "income"
-            ? incomeSlices()
-            : categories;
-      const defaultTitle =
-        source === "merchants"
-          ? "Top merchants by spending"
-          : source === "income"
-            ? "Where the money came from"
-            : "Spending by category";
-      const title = chartRequest?.title?.slice(0, 60).trim() || titled(defaultTitle);
-      const topN = Math.min(8, Math.max(2, chartRequest?.topN ?? 5));
-      const chart = toPie(title, slices, topN);
-      return {
-        result: chart
-          ? {
-              displayed: chart.title,
-              period: scope,
-              total_chf: chf(chart.totalMinor),
-              slices: chart.slices.map((s) => ({
-                name: s.label,
-                amount_chf: chf(s.amountMinor),
-                share_pct: Number(s.share.toFixed(1)),
-              })),
-            }
-          : { error: `No ${source} data in this period — nothing to chart.` },
-        chart,
-      };
-    }
     case "get_savings_potential": {
       const fixed = categories.filter((s) => FIXED_EXPENSE_CATEGORIES.has(s.key));
       const flexible = categories.filter(
@@ -553,18 +387,16 @@ export function runTool(
           flexible_categories: sliceRows(flexible),
           note: "Fixed costs cannot realistically be cut — advise on the largest flexible categories.",
         },
-        chart: toPie(titled("Flexible spending — where saving is possible"), flexible),
       };
     }
     case "run_sql":
-    case "display_echart":
     case "get_subscriptions":
     case "get_recent_anomalies":
     case "get_savings_goals":
     case "propose_allocation":
-      // All need what a pure helper cannot hold — the SQL sandbox, the parsed
-      // option, or a database read of their own — so the action loop handles
-      // them before calling here.
+      // All need what a pure helper cannot hold — the SQL sandbox, or a
+      // database read of their own — so the action loop handles them before
+      // calling here.
       return { result: { error: "Handled by the action loop." } };
   }
 }
@@ -692,7 +524,7 @@ export function extractJsonAfter(content: string, marker: string): unknown {
     }
     try {
       const parsed = JSON.parse(content.slice(start, end + 1));
-      // When the model narrates before the call ("I'll use display_echart
+      // When the model narrates before the call ("I'll use propose_allocation
       // …") the anchor lands on the prose mention, so the first balanced
       // object is the wrapper `{ "<marker>": {…real args…} }`. Unwrap it:
       // tool args never legitimately contain a key named after the tool.
@@ -708,140 +540,6 @@ export function extractJsonAfter(content: string, marker: string): unknown {
     }
   }
   return undefined;
-}
-
-/** Depth cap for `sanitizeEChartsOption` — a JSON bomb is not a chart. */
-const OPTION_MAX_DEPTH = 12;
-const OPTION_MAX_BYTES = 20_000;
-
-/**
- * A model-composed ECharts option, made safe to store and render: JSON only
- * (so no functions can exist), size- and depth-capped, and stripped of the
- * vectors that are not "a chart": `graphic` (free-form drawing, can embed
- * images), any `image` property (external fetches from the viewer's browser),
- * and `tooltip` (removed app-wide by design).
- */
-export function sanitizeEChartsOption(
-  raw: unknown,
-): Record<string, unknown> | undefined {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return undefined;
-  }
-  if (JSON.stringify(raw).length > OPTION_MAX_BYTES) return undefined;
-
-  const BANNED_KEYS = new Set(["graphic", "image", "tooltip", "toolbox"]);
-  const walk = (node: unknown, depth: number): unknown => {
-    if (depth > OPTION_MAX_DEPTH) return undefined;
-    if (Array.isArray(node)) return node.map((item) => walk(item, depth + 1));
-    if (typeof node === "object" && node !== null) {
-      const out: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(node)) {
-        if (BANNED_KEYS.has(key)) continue;
-        const cleaned = walk(value, depth + 1);
-        if (cleaned !== undefined) out[key] = cleaned;
-      }
-      return out;
-    }
-    if (typeof node === "string") {
-      // ECharts loads `image://<url>` (and `path://`) symbols and rich-text
-      // resources by fetching them from the VIEWER's browser — an SSRF /
-      // tracking-beacon vector that the banned-keys pass alone misses, because
-      // the url is a string *value* (on `symbol`, per-datum symbols, markPoint
-      // symbols, …), not a banned key. Drop any such value.
-      if (/^\s*(image|path):\/\//i.test(node)) return undefined;
-      return node;
-    }
-    // JSON primitives only — anything else has no business in an option.
-    return typeof node === "number" || typeof node === "boolean" || node === null
-      ? node
-      : undefined;
-  };
-
-  const option = walk(raw, 0) as Record<string, unknown>;
-  return "series" in option ? option : undefined;
-}
-
-/**
- * The non-pie chart type a question explicitly asks for, if any. Requires an
- * actual chart word next to "bar"/"line" so "bottom line" and "coffee bar"
- * don't trigger, and yields to an explicit "pie".
- */
-export function wantsNonPieChart(question: string): "bar" | "line" | undefined {
-  const q = question.toLowerCase();
-  if (/\bpie\b/.test(q)) return undefined;
-  if (/\b(bar|column)s?[\s-]*(chart|graph|plot|diagram)/.test(q) || /\bas\s+(a\s+)?(bar|column)s?\b/.test(q)) {
-    return "bar";
-  }
-  if (/\bline[\s-]*(chart|graph|plot|diagram)/.test(q) || /\bas\s+(a\s+)?line\b/.test(q)) {
-    return "line";
-  }
-  return undefined;
-}
-
-/**
- * The guarantee behind display_echart: when the user names a bar or line
- * chart and the model never composed one, the server does — from the same
- * real aggregates everything else draws on. Subject follows the question:
- * merchants and categories become ranked bars, everything else becomes the
- * monthly in/out series.
- */
-export function composeEChart(
-  type: "bar" | "line",
-  question: string,
-  dashboard: Dashboard,
-  period?: Period,
-): EChartsChartSpec | undefined {
-  const q = question.toLowerCase();
-  const francs = (minor: number) => Number((minor / 100).toFixed(2));
-  const suffix = period ? ` — ${period.label}` : "";
-
-  const ranked = /\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)
-    ? { title: "Top merchants", slices: dashboard.merchants }
-    : /\bcategor(y|ies)\b/.test(q)
-      ? { title: "Spending by category", slices: dashboard.categories }
-      : undefined;
-
-  if (ranked) {
-    const top = ranked.slices.filter((s) => s.amount > 0).slice(0, 8);
-    if (top.length === 0) return undefined;
-    return {
-      kind: "echarts",
-      title: `${ranked.title} (CHF)${suffix}`,
-      option: {
-        grid: { left: 8, right: 16, top: 8, bottom: 8, containLabel: true },
-        xAxis: { type: "value" },
-        yAxis: {
-          type: "category",
-          // Reversed so the biggest bar sits on top.
-          data: top.map((s) => s.key).reverse(),
-        },
-        series: [
-          { type: "bar", data: top.map((s) => francs(s.amount)).reverse() },
-        ],
-      },
-    };
-  }
-
-  const fromMonth = period?.from.slice(0, 7);
-  const toMonth = period?.to.slice(0, 7);
-  const months = dashboard.monthly.filter(
-    (m) => (!fromMonth || m.month >= fromMonth) && (!toMonth || m.month <= toMonth),
-  );
-  if (months.length === 0) return undefined;
-  return {
-    kind: "echarts",
-    title: `Money in and out per month (CHF)${suffix}`,
-    option: {
-      legend: { bottom: 0 },
-      grid: { left: 8, right: 16, top: 12, bottom: 32, containLabel: true },
-      xAxis: { type: "category", data: months.map((m) => m.label) },
-      yAxis: { type: "value" },
-      series: [
-        { name: "Out", type, data: months.map((m) => francs(m.expense)) },
-        { name: "In", type, data: months.map((m) => francs(m.income)) },
-      ],
-    },
-  };
 }
 
 /** One detected recurring charge. */
@@ -1358,41 +1056,6 @@ export function parsePeriod(content: string): string | undefined {
   return match?.[1]?.toLowerCase();
 }
 
-/**
- * The presentation choices in a display_chart call, fished out one regex per
- * field so a mangled argument object still yields whatever it did contain.
- */
-export function parseChartRequest(content: string): ChartRequest {
-  const sourceMatch =
-    /["']?source["']?\s*[:=]\s*["']?(categor\w*|merchant\w*|income|spend\w*)/i.exec(content);
-  const raw = sourceMatch?.[1]?.toLowerCase();
-  const source: ChartSource | undefined =
-    raw?.startsWith("categor") || raw?.startsWith("spend")
-      ? "categories"
-      : raw?.startsWith("merchant")
-        ? "merchants"
-        : raw === "income"
-          ? "income"
-          : undefined;
-
-  const topMatch = /["']?top_?n["']?\s*[:=]\s*["']?(\d{1,2})/i.exec(content);
-  const titleMatch = /["']?title["']?\s*[:=]\s*["']([^"'\n]{1,80})["']/i.exec(content);
-
-  return {
-    source,
-    topN: topMatch ? Number(topMatch[1]) : undefined,
-    title: titleMatch?.[1]?.trim(),
-  };
-}
-
-/** Where a chart should come from when the model named no source. */
-export function defaultChartSource(question: string): ChartSource {
-  const q = question.toLowerCase();
-  if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) return "merchants";
-  if (/\b(income|earn(ed|ings)?|salary|refunds?)\b/.test(q)) return "income";
-  return "categories";
-}
-
 const MONTH_NUMBERS: Record<string, string> = {
   january: "01", february: "02", march: "03", april: "04",
   may: "05", june: "06", july: "07", august: "08",
@@ -1579,10 +1242,10 @@ export function routeTool(question: string): ToolName | undefined {
   if (rowLevel) {
     return "run_sql";
   }
-  // An explicit ask for a chart routes to the chart tool itself — the
-  // caller fills the source from `defaultChartSource`.
+  // The assistant no longer draws; an explicit chart ask is answered with
+  // the figures the chart would have shown.
   if (/\b(pie|charts?|graphs?|diagrams?|visuali[sz]e)\b/.test(q)) {
-    return "display_chart";
+    return "get_spending_by_category";
   }
   if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) {
     return "get_top_merchants";
@@ -1594,7 +1257,7 @@ export function routeTool(question: string): ToolName | undefined {
     return "get_monthly_series";
   }
   // "total" and "overview" deliberately fall through to the category tool:
-  // those questions can be answered with a chart, and charts are preferred.
+  // the category split is the most useful single answer for them.
   if (/\b(save[d]?|savings|net|balance|how much money)\b/.test(q)) {
     return "get_overview";
   }
@@ -1606,33 +1269,6 @@ export function routeTool(question: string): ToolName | undefined {
     return "get_spending_by_category";
   }
   return undefined;
-}
-
-/**
- * Whether a turn that produced no chart of its own should still get one. True
- * when the question is about the composition or size of money — the cases a
- * pie answers well — and false for the row-level, count, and month-series
- * questions that read better as a sentence or a different shape. Defers to
- * `routeTool` so this can never disagree with how the question is otherwise
- * classified.
- */
-export function shouldDefaultChart(question: string): boolean {
-  const routed = routeTool(question);
-  return (
-    routed === "display_chart" ||
-    routed === "get_spending_by_category" ||
-    routed === "get_top_merchants" ||
-    routed === "get_income_breakdown"
-  );
-}
-
-/** The pie-bearing tool for a default chart's source. */
-export function chartToolForSource(source: ChartSource): ToolName {
-  return source === "merchants"
-    ? "get_top_merchants"
-    : source === "income"
-      ? "get_income_breakdown"
-      : "get_spending_by_category";
 }
 
 /** Drop Apertus special tokens and any tool-call block from a visible reply. */
