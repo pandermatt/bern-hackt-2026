@@ -31,9 +31,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { Fragment, type ReactNode } from "react";
 
 import { MerchantAvatar } from "@/components/merchant-avatar";
 import type { Transaction } from "@/db/schema";
+import { Link } from "@/i18n/navigation";
 import type { AnomalyInsight, AnomalySeverity } from "@/lib/anomaly-engine";
 import { formatMoney, type MonthTotal } from "@/lib/insights";
 
@@ -102,6 +104,78 @@ const SEVERITY_CLASSES: Record<AnomalySeverity, string> = {
 
 /** Beyond this a row stops being a ledger entry and becomes a badge cloud. */
 const MAX_VISIBLE_BADGES = 3;
+
+/**
+ * A panel that opens from a badge, on the browser's own popover machinery.
+ *
+ * Deliberately not a Radix popover. The ledger scrolls for ever, so one popover
+ * component per badge would be three hydrated client roots per row without
+ * bound — on a page whose whole architecture (`transaction-feed.tsx` passing
+ * rendered chunks, `app/actions/ledger.tsx` returning JSX) exists so that rows
+ * never become client state. `popover` needs no JavaScript at all, and because
+ * the top layer sits outside the document flow it escapes `MonthGroup`'s
+ * `overflow-clip`, which would otherwise cut the panel off. Escape and
+ * click-outside come free with `popover="auto"`.
+ */
+function Panel({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <div
+      id={id}
+      popover="auto"
+      className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface p-4 text-left shadow-lg backdrop:bg-black/30"
+    >
+      {children}
+    </div>
+  );
+}
+
+/** What one finding means, and the way through to everything it touches. */
+function FindingPanel({
+  id,
+  anomaly,
+  transactionId,
+}: {
+  id: string;
+  anomaly: AnomalyInsight;
+  transactionId: number;
+}) {
+  const t = useTranslations("Anomalies");
+  // Keyed by rule id, so a finding left over from an older engine renders
+  // without an explanation rather than throwing.
+  const explain = useTranslations("AnomalyRules");
+  const explanation = explain.has(anomaly.rule_id) ? explain(anomaly.rule_id) : null;
+
+  return (
+    <Panel id={id}>
+      <p className="flex items-start gap-2 text-[14px] font-semibold text-text">
+        <span aria-hidden className="shrink-0 leading-none">
+          {anomaly.emoji}
+        </span>
+        <span>{anomaly.title}</span>
+      </p>
+
+      {explanation && (
+        <p className="mt-2 text-[13px] leading-relaxed text-text-muted">{explanation}</p>
+      )}
+
+      {/* The finding's own words, which carry the numbers — the reason the
+          stored evidence blob is not rendered here as well. */}
+      <p className="mt-2 border-t border-line pt-2 text-[12.5px] text-text-muted">
+        {anomaly.description}
+      </p>
+
+      <Link
+        href={{
+          pathname: `/anomalies/${anomaly.rule_id}`,
+          query: { tx: String(transactionId) },
+        }}
+        className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+      >
+        {t("seeAll")} →
+      </Link>
+    </Panel>
+  );
+}
 
 function Amount({ row }: { row: Transaction }) {
   const inflow = row.amountMinor > 0;
@@ -233,40 +307,71 @@ function TransactionRow({
             {shownAnomalies.map((anomaly, index) => {
               const Icon = getLucideIcon(anomaly.icon);
               const isNewMerchant = anomaly.rule_id === "NEW_MERCHANT";
+              /* Not keyed on `rule_id` alone: one transaction can carry two
+                 findings from the same rule — an airline billing two different
+                 amounts twice over on one day — and React then sees duplicate
+                 keys. The panel needs the same uniqueness for its element id. */
+              const key = `${anomaly.rule_id}-${index}`;
+              const panelId = `finding-${row.id}-${key}`;
 
               return (
-                <span
-                  /* Not keyed on `rule_id` alone: one transaction can carry two
-                     findings from the same rule — an airline billing two
-                     different amounts twice over on one day — and React then
-                     sees duplicate keys. */
-                  key={`${anomaly.rule_id}-${index}`}
-                  title={`${anomaly.title}: ${anomaly.description}`}
-                  /* `bg-surface`, not the soft tint the row already wears — a
-                     chip filled with its own background colour would dissolve
-                     into the wash behind it. On the tinted row a plain surface
-                     reads as raised, which is what a badge wants anyway. */
-                  className={`inline-flex items-center gap-1.5 rounded-md border bg-surface px-2 py-0.5 text-[11px] font-medium shadow-2xs transition-transform hover:scale-105 ${
-                    isNewMerchant
-                      ? "border-accent/40 text-accent"
-                      : SEVERITY_CLASSES[anomaly.severity]
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  {/* The finding's own words. This used to print `rule_id`, so
-                      the row read UNUSUAL_FINANCIAL_IMPACT in monospace at a
-                      person who wanted to know what happened to their money. */}
-                  <span className="font-medium">{anomaly.title}</span>
-                </span>
+                <Fragment key={key}>
+                  <button
+                    type="button"
+                    popoverTarget={panelId}
+                    /* `bg-surface`, not the soft tint the row already wears — a
+                       chip filled with its own background colour would dissolve
+                       into the wash behind it. On the tinted row a plain surface
+                       reads as raised, which is what a badge wants anyway. */
+                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-surface px-2 py-0.5 text-[11px] font-medium shadow-2xs transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                      isNewMerchant
+                        ? "border-accent/40 text-accent"
+                        : SEVERITY_CLASSES[anomaly.severity]
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    {/* The finding's own words. This used to print `rule_id`, so
+                        the row read UNUSUAL_FINANCIAL_IMPACT in monospace at a
+                        person who wanted to know what happened to their money. */}
+                    <span className="font-medium">{anomaly.title}</span>
+                  </button>
+
+                  <FindingPanel id={panelId} anomaly={anomaly} transactionId={row.id} />
+                </Fragment>
               );
             })}
             {hiddenCount > 0 && (
-              <span
-                title={hiddenAnomalies.map((a) => `${a.title}: ${a.description}`).join("\n")}
-                className="inline-flex items-center rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-text-muted shadow-2xs"
-              >
-                +{hiddenCount} {t("more")}
-              </span>
+              <>
+                <button
+                  type="button"
+                  popoverTarget={`finding-${row.id}-more`}
+                  className="inline-flex cursor-pointer items-center rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-text-muted shadow-2xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  +{hiddenCount} {t("more")}
+                </button>
+                <Panel id={`finding-${row.id}-more`}>
+                  <ul className="divide-y divide-line">
+                    {hiddenAnomalies.map((anomaly, index) => (
+                      <li key={`${anomaly.rule_id}-${index}`} className="py-2.5 first:pt-0 last:pb-0">
+                        <Link
+                          href={{
+                            pathname: `/anomalies/${anomaly.rule_id}`,
+                            query: { tx: String(row.id) },
+                          }}
+                          className="block hover:underline"
+                        >
+                          <span className="text-[13px] font-medium text-text">
+                            {anomaly.emoji} {anomaly.title}
+                          </span>
+                          <span className="mt-0.5 block text-[12px] text-text-muted">
+                            {anomaly.description}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </Panel>
+              </>
             )}
           </div>
         )}
