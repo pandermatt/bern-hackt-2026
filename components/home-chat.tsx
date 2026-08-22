@@ -18,15 +18,19 @@ import { ChatPanel, useAssistantChat } from "@/components/chat-panel";
  * - **No `inputRef`, so nothing is focused on arrival.** Autofocusing an input
  *   near the top of a phone page raises the keyboard immediately, collapses the
  *   viewport and pushes away the very thing the reader opened the page to see.
- * - **The transcript is capped rather than stretched.** An auto-height root
- *   keeps an empty chat short — it is a greeting, not a screenful of blank
- *   panel — and the cap takes over once a conversation gets going. It is
- *   deliberately tight on a phone (`30svh`): the transcript scrolls, the
- *   mascot below it does not, so every extra centimetre the chat takes is one
- *   the dragon loses. From `lg` the page is two columns and the mascot sits
- *   beside the chat rather than under it, so the cap opens up. `svh`, not
- *   `vh`: on iOS Safari `vh` measures against the collapsed URL bar, which
- *   would tuck the input underneath it.
+ * - **The transcript is a fixed height, not a cap.** This was `max-h` once,
+ *   on the reasoning that an empty chat should not reserve a screenful of
+ *   blank panel. What that actually bought was a panel that grew with the
+ *   first few replies and shoved the nudges and the mascot down the page on
+ *   every turn — the reader's eye lost its place mid-conversation. A constant
+ *   height costs some whitespace at the greeting and buys a page that never
+ *   moves under you; the transcript scrolls inside it instead.
+ *
+ *   It is deliberately short on a phone (`30svh`): there the mascot sits below
+ *   the chat, so every centimetre the panel holds is one the dragon loses.
+ *   From `lg` the page is two columns and the two sit side by side, so the
+ *   panel can have the room. `svh`, not `vh`: on iOS Safari `vh` measures
+ *   against the collapsed URL bar, which would tuck the input underneath it.
  */
 export function HomeChat() {
   const t = useTranslations("Chat");
@@ -46,7 +50,7 @@ export function HomeChat() {
         </div>
       </div>
 
-      <ChatPanel chat={chat} scrollClassName="max-h-[30svh] lg:max-h-[60svh]" />
+      <ChatPanel chat={chat} scrollClassName="h-[30svh] lg:h-[60svh]" />
     </div>
   );
 }
