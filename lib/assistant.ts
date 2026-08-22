@@ -8,10 +8,13 @@
  * The model sees no figures up front. It gets a toolbox: the system prompt
  * describes what can be fetched, the model asks, `runTool` answers from the
  * real aggregates, and the pie chart is formed from the same data the model
- * requested. The Stoney endpoint accepts OpenAI `tools` but does not parse
- * the model's calls into `tool_calls` — Apertus emits its native
- * `<|tools_prefix|>[{"name": {…}}]` syntax in the content, so the parsing
- * lives here too.
+ * requested.
+ *
+ * Calls arrive as real OpenAI `tool_calls` with parsed `arguments`, so no
+ * prose is scraped here. That is load-bearing on the prompt: earlier versions
+ * of `SYSTEM_PROMPT` showed the call syntax inline (`[{"get_overview": {…}}]`),
+ * which teaches the model to write calls as text in `content` and suppresses
+ * the native ones outright. Do not put call syntax back.
  */
 import type { AnomalyGroup, AnomalyOverview } from "@/app/actions/anomalies";
 import type { SavingsOverview } from "@/app/actions/savings";
@@ -40,10 +43,24 @@ export type ChatMessage = {
   content: string;
 };
 
-/** What actually goes over the wire — one turn can add assistant/tool pairs. */
+/** One call as the endpoint reports it, arguments still a JSON string. */
+export type ToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
+/**
+ * What actually goes over the wire — one turn can add assistant/tool pairs.
+ * The assistant message is echoed back carrying its `tool_calls`, and every
+ * result quotes the `tool_call_id` it answers; an endpoint that loses either
+ * side of that pairing rejects the next round.
+ */
 export type WireMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
 };
 
 /**
@@ -76,10 +93,10 @@ export const SYSTEM_PROMPT = [
   "You are the analytics assistant of Beyond Money, a personal-finance dashboard.",
   "You answer questions about the customer's bank statements.",
   "You know none of the figures yourself: always call one of the provided tools first and answer only from what the tools return — never invent or estimate a number.",
-  "To call a tool, emit only the tool call itself — no prose before or after it. Once you have the data, answer without mentioning tools or their names.",
-  'Every tool accepts an optional period argument for time-scoped questions, e.g. [{"get_spending_by_category": {"period": "ytd"}}]. Accepted values: ytd, a year like 2025, a month like 2025-03, a range like 2025-01-01..2025-03-31, last_month, or last_3_months. When you omit it the app scopes to the current year (year-to-date) by default; pass an explicit range, or the user must say "all time", for the full history.',
+  "Call tools through the function-calling interface. Never write a call out as text in your reply, and never describe the call you are about to make — just make it. Once you have the data, answer without mentioning tools or their names.",
+  "Your reply is read by a person, not by a program. It must never contain a tool name, a JSON object, or a suggestion that the reader run something. When you need data, call the tool — do not tell the reader about it.",
   "Be concise: 2–3 short sentences, plain text, no markdown, no lists.",
-  "All amounts are Swiss francs. Write them exactly as the tools format them, e.g. CHF 1'234.55 — apostrophe as thousands separator, two decimals.",
+  "All amounts are Swiss francs. The tools return them already formatted, apostrophe as thousands separator — reproduce those strings character for character. Never state a figure the tools did not return, and never reuse a number that appears in these instructions or in a tool description: those are format templates, not the customer's money.",
   "Name only the figures that answer the question — the biggest item and the takeaway — rather than listing everything a tool returned.",
   "When the tools cannot answer — a specific transaction, a day of week, a count, a comparison they don't cover — call run_sql with one SQLite SELECT over the transactions table; the schema is in the tool description.",
   "Four tools carry the advice questions: get_savings_potential for where the customer could save (advise only on its flexible categories — fixed costs like housing, insurance and taxes cannot be cut); get_recent_anomalies for anything suspicious or unusual (stay calm — most findings are the customer's own legitimate spending); get_subscriptions for recurring subscriptions; get_savings_goals for the saving goals and a month's unallocated surplus.",
@@ -96,7 +113,9 @@ export const SYSTEM_PROMPT = [
  * than baked into it.
  */
 const LANGUAGE_NAMES: Record<string, string> = {
-  de: "German",
+  // Spelled out the same way `lib/llm/analyze-insights.ts` does it: a bare
+  // "German" gets ß back, which is wrong on a Swiss statement.
+  de: "German (Swiss usage: never the letter ß, always ss)",
   en: "English",
 };
 
@@ -124,9 +143,12 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 
 /**
  * The one argument every tool shares. A single constrained string instead of
- * from/to fields: a small model emits `{"period": "ytd"}` far more reliably
- * than two well-formed dates, and `parsePeriod` can still fish it out of
- * mangled JSON.
+ * from/to fields: a model emits one `"period"` far more reliably than two
+ * well-formed dates, and `resolvePeriod` does the calendar work server-side.
+ *
+ * The default is stated here rather than in the system prompt because it has
+ * to be true at the point of the call — without it the model stops to ask the
+ * customer which period they meant instead of answering.
  */
 const PERIOD_PARAMETERS = {
   type: "object" as const,
@@ -134,7 +156,7 @@ const PERIOD_PARAMETERS = {
     period: {
       type: "string" as const,
       description:
-        "Optional time period: 'ytd', a year ('2025'), a month ('2025-03'), a range ('2025-01-01..2025-03-31'), 'last_month', or 'last_3_months'. Relative periods count back from the newest statement. Omit for all data.",
+        "Optional time period: 'ytd', a year ('2025'), a month ('2025-03'), a range ('2025-01-01..2025-03-31'), 'last_month', or 'last_3_months'. Relative periods count back from the newest statement, not from today. Omit it unless the question names a period — omitting scopes to the current year, which is the right default. Pass an explicit range for the full history.",
     },
   },
 };
@@ -237,11 +259,12 @@ export const TOOL_DEFINITIONS = [
     name: "run_sql",
     description: [
       "Escape hatch when the other tools cannot answer: run one read-only SQLite SELECT over the customer's transactions.",
-      "Table: transactions(booked_on TEXT 'YYYY-MM-DD', kind TEXT in ('income','expense'), amount_chf REAL signed francs (income positive, spending negative), amount_minor INTEGER signed rappen, account TEXT, merchant TEXT, category TEXT, description TEXT, currency TEXT). Internal transfers between the customer's own accounts are already excluded, matching every other figure in the app.",
+      "Table: transactions(booked_on TEXT 'YYYY-MM-DD', weekday TEXT the English day name ('Monday'…'Sunday'), month TEXT 'YYYY-MM', kind TEXT in ('income','expense'), amount_chf REAL signed francs (income positive, spending negative), amount_minor INTEGER signed rappen, account TEXT, merchant TEXT, category TEXT, description TEXT, currency TEXT). Internal transfers between the customer's own accounts are already excluded, matching every other figure in the app.",
+      "Group by weekday or month directly — they are real columns. Do not derive them with strftime, and never report a day or month as a number.",
       "The table holds ONLY rows inside the resolved period scope (year-to-date by default). A WHERE on booked_on can narrow further but can never reach outside that scope — to query a different or wider window, pass the period argument.",
       "One SELECT statement (no CTEs / WITH), no writes, reference the table at most twice. At most 40 result rows come back, so aggregate in SQL.",
       "Remember spending is negative: the largest expense is MIN(amount_chf) / ORDER BY amount_chf ASC, and filter kind='expense' for spending, kind='income' for income.",
-      'Example: {"run_sql": {"sql": "SELECT merchant, ROUND(SUM(-amount_chf), 2) AS spent FROM transactions WHERE kind=\'expense\' GROUP BY merchant ORDER BY spent DESC LIMIT 5", "period": "2025"}}',
+      "Example: SELECT weekday, ROUND(SUM(-amount_chf), 2) AS spent FROM transactions WHERE kind='expense' GROUP BY weekday ORDER BY spent DESC LIMIT 3",
     ].join(" "),
     parameters: {
       type: "object" as const,
@@ -259,6 +282,188 @@ export const TOOL_DEFINITIONS = [
   type: "function" as const,
   function: { name, description, parameters },
 }));
+
+/** A tool we actually serve, or nothing — the model can name anything. */
+export function asToolName(name: string | undefined): ToolName | undefined {
+  return TOOL_NAMES.includes(name as ToolName) ? (name as ToolName) : undefined;
+}
+
+/** Every name in `tool_calls` that we actually serve, in the order asked. */
+export function toolNamesIn(calls: ToolCall[]): ToolName[] {
+  return calls
+    .map((call) => asToolName(call.function?.name))
+    .filter((name): name is ToolName => name !== undefined);
+}
+
+/**
+ * A call's arguments, guarded. The endpoint hands back `arguments` as a JSON
+ * string it did not itself validate, and a model that truncated mid-object or
+ * emitted `{}` is routine — an unreadable argument set means "no arguments",
+ * never a failed turn. Every tool but propose_allocation has a working default
+ * for every field, so an empty object still answers.
+ */
+export function parseToolArguments(raw: string | undefined): Record<string, unknown> {
+  if (!raw || !raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The `period` argument, if the model passed a usable one. */
+export function periodArgument(args: Record<string, unknown>): string | undefined {
+  const period = args.period;
+  return typeof period === "string" && period.trim()
+    ? period.trim().toLowerCase()
+    : undefined;
+}
+
+/** The `sql` argument of a run_sql call. Validation is `validateSelect`'s job. */
+export function sqlArgument(args: Record<string, unknown>): string | undefined {
+  const sql = args.sql;
+  return typeof sql === "string" && sql.trim() ? sql : undefined;
+}
+
+/**
+ * The goal/amount pairs of a propose_allocation call. The wrapper key is
+ * tolerated in the spellings the model reaches for, and so are the field
+ * names, because the alternative is a wasted round trip to say "call it
+ * allocations". The figures themselves are requests, not facts:
+ * `buildAllocationProposal` clamps every one against the month's real free
+ * surplus before anything reaches the Apply card.
+ */
+export function allocationsFrom(args: Record<string, unknown>): RawAllocation[] {
+  const list = Array.isArray(args)
+    ? args
+    : (args.allocations ?? args.split ?? args.goals);
+  if (!Array.isArray(list)) return [];
+  const parsed: RawAllocation[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as Record<string, unknown>;
+    const goal = entry.goal ?? entry.name ?? entry.goal_name;
+    const amountMinor = francsToMinor(entry.amount_chf ?? entry.amount ?? entry.chf);
+    if (typeof goal === "string" && goal.trim() && amountMinor !== undefined) {
+      parsed.push({ goal: goal.trim(), amountMinor });
+    }
+  }
+  return parsed;
+}
+
+/** A JSON object literal — `{"key":` — anywhere in a would-be answer. */
+const JSON_OBJECT = /\{\s*"[^"\n]+"\s*:/;
+
+/**
+ * A snake_case identifier — `get_weekday_spending`, `amount_chf`. Matching the
+ * shape rather than the eleven known names on purpose: the model invents tool
+ * names it wishes existed ("Bitte rufe get_weekday_spending an") as readily as
+ * it misuses the real ones, and a reader told to call a function that does not
+ * exist is worse off than one told nothing. No German or English word is
+ * spelled this way, so the shape is safe to reject on sight.
+ */
+const SNAKE_CASE = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/;
+
+/**
+ * Where a would-be answer stops being an answer, or -1 if it never does.
+ *
+ * Three shapes, all of them the model showing its plumbing instead of using
+ * it: naming a tool, writing a call out as JSON rather than making it, and
+ * naming a function that does not exist at all.
+ * Used only to *reject* a reply, never to route one — the difference from the
+ * keyword routing this replaced. It matters more than it looks: on exactly
+ * these turns the model also invents the figures it puts in the JSON.
+ */
+export function plumbingAt(text: string): number {
+  const marks = [
+    ...TOOL_NAMES.map((name) => text.indexOf(name)),
+    text.search(JSON_OBJECT),
+    text.search(SNAKE_CASE),
+  ].filter((at) => at >= 0);
+  return marks.length > 0 ? Math.min(...marks) : -1;
+}
+
+/** Whether a would-be answer shows the plumbing anywhere. */
+export function showsPlumbing(text: string): boolean {
+  return plumbingAt(text) >= 0;
+}
+
+/**
+ * Every number a tool handed the model this turn, in the spellings a reply
+ * might use it in. Amounts come back pre-formatted ("6'044.27"), so the
+ * apostrophes go and both the exact and whole-franc forms are kept.
+ */
+export function numbersIn(json: string): Set<string> {
+  const seen = new Set<string>();
+  for (const match of json.matchAll(/-?\d[\d']*(?:\.\d+)?/g)) {
+    const value = Number(match[0].replace(/'/g, ""));
+    if (!Number.isFinite(value)) continue;
+    seen.add(Math.abs(value).toFixed(2));
+    seen.add(Math.round(Math.abs(value)).toString());
+  }
+  return seen;
+}
+
+/**
+ * Amounts of money in a reply, as written. Deliberately narrow: a figure
+ * counts only if it is marked as money — next to CHF, grouped with an
+ * apostrophe, or written to the rappen. Bare integers are years, counts and
+ * ranks, and percentages are the model's own arithmetic over figures it did
+ * fetch; neither is checkable, so neither is checked.
+ */
+export function amountsIn(text: string): string[] {
+  const found: string[] = [];
+  const pattern =
+    /(?:CHF\s?)?(\d{1,3}(?:'\d{3})+(?:\.\d{2})?|\d+\.\d{2})(?:\s?(?:CHF|%))?/g;
+  for (const match of text.matchAll(pattern)) {
+    const whole = match[0];
+    if (whole.trimEnd().endsWith("%")) continue;
+    if (!/CHF/i.test(whole) && !whole.includes("'")) continue;
+    found.push(match[1]);
+  }
+  return found;
+}
+
+/**
+ * The amounts in a reply that no tool returned this turn.
+ *
+ * The assistant's one hard promise is that every franc on screen came off the
+ * customer's statements. The model breaks it on a minority of turns — naming
+ * March's spending as CHF 5'210.40 when March was CHF 6'960.90, or inventing
+ * merchants outright — and it breaks it most readily when it never fetched
+ * anything. Amounts are cheap to verify against what came back, so they are.
+ */
+export function unverifiedAmounts(text: string, seen: Set<string>): string[] {
+  return amountsIn(text).filter((written) => {
+    const value = Math.abs(Number(written.replace(/'/g, "")));
+    if (!Number.isFinite(value)) return false;
+    return !(
+      seen.has(value.toFixed(2)) ||
+      seen.has(Math.round(value).toString()) ||
+      seen.has((value * 100).toFixed(2))
+    );
+  });
+}
+
+/**
+ * Everything that is the model thinking rather than the model answering.
+ * Three sources, all seen on the endpoints this talks to: `<think>` blocks
+ * from a reasoning model, Apertus's `<|…|>` control tokens, and a
+ * `reasoning_content` field the caller drops separately. An unclosed
+ * `<think>` means the answer was truncated inside the reasoning — there is no
+ * answer in there to keep, so the whole tail goes.
+ */
+export function stripReasoning(content: string): string {
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/i, "")
+    .split("<|tools_prefix|>")[0]
+    .replace(/<\|[^|>]*\|>/g, "")
+    .trim();
+}
 
 /**
  * Minor units → "1'234.55", the Swiss format the answers should use. Handed
@@ -422,105 +627,6 @@ export function validateSelect(sql: string): string | undefined {
   const references = trimmed.match(/\btransactions\b/gi)?.length ?? 0;
   if (references > 2) return "Reference the transactions table at most twice.";
   if (references === 0) return "Query the transactions table.";
-  return undefined;
-}
-
-/** The SQL string out of a run_sql call, surviving mangled surrounding JSON. */
-export function extractSql(content: string): string | undefined {
-  const args = extractJsonAfter(content, "run_sql");
-  if (args && typeof args === "object" && !Array.isArray(args)) {
-    const sql = (args as Record<string, unknown>).sql;
-    if (typeof sql === "string" && sql.trim()) return sql;
-  }
-  // The args object was mangled — fish the one string field out directly.
-  const match = /"sql"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(content);
-  if (match) {
-    try {
-      return JSON.parse(`"${match[1]}"`) as string;
-    } catch {
-      // fall through to the prose scan
-    }
-  }
-  // Last resort: the model wrote the statement as prose ("you would need to
-  // query … SELECT … FROM transactions …") instead of calling the tool.
-  // Writing the query IS asking for it — cut it out of the surrounding text.
-  const at = content.search(/\b(select|with)\b/i);
-  if (at < 0) return undefined;
-  let candidate = content.slice(at);
-  const semi = candidate.indexOf(";");
-  if (semi >= 0) {
-    candidate = candidate.slice(0, semi);
-  } else {
-    const paragraphBreak = candidate.search(/\n\s*\n/);
-    if (paragraphBreak >= 0) candidate = candidate.slice(0, paragraphBreak);
-  }
-  candidate = candidate.replace(/```/g, "").trim();
-  return /\bfrom\s+transactions\b/i.test(candidate) ? candidate : undefined;
-}
-
-/**
- * The first balanced JSON object after `marker`, or undefined. A real parser
- * rather than a regex because ECharts options nest arbitrarily deep; string-
- * aware so braces inside labels don't unbalance the scan.
- */
-export function extractJsonAfter(content: string, marker: string): unknown {
-  const at = content.indexOf(marker);
-  if (at < 0) return undefined;
-  // A handful of candidate regions, not one: prose pseudo-JSON ("{series:
-  // [1]}") or a format echo with a literal ellipsis often sits between the
-  // marker and the real arguments, and giving up on the first unparseable
-  // balanced region would throw the real call away with it.
-  let from = at + marker.length;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const start = content.indexOf("{", from);
-    if (start < 0) return undefined;
-
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    let end = -1;
-    for (let i = start; i < content.length; i++) {
-      const ch = content[i];
-      if (escaped) {
-        escaped = false;
-      } else if (inString) {
-        if (ch === "\\") escaped = true;
-        else if (ch === '"') inString = false;
-      } else if (ch === '"') {
-        inString = true;
-      } else if (ch === "{") {
-        depth += 1;
-      } else if (ch === "}") {
-        depth -= 1;
-        if (depth === 0) {
-          end = i;
-          break;
-        }
-      }
-    }
-    // Unclosed (a stray prose brace swallowed the rest): step inside it —
-    // the next `{` may open a region that does balance.
-    if (end < 0) {
-      from = start + 1;
-      continue;
-    }
-    try {
-      const parsed = JSON.parse(content.slice(start, end + 1));
-      // When the model narrates before the call ("I'll use propose_allocation
-      // …") the anchor lands on the prose mention, so the first balanced
-      // object is the wrapper `{ "<marker>": {…real args…} }`. Unwrap it:
-      // tool args never legitimately contain a key named after the tool.
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        const inner = (parsed as Record<string, unknown>)[marker];
-        if (inner && typeof inner === "object" && !Array.isArray(inner)) {
-          return inner;
-        }
-      }
-      return parsed;
-    } catch {
-      from = start + 1;
-    }
-  }
   return undefined;
 }
 
@@ -801,60 +907,6 @@ function francsToMinor(value: unknown): number | undefined {
 }
 
 /**
- * The goal/amount pairs out of a propose_allocation call. Two layers, like
- * `extractSql`: the balanced-JSON extractor first, and when the surrounding
- * array was mangled past parsing, a regex sweep for `"goal": …, "amount…": …`
- * pairs — an 8B model truncates argument arrays often enough that the pairs
- * deserve to survive their wrapper.
- */
-export function parseAllocationArgs(content: string): RawAllocation[] {
-  const args = extractJsonAfter(content, "propose_allocation");
-  const list = Array.isArray(args)
-    ? args
-    : args && typeof args === "object"
-      ? (args as Record<string, unknown>).allocations ??
-        (args as Record<string, unknown>).split
-      : undefined;
-  if (Array.isArray(list)) {
-    const parsed: RawAllocation[] = [];
-    for (const item of list) {
-      if (!item || typeof item !== "object") continue;
-      const record = item as Record<string, unknown>;
-      const goal = record.goal ?? record.name ?? record.goal_name;
-      const amountMinor = francsToMinor(
-        record.amount_chf ?? record.amount ?? record.chf,
-      );
-      if (typeof goal === "string" && goal.trim() && amountMinor !== undefined) {
-        parsed.push({ goal: goal.trim(), amountMinor });
-      }
-    }
-    if (parsed.length > 0) return parsed;
-  }
-
-  const parsed: RawAllocation[] = [];
-  // The trailing delimiter is the guard: a pair cut off mid-amount ("…chf": 2⏎)
-  // may be a truncated 250, and a confidently wrong figure is worse than one
-  // dropped row the model can re-propose.
-  const pair =
-    /"(?:goal|name|goal_name)"\s*:\s*"([^"]+)"\s*,\s*"(?:amount_chf|amount|chf)"\s*:\s*"?([\d.,'’]+)"?\s*[,}\]]/g;
-  // The sweep is fenced to the argument region — from the tool name to the
-  // first `]` that could close its array. Goal/amount-shaped pairs elsewhere
-  // in the content (an echoed goals list, a quoted earlier proposal) must not
-  // turn into phantom allocations.
-  const at = content.indexOf("propose_allocation");
-  let region = at >= 0 ? content.slice(at) : content;
-  const close = region.indexOf("]");
-  if (close >= 0) region = region.slice(0, close + 1);
-  for (const match of region.matchAll(pair)) {
-    const amountMinor = francsToMinor(match[2]);
-    if (amountMinor !== undefined) {
-      parsed.push({ goal: match[1].trim(), amountMinor });
-    }
-  }
-  return parsed;
-}
-
-/**
  * Validate a proposed split against the month's real state, yielding both the
  * typed proposal the Apply card renders and the result the model captions.
  * The model's numbers are requests, not figures: goals are matched against
@@ -1029,27 +1081,6 @@ export function defaultAllocationSplit(
     .filter((item) => item.amountMinor > 0);
 }
 
-/**
- * Which tools the model asked for. Scans for known names instead of parsing:
- * the emitted JSON is often malformed (`[{"get_overview": }]`, truncation at
- * a stop token), and the model sometimes writes prose *about* the call
- * ("Let me call get_spending_by_category.") without any call syntax at all.
- * In a round where tools are on offer, naming one is asking for it — the
- * round cap keeps a chatty final answer from looping the conversation.
- *
- * FOLLOWUP lines are exempt from the scan: they are definitionally part of a
- * finished answer, and the locale prompt actively invites tool names there
- * ("match a toolcall available to you") — scanning them would turn a
- * finished caption back into a tool round and discard the real answer.
- */
-export function parseToolCalls(content: string): ToolName[] {
-  const scanned = content
-    .split("\n")
-    .filter((line) => !FOLLOWUP_MARKER.test(line))
-    .join("\n");
-  return TOOL_NAMES.filter((name) => scanned.includes(name));
-}
-
 /** A resolved, inclusive date window over the statements. */
 export type Period = {
   from: string;
@@ -1057,15 +1088,6 @@ export type Period = {
   /** Human wording, echoed into tool results, chart titles, and the log. */
   label: string;
 };
-
-/**
- * The period string the model passed, fished out with a regex for the same
- * reason tool names are: the argument JSON is often mangled.
- */
-export function parsePeriod(content: string): string | undefined {
-  const match = /["']?period["']?\s*[:=]\s*["']?([\w.-]+)["']?/i.exec(content);
-  return match?.[1]?.toLowerCase();
-}
 
 const MONTH_NUMBERS: Record<string, string> = {
   january: "01", february: "02", march: "03", april: "04",
@@ -1186,29 +1208,9 @@ export function resolvePeriod(
 }
 
 /**
- * True when a round produced neither a tool call nor an answer — the model
- * talking *about* fetching ("Let me call the relevant tool…") or replying to
- * a finance question with no figure at all. Only consulted when no tool name
- * was found; whether anything is injected is `routeTool`'s call.
- */
-export function looksLikeStall(content: string): boolean {
-  // A real figure, not the `amount_chf` column name showing up in SQL prose.
-  if (/CHF\s?\d/i.test(content)) return false;
-  // Promising to do something is not doing it. Match the intent verbs plainly,
-  // but "sql"/"query"/"generate" ONLY inside a planning phrase — otherwise a
-  // genuine caption ("The query returned 42 transactions") is misread as a
-  // stall and the real answer is thrown away.
-  if (/\b(i'?ll|i will|let me|i need to|one moment|hold on|fetching|retrieving|getting)\b/i.test(content)) {
-    return true;
-  }
-  if (/\b(i'?ll|i will|let me|i need to|first|going to|about to)\b[^.\n]{0,60}\b(generate|sql|quer(y|ies)|fetch|run)\b/i.test(content)) {
-    return true;
-  }
-  return /\b(tools?|fetch|call|retriev|look up)\b/i.test(content) || !/\d/.test(content);
-}
-
-/**
- * Deterministic question → tool routing, the fallback when the model stalls.
+ * Deterministic question → tool classification. No longer a fallback for a
+ * stalled model — calls arrive as `tool_calls` now — but still what the
+ * proposal safety net at the end of a turn reads intent with.
  * Mirrors the tool descriptions; returns nothing for small talk, which lets
  * the model's own words stand as the reply.
  */
@@ -1280,14 +1282,6 @@ export function routeTool(question: string): ToolName | undefined {
     return "get_spending_by_category";
   }
   return undefined;
-}
-
-/** Drop Apertus special tokens and any tool-call block from a visible reply. */
-export function stripModelMarkup(content: string): string {
-  return content
-    .split("<|tools_prefix|>")[0]
-    .replace(/<\|[^|>]*\|>/g, "")
-    .trim();
 }
 
 /**

@@ -4,18 +4,23 @@ import type { SavingsOverview } from "@/app/actions/savings";
 import type { Dashboard } from "@/app/actions/transactions";
 import type { Transaction } from "@/db/schema";
 import {
+  allocationsFrom,
+  asToolName,
+  numbersIn,
+  parseToolArguments,
+  periodArgument,
+  showsPlumbing,
+  sqlArgument,
+  stripReasoning,
+  toolNamesIn,
+  unverifiedAmounts,
   anomaliesToolResult,
   buildAllocationProposal,
   defaultAllocationSplit,
   defaultPeriod,
   detectSubscriptions,
   extractFollowUps,
-  parseAllocationArgs,
-  parseToolCalls,
   resolvePeriod,
-  extractJsonAfter,
-  extractSql,
-  looksLikeStall,
   routeTool,
   savingsGoalsToolResult,
   savingsPotentialToolResult,
@@ -115,73 +120,6 @@ describe("validateSelect", () => {
     expect(validateSelect("SELECT 1")).toBeDefined();
     expect(validateSelect("EXPLAIN SELECT * FROM transactions")).toBeDefined();
     expect(validateSelect("")).toBeDefined();
-  });
-});
-
-describe("extractSql", () => {
-  it("reads sql out of well-formed args", () => {
-    expect(
-      extractSql('[{"run_sql": {"sql": "SELECT * FROM transactions"}}]'),
-    ).toBe("SELECT * FROM transactions");
-  });
-
-  it("survives mangled surrounding JSON via the string-field fallback", () => {
-    expect(
-      extractSql(
-        'run_sql with "sql": "SELECT \\"a\\" FROM transactions WHERE kind=\'expense\'" and trailing garbage',
-      ),
-    ).toBe('SELECT "a" FROM transactions WHERE kind=\'expense\'');
-  });
-
-  it("returns undefined when there is nothing to find", () => {
-    expect(extractSql("[{run_sql: }]")).toBeUndefined();
-  });
-});
-
-describe("extractJsonAfter", () => {
-  it("returns the first balanced object after the marker", () => {
-    expect(
-      extractJsonAfter('call propose_allocation {"a": {"b": [1, 2]}} tail', "propose_allocation"),
-    ).toEqual({ a: { b: [1, 2] } });
-  });
-
-  it("is not fooled by braces inside strings", () => {
-    expect(
-      extractJsonAfter('propose_allocation {"label": "a } b", "n": 1}', "propose_allocation"),
-    ).toEqual({ label: "a } b", n: 1 });
-  });
-
-  it("unwraps a marker-keyed wrapper when the model narrates before the call", () => {
-    // The anchor lands on the prose mention, so the first object is the wrapper.
-    expect(
-      extractJsonAfter(
-        'I will use propose_allocation. [{"propose_allocation": {"allocations": []}}]',
-        "propose_allocation",
-      ),
-    ).toEqual({ allocations: [] });
-  });
-
-  it("leaves a direct (non-wrapper) args object untouched", () => {
-    expect(
-      extractJsonAfter('[{"run_sql": {"sql": "SELECT 1"}}]', "run_sql"),
-    ).toEqual({ sql: "SELECT 1" });
-  });
-
-  it("returns undefined for unbalanced or invalid JSON", () => {
-    expect(extractJsonAfter('propose_allocation {"a": ', "propose_allocation")).toBeUndefined();
-  });
-});
-
-describe("looksLikeStall", () => {
-  it("treats planning phrases as stalls", () => {
-    expect(looksLikeStall("Let me check that for you.")).toBe(true);
-    expect(looksLikeStall("First, I will generate a SQL query for this.")).toBe(true);
-    expect(looksLikeStall("I need to fetch the data.")).toBe(true);
-  });
-
-  it("does NOT treat a genuine caption mentioning the query as a stall", () => {
-    expect(looksLikeStall("The query returned 42 transactions in March.")).toBe(false);
-    expect(looksLikeStall("Your biggest expense was CHF 7'439.00 on 2025-08-14.")).toBe(false);
   });
 });
 
@@ -416,29 +354,6 @@ describe("savingsGoalsToolResult", () => {
   });
 });
 
-describe("parseAllocationArgs", () => {
-  it("reads a clean call, numeric and Swiss-formatted string amounts alike", () => {
-    const content =
-      '<|tools_prefix|>[{"propose_allocation": {"allocations": [{"goal": "Ferien", "amount_chf": 600}, {"goal": "Auto", "amount_chf": "CHF 1\'200,50"}]}}]';
-    expect(parseAllocationArgs(content)).toEqual([
-      { goal: "Ferien", amountMinor: 60_000 },
-      { goal: "Auto", amountMinor: 120_050 },
-    ]);
-  });
-
-  it("salvages goal/amount pairs from a truncated argument array", () => {
-    const content =
-      'I will call propose_allocation: [{"goal": "Ferien", "amount_chf": "600"}, {"goal": "Auto", "amount_chf": 2';
-    expect(parseAllocationArgs(content)).toEqual([
-      { goal: "Ferien", amountMinor: 60_000 },
-    ]);
-  });
-
-  it("returns nothing when there is nothing to read", () => {
-    expect(parseAllocationArgs("propose_allocation, but no arguments")).toEqual([]);
-  });
-});
-
 describe("buildAllocationProposal", () => {
   const overview = (patch: Partial<SavingsOverview> = {}): SavingsOverview => ({
     months: ["2025-06", "2025-07"],
@@ -596,52 +511,6 @@ describe("defaultPeriod", () => {
   });
 });
 
-describe("francsToMinor comma semantics (via parseAllocationArgs)", () => {
-  const parse = (amount: string) =>
-    parseAllocationArgs(
-      `[{"propose_allocation": {"allocations": [{"goal": "Ferien", "amount_chf": "${amount}"}]}}]`,
-    )[0]?.amountMinor;
-
-  it("reads a trailing 1–2 digit comma as the Swiss decimal", () => {
-    expect(parse("89,90")).toBe(8_990);
-    expect(parse("1'234,5")).toBe(123_450);
-  });
-
-  it("reads a 3-digit comma group as thousands, not as a 1000x shrink", () => {
-    expect(parse("1,250")).toBe(125_000);
-    expect(parse("1,250.50")).toBe(125_050);
-  });
-});
-
-describe("parseAllocationArgs sweep fencing", () => {
-  it("ignores goal/amount pairs outside the propose_allocation argument region", () => {
-    // An echoed pair before the call, and one after the array closes — only
-    // the pair inside the (truncated) argument array may count.
-    const content =
-      'Earlier: {"goal": "Echo", "amount_chf": "100"}. Now propose_allocation: ' +
-      '[{"goal": "Ferien", "amount_chf": "600"}] and again {"goal": "Ghost", "amount_chf": "50"},';
-    expect(parseAllocationArgs(content)).toEqual([
-      { goal: "Ferien", amountMinor: 60_000 },
-    ]);
-  });
-});
-
-describe("extractJsonAfter retry", () => {
-  it("skips an unparseable balanced region and finds the real arguments", () => {
-    const content =
-      'propose_allocation takes arguments like {allocations: [1]} — here: {"propose_allocation": {"allocations": [{"goal": "Ferien", "amount_chf": 1}]}}';
-    const args = extractJsonAfter(content, "propose_allocation") as Record<string, unknown>;
-    expect(args).toBeTruthy();
-    expect(args.allocations).toBeTruthy();
-  });
-
-  it("steps inside an unclosed prose brace to reach a balanced object", () => {
-    const content = 'propose_allocation {broken and never closed {"allocations": []}';
-    const args = extractJsonAfter(content, "propose_allocation") as Record<string, unknown>;
-    expect(args).toEqual({ allocations: [] });
-  });
-});
-
 describe("extractFollowUps", () => {
   it("splits the inline array form the locale prompt invites", () => {
     const { text, followUps } = extractFollowUps(
@@ -667,17 +536,6 @@ describe("extractFollowUps", () => {
     );
     expect(text).toContain("cancel Netflix");
     expect(followUps).toEqual([]);
-  });
-});
-
-describe("parseToolCalls", () => {
-  it("does not scan FOLLOWUP lines for tool names", () => {
-    expect(
-      parseToolCalls(
-        "Your biggest cost is Travel.\nFOLLOWUP: Should I call get_savings_potential next?",
-      ),
-    ).toEqual([]);
-    expect(parseToolCalls('[{"get_overview": {}}]')).toEqual(["get_overview"]);
   });
 });
 
@@ -753,5 +611,163 @@ describe("defaultAllocationSplit", () => {
     const { proposal } = buildAllocationProposal(defaultAllocationSplit(view), view);
     expect(proposal?.addTotalMinor).toBe(100_000);
     expect(proposal?.items.map((i) => i.name)).toEqual(["Ferien", "Auto"]);
+  });
+});
+
+/**
+ * What replaced the prose parsers. The endpoint hands back `arguments` as a
+ * JSON string it never validated, so these are the guards between it and the
+ * tools — nothing here may throw, and nothing may repair a value into
+ * something the model did not say.
+ */
+describe("tool call arguments", () => {
+  it("parses an ordinary argument object", () => {
+    expect(parseToolArguments('{"period": "2025-03"}')).toEqual({ period: "2025-03" });
+    expect(periodArgument({ period: " YTD " })).toBe("ytd");
+    expect(sqlArgument({ sql: "SELECT 1 FROM transactions" })).toBe(
+      "SELECT 1 FROM transactions",
+    );
+  });
+
+  it("treats unusable arguments as absent rather than throwing", () => {
+    // Truncation at max_tokens, an empty call and a non-object are all routine.
+    // Note what is NOT here: the prose sweep that used to salvage goal/amount
+    // pairs out of a truncated array. A native call either arrives complete or
+    // the round is re-asked, so there is no half-call left to rescue.
+    expect(parseToolArguments('{"period": ')).toEqual({});
+    expect(parseToolArguments("")).toEqual({});
+    expect(parseToolArguments(undefined)).toEqual({});
+    expect(parseToolArguments("[1, 2]")).toEqual({});
+    expect(periodArgument({})).toBeUndefined();
+    expect(periodArgument({ period: "  " })).toBeUndefined();
+    expect(sqlArgument({ sql: 42 })).toBeUndefined();
+  });
+
+  it("recognises only tools it actually serves", () => {
+    expect(asToolName("run_sql")).toBe("run_sql");
+    // A neighbouring model emitted exactly this typo in testing.
+    expect(asToolName("run__sql")).toBeUndefined();
+    expect(asToolName(undefined)).toBeUndefined();
+    expect(
+      toolNamesIn([
+        { id: "a", type: "function", function: { name: "get_overview", arguments: "{}" } },
+        { id: "b", type: "function", function: { name: "nope", arguments: "{}" } },
+      ]),
+    ).toEqual(["get_overview"]);
+  });
+});
+
+describe("allocationsFrom", () => {
+  it("reads a clean call, numeric and Swiss-formatted string amounts alike", () => {
+    expect(
+      allocationsFrom({
+        allocations: [
+          { goal: "Ferien", amount_chf: 600 },
+          { goal: "Auto", amount_chf: "CHF 1'200,50" },
+        ],
+      }),
+    ).toEqual([
+      { goal: "Ferien", amountMinor: 60_000 },
+      { goal: "Auto", amountMinor: 120_050 },
+    ]);
+  });
+
+  it("tolerates the wrapper key and field names the model reaches for", () => {
+    expect(allocationsFrom({ split: [{ name: "Ferien", amount: 600 }] })).toEqual([
+      { goal: "Ferien", amountMinor: 60_000 },
+    ]);
+  });
+
+  it("drops entries it cannot read, and returns nothing for nothing", () => {
+    expect(
+      allocationsFrom({ allocations: [{ goal: "Ferien" }, { amount_chf: 50 }, 7] }),
+    ).toEqual([]);
+    expect(allocationsFrom({})).toEqual([]);
+  });
+
+  // The comma is ambiguous on a Swiss statement and the reading has to be the
+  // same one `francsToMinor` always made.
+  it("keeps the comma semantics", () => {
+    const parse = (amount: string) =>
+      allocationsFrom({ allocations: [{ goal: "F", amount_chf: amount }] })[0]?.amountMinor;
+    expect(parse("89,90")).toBe(8_990);
+    expect(parse("1'234,5")).toBe(123_450);
+    expect(parse("1,250")).toBe(125_000);
+    expect(parse("1,250.50")).toBe(125_050);
+  });
+});
+
+/**
+ * An answer that names a tool, or that is a call the model typed out instead
+ * of making, is not an answer — it is the model showing its plumbing. Used
+ * only to reject a reply, never to route one. FOLLOWUP lines are removed
+ * before this ever sees the text, so a follow-up naming a tool is not the
+ * false positive it would otherwise be.
+ */
+describe("showsPlumbing", () => {
+  it("passes a real answer", () => {
+    expect(showsPlumbing("You spend the most on Wednesdays.")).toBe(false);
+    expect(showsPlumbing("Ihr Geld fliesst in die Miete (21'840.00 CHF).")).toBe(false);
+  });
+
+  it("rejects a tool named in prose, or a call written out as JSON", () => {
+    expect(showsPlumbing("Call get_savings_goals with the month.")).toBe(true);
+    expect(
+      showsPlumbing('Here you go:\n{"allocations": [{"goal": "Ferien"}]}'),
+    ).toBe(true);
+  });
+
+  it("rejects a tool the model invented, not just the ones that exist", () => {
+    // Observed live: the reader was told to call a function nobody wrote.
+    expect(
+      showsPlumbing("Ich kann das nicht beantworten. Bitte rufe get_weekday_spending an."),
+    ).toBe(true);
+    expect(showsPlumbing("Sort by amount_chf to see it.")).toBe(true);
+  });
+});
+
+/**
+ * The assistant's one hard promise is that every franc on screen came off the
+ * customer's statements. The model quotes one it was never given on a
+ * minority of turns — naming March's spending as CHF 5'210.40 when the tool
+ * had returned CHF 6'960.90.
+ */
+describe("unverifiedAmounts", () => {
+  const seen = numbersIn(
+    JSON.stringify({ rows: [{ month: "March", spent: "6'960.90" }, { spent: "12'423.03" }] }),
+  );
+
+  it("passes amounts the tools returned", () => {
+    expect(unverifiedAmounts("March was CHF 6'960.90, July CHF 12'423.03.", seen)).toEqual([]);
+  });
+
+  it("catches an amount no tool returned", () => {
+    expect(unverifiedAmounts("March was the highest at CHF 5'210.40.", seen)).toEqual([
+      "5'210.40",
+    ]);
+  });
+
+  it("does not police percentages, years, or counts", () => {
+    expect(
+      unverifiedAmounts("In 2025 you made 48 payments, about 23.5% of them online.", seen),
+    ).toEqual([]);
+  });
+});
+
+/** The model's scratchpad is never the answer. */
+describe("stripReasoning", () => {
+  it("removes think blocks, keeping the answer after them", () => {
+    expect(
+      stripReasoning("<think>Der Benutzer fragt auf Deutsch…</think>\n\nDein Geld geht…"),
+    ).toBe("Dein Geld geht…");
+  });
+
+  it("drops an unclosed think block whole — a truncated answer is not an answer", () => {
+    expect(stripReasoning("Fine so far. <think>and then it was cut off")).toBe("Fine so far.");
+  });
+
+  it("removes Apertus control tokens and anything after a tool block", () => {
+    expect(stripReasoning('Answer.<|tools_prefix|>[{"get_overview": {}}]')).toBe("Answer.");
+    expect(stripReasoning("<|assistant|>Answer.<|end|>")).toBe("Answer.");
   });
 });
