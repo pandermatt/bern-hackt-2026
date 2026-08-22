@@ -88,21 +88,15 @@ export default function Loading() {
         <SectionHeading titleWidth="w-[220px]" metaWidth="w-[250px]" />
         <div className="h-[454px] rounded-lg bg-surface-muted" />
 
-        {/* Top merchants: eight rows over two columns, so four rows tall. */}
+        {/* Top merchants: eight rows over two columns, so four rows tall. Each
+            row is now one 36px bar carrying its own mark and name, so the
+            skeleton is the bar — full width, because the coloured fill inside
+            it lands on a track that spans the row either way. */}
         <SectionHeading titleWidth="w-[190px]" />
-        <div className="rounded-lg bg-surface-muted p-4 sm:p-5">
-          <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+        <div className="rounded-lg bg-surface-muted p-3 sm:p-4">
+          <div className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">
             {[0, 1, 2, 3, 4, 5, 6, 7].map((row) => (
-              <div key={row}>
-                {/* Staggered widths read as a ranked list, not eight identical
-                    bars. `bg-surface`, not the `Bar` helper's grey — inside the
-                    panel that grey is invisible. */}
-                <div
-                  className="h-[13px] rounded bg-surface"
-                  style={{ width: `${[70, 58, 64, 46, 52, 61, 44, 38][row]}%` }}
-                />
-                <div className="mt-1.5 h-[6px] w-full rounded bg-surface" />
-              </div>
+              <div key={row} className="h-9 rounded-md bg-surface" />
             ))}
           </div>
         </div>
