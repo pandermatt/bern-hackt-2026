@@ -1,10 +1,24 @@
 /**
  * Deterministic Transaction Anomaly Detection Engine
  *
- * Implements 30 statistical / deterministic rules for analyzing user bank transactions.
+ * Implements 26 statistical / deterministic rules for analyzing user bank transactions.
  * Rules operate ONLY on mathematical baselines (median, MAD, percentiles, intervals, trend regressions).
  * No LLMs, no intent inference, no subjective fraud labeling.
+ *
+ * The rules are tuned against `scripts/seed-data` — a year of real Swiss
+ * statements — rather than against fixtures, and `tests/anomaly-seed-data.test.ts`
+ * holds that tuning in place. Two things that measurement settled, in case they
+ * look arbitrary later:
+ *
+ *  - A baseline is only trustworthy if the things in it are comparable. Falling
+ *    back to a category when a merchant is too sparse sounds safe and is not: it
+ *    measured power bills against phone bills.
+ *  - Rules overlap. Four of them describe one transaction's amount, so without
+ *    the consolidation pass at the bottom of this file, one afternoon of airline
+ *    bookings reported itself fifteen times.
  */
+
+import { formatDay, formatMoney } from "@/lib/insights";
 
 export type AnomalySeverity = "low" | "medium" | "high";
 
@@ -18,12 +32,8 @@ export const RULE_EMOJIS: Record<string, string> = {
   NEW_RECURRING_PAYMENT: "📅",
   RECURRING_PAYMENT_CHANGE: "🔄",
   RECURRING_PAYMENT_DISAPPEARANCE: "❌",
-  UNUSUAL_TIME: "🕒",
   UNUSUAL_DAY: "🗓️",
-  VELOCITY_SPIKE: "⚡",
-  DUPLICATE_TRANSACTION: "👯",
-  UNUSUAL_LOCATION: "📍",
-  RAPID_LOCATION_CHANGE: "✈️",
+  REPEAT_CHARGE: "👯",
   NEW_COUNTERPARTY: "👤",
   LARGE_TRANSFER: "↔️",
   INCOME_DEVIATION: "💼",
@@ -52,20 +62,6 @@ export interface AnomalyInsight {
   emoji: string;
 }
 
-export function getAnomaliesByTransactionId(
-  anomalies: AnomalyInsight[],
-): Map<number, AnomalyInsight[]> {
-  const map = new Map<number, AnomalyInsight[]>();
-  for (const anomaly of anomalies) {
-    for (const id of anomaly.transaction_ids) {
-      const list = map.get(id) ?? [];
-      list.push(anomaly);
-      map.set(id, list);
-    }
-  }
-  return map;
-}
-
 export interface TransactionInput {
   id: number;
   userId?: number | null;
@@ -77,21 +73,11 @@ export interface TransactionInput {
   merchant: string;
   category: string;
   description: string;
-  location?: {
-    city?: string;
-    country?: string;
-    lat?: number;
-    lon?: number;
-  };
-  paymentMethod?: string;
-  timestamp?: number; // epoch ms (optional)
 }
 
 export interface EngineOptions {
   referenceDate?: string; // "YYYY-MM-DD"
   typicalMonthlyIncomeMinor?: number; // if known in advance, else inferred from salary/income history
-  minHistoryDays?: number;
-  travelSpeedThresholdKmH?: number; // default 800 km/h
   targetTransactionIds?: number[] | Set<number>; // if provided, only flag anomalies for these transactions
 }
 
@@ -127,9 +113,7 @@ export function parseTransactionDate(t: TransactionInput): Date {
   if (cached) return cached;
 
   let parsed: Date;
-  if (t.timestamp) {
-    parsed = new Date(t.timestamp);
-  } else if (t.bookedOn.includes("T") || t.bookedOn.includes(":")) {
+  if (t.bookedOn.includes("T") || t.bookedOn.includes(":")) {
     // Support both YYYY-MM-DD and full ISO strings
     parsed = new Date(t.bookedOn);
   } else {
@@ -197,20 +181,6 @@ export function fitLinearSlope(yValues: number[]): number {
   const denominator = n * sumXX - sumX * sumX;
   if (denominator === 0) return 0;
   return (n * sumXY - sumX * sumY) / denominator;
-}
-
-export function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
 }
 
 /**
@@ -290,7 +260,7 @@ export function detectRecurringPatterns(
       const amounts = sorted.map((t) => Math.abs(t.amountMinor));
       const medianAmount = calculateMedian(amounts);
       const amountMAD = calculateMAD(amounts, medianAmount);
-      // Predictable subscription: amounts are tight (amount MAD <= 10% of median)
+      // Predictable subscription: amounts are tight (amount MAD <= 15% of median)
       const isPredictable =
         medianAmount > 0 && amountMAD / medianAmount <= 0.15;
 
@@ -340,8 +310,7 @@ export function analyzeTransactionAnomalies(
   const typicalMonthlyIncome =
     options.typicalMonthlyIncomeMinor ?? estimateTypicalMonthlyIncome(sorted);
 
-  const rawInsights: Omit<AnomalyInsight, "emoji">[] = [];
-  const insights = rawInsights;
+  const insights: Omit<AnomalyInsight, "emoji">[] = [];
 
   // Groupings by category, merchant, etc.
   const expensesByCategory = new Map<string, TransactionInput[]>();
@@ -405,7 +374,7 @@ export function analyzeTransactionAnomalies(
 
       if (!monthlyAccountSpend.has(month)) monthlyAccountSpend.set(month, new Map());
       const accMap = monthlyAccountSpend.get(month)!;
-      const acc = t.paymentMethod || t.account;
+      const acc = t.account;
       accMap.set(acc, (accMap.get(acc) ?? 0) + mag);
     } else if (t.kind === "income") {
       monthlyIncome.set(month, (monthlyIncome.get(month) ?? 0) + Math.abs(t.amountMinor));
@@ -413,6 +382,28 @@ export function analyzeTransactionAnomalies(
   }
 
   const allMonths = [...new Set([...monthlyExpenses.keys(), ...monthlyIncome.keys()])].sort();
+
+  /**
+   * The largest expenses behind a month-level finding.
+   *
+   * The rules that describe a whole month rather than a transaction used to
+   * report no transaction ids at all. That is not a harmless omission: findings
+   * are stored one row per (finding, transaction) pair, so every one of them was
+   * computed and then silently dropped on the way to the database — 23 of 98 on
+   * a year of real statements. Naming the biggest contributors both keeps the
+   * finding alive and answers the reader's first question, which is "driven by
+   * what?".
+   */
+  const representativeIds = (
+    month: string,
+    match: (t: TransactionInput) => boolean,
+    limit = 3,
+  ): number[] =>
+    sorted
+      .filter((t) => t.kind === "expense" && t.bookedOn.slice(0, 7) === month && match(t))
+      .sort((a, b) => Math.abs(b.amountMinor) - Math.abs(a.amountMinor))
+      .slice(0, limit)
+      .map((t) => t.id);
 
   /* -------------------------------------------------------------------------
      RULE 1: AMOUNT_SPIKE
@@ -431,11 +422,29 @@ export function analyzeTransactionAnomalies(
     const mag = Math.abs(t.amountMinor);
     const norm = normalizeMerchant(t.merchant);
 
-    const fullMerchantHistory = expensesByMerchant.get(norm) ?? [];
-    const fullCategoryHistory = expensesByCategory.get(t.category) ?? [];
-
-    const baselineGroup = fullMerchantHistory.length >= 5 ? fullMerchantHistory : fullCategoryHistory;
-    const baselineType = fullMerchantHistory.length >= 5 ? "merchant" : "category";
+    /*
+     * The merchant's own history, or nothing. This used to fall back to the
+     * category when a merchant had fewer than five expenses, which sounds
+     * harmless and is not: 43 of the 61 merchants in a year of real statements
+     * are below that line, and a category is not a comparable population. It
+     * put a CHF 210 power bill next to a CHF 19.90 phone bill (both "Utilities
+     * & Telecom") and called it a spike three times over; likewise a CHF 1501
+     * annual travel pass against single SBB tickets, and restaurant dinners
+     * against canteen lunches.
+     *
+     * Gating the fallback on how tight the category looks does not rescue it —
+     * it makes it worse. "Food & Drink" is 121 canteen lunches out of 128 rows,
+     * so it scores as extremely homogeneous while being plainly bimodal, and a
+     * homogeneity test would hand the fallback its highest confidence exactly
+     * where it is most wrong.
+     *
+     * Sparse merchants are not left unwatched: UNUSUALLY_LARGE_TRANSACTION and
+     * UNUSUAL_FINANCIAL_IMPACT are percentile-based over the whole ledger and
+     * need no merchant history, which is what catches a first-ever CHF 6000
+     * purchase.
+     */
+    const baselineGroup = expensesByMerchant.get(norm) ?? [];
+    const baselineType = "merchant";
 
     if (baselineGroup.length >= 5) {
       /*
@@ -611,7 +620,7 @@ export function analyzeTransactionAnomalies(
      Trigger when 7d or 30d transaction count >= 2x baseline AND absolute >= 3.
      ------------------------------------------------------------------------- */
   if (totalHistoryDays >= 30) {
-    for (const [norm, group] of allByMerchantNorm.entries()) {
+    for (const group of allByMerchantNorm.values()) {
       if (group.length < 6) continue;
       const merchantHistoryDays = Math.max(
         1,
@@ -806,45 +815,11 @@ export function analyzeTransactionAnomalies(
   }
 
   /* -------------------------------------------------------------------------
-     RULE 10: UNUSUAL_TIME
-     Icon: lucide:clock-3
-     Trigger when transaction occurs outside user's 99th percentile time range.
-     ------------------------------------------------------------------------- */
-  const hoursRecorded = sorted
-    .filter((t) => t.timestamp || (t.bookedOn.includes("T") && !t.bookedOn.includes("T12:00:00")))
-    .map((t) => parseTransactionDate(t).getUTCHours());
-
-  if (hoursRecorded.length >= 30) {
-    const lowHourP1 = calculatePercentile(hoursRecorded, 1);
-    const highHourP99 = calculatePercentile(hoursRecorded, 99);
-
-    for (const t of sorted) {
-      if (!t.timestamp && !t.bookedOn.includes("T")) continue;
-      const h = parseTransactionDate(t).getUTCHours();
-      if (h < lowHourP1 || h > highHourP99) {
-        insights.push({
-          rule_id: "UNUSUAL_TIME",
-          title: "Unusual Time of Day",
-          description: `Transaction at ${h}:00 UTC falls outside normal activity hours (${Math.round(lowHourP1)}:00 - ${Math.round(highHourP99)}:00).`,
-          severity: "low",
-          transaction_ids: [t.id],
-          supporting_metrics: {
-            hour: h,
-            normal_hour_min: Math.round(lowHourP1),
-            normal_hour_max: Math.round(highHourP99),
-          },
-          icon: "lucide:clock-3",
-        });
-      }
-    }
-  }
-
-  /* -------------------------------------------------------------------------
      RULE 11: UNUSUAL_DAY
      Icon: lucide:calendar-clock
      Trigger only for strict merchant/category weekday patterns (>= 25 samples, 0 historical on this day).
      ------------------------------------------------------------------------- */
-  for (const [norm, group] of expensesByMerchant.entries()) {
+  for (const group of expensesByMerchant.values()) {
     if (group.length >= 25) {
       const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
       for (const g of group) {
@@ -873,159 +848,90 @@ export function analyzeTransactionAnomalies(
   }
 
   /* -------------------------------------------------------------------------
-     RULE 12: VELOCITY_SPIKE
-     Icon: lucide:gauge
-     Trigger when >= 5 tx in 10 min OR >= 10 tx in 60 min.
-     ------------------------------------------------------------------------- */
-  const txWithExactTime = sorted.filter((t) => t.timestamp || (t.bookedOn.includes("T") && !t.bookedOn.includes("12:00:00")));
-  if (txWithExactTime.length >= 5) {
-    for (let i = 0; i < txWithExactTime.length; i++) {
-      const t1 = txWithExactTime[i];
-      const time1 = parseTransactionDate(t1).getTime();
-
-      const in10Min = txWithExactTime.filter((t2) => {
-        const diffMin = (parseTransactionDate(t2).getTime() - time1) / 60000;
-        return diffMin >= 0 && diffMin <= 10;
-      });
-
-      const in60Min = txWithExactTime.filter((t2) => {
-        const diffMin = (parseTransactionDate(t2).getTime() - time1) / 60000;
-        return diffMin >= 0 && diffMin <= 60;
-      });
-
-      if (in10Min.length >= 5 || in60Min.length >= 10) {
-        const isExtreme = in10Min.length >= 10 || in60Min.length >= 20;
-        const severity: AnomalySeverity = isExtreme ? "high" : "medium";
-        const flagged = in10Min.length >= 5 ? in10Min : in60Min;
-        insights.push({
-          rule_id: "VELOCITY_SPIKE",
-          title: "High Transaction Velocity Burst",
-          description: `${flagged.length} transactions executed within a very short window.`,
-          severity,
-          transaction_ids: flagged.map((f) => f.id),
-          supporting_metrics: {
-            count_10min: in10Min.length,
-            count_60min: in60Min.length,
-            burst_size: flagged.length,
-          },
-          icon: "lucide:gauge",
-        });
-        i += flagged.length - 1;
-      }
-    }
-  }
-
-  /* -------------------------------------------------------------------------
-     RULE 13: DUPLICATE_TRANSACTION
+     RULE 12: REPEAT_CHARGE
      Icon: lucide:copy
-     Trigger when same merchant, amount, currency, account occur <= 5 mins apart.
-     ------------------------------------------------------------------------- */
-  const exactTxs = sorted.filter((t) => t.timestamp || t.bookedOn.includes("T"));
-  for (let i = 0; i < exactTxs.length; i++) {
-    for (let j = i + 1; j < exactTxs.length; j++) {
-      const t1 = exactTxs[i];
-      const t2 = exactTxs[j];
-      const d1 = parseTransactionDate(t1);
-      const d2 = parseTransactionDate(t2);
-      const diffMinutes = Math.abs(d2.getTime() - d1.getTime()) / 60000;
+     The same merchant billing the same amount more than once on one day.
 
-      if (
-        diffMinutes <= 5 &&
-        t1.amountMinor === t2.amountMinor &&
-        t1.currency === t2.currency &&
-        t1.account === t2.account &&
-        normalizeMerchant(t1.merchant) === normalizeMerchant(t2.merchant)
-      ) {
-        insights.push({
-          rule_id: "DUPLICATE_TRANSACTION",
-          title: "Potential Duplicate Transaction",
-          description: `Two identical charges of ${(Math.abs(t1.amountMinor) / 100).toFixed(2)} ${t1.currency} at "${t1.merchant}" occurred ${diffMinutes.toFixed(0)} mins apart.`,
-          severity: "medium",
-          transaction_ids: [t1.id, t2.id],
-          supporting_metrics: {
-            merchant: t1.merchant,
-            amount_minor: Math.abs(t1.amountMinor),
-            currency: t1.currency,
-            account: t1.account,
-            diff_minutes: Number(diffMinutes.toFixed(1)),
-          },
-          icon: "lucide:copy",
-        });
-      }
+     This replaces a duplicate-detection rule that required two charges within
+     five minutes of each other. Statements do not carry a time of day — every
+     row is anchored to noon — so that rule could never fire on real data, while
+     the plainest anomaly in a year of statements went unnamed: an airline
+     charging CHF 1'766.50 four times over on a single day.
+
+     Import artefacts are already gone by the time rows reach here. The importer
+     dedupes on a natural key (`scripts/lib/statement.ts`), which is what stops
+     the credit-card payments listed in both account exports from counting
+     twice, so a same-day repeat that survives is a genuinely separate charge.
+     ------------------------------------------------------------------------- */
+  {
+    type RepeatGroup = { rows: TransactionInput[]; merchant: string; day: string };
+    const repeats = new Map<string, RepeatGroup>();
+    /** Days this merchant was active at all, to judge whether repeats are its norm. */
+    const activeDays = new Map<string, Set<string>>();
+    const repeatDays = new Map<string, Set<string>>();
+
+    for (const t of sorted) {
+      if (t.kind !== "expense") continue;
+      const norm = normalizeMerchant(t.merchant);
+      const days = activeDays.get(norm) ?? new Set<string>();
+      days.add(t.bookedOn);
+      activeDays.set(norm, days);
+
+      const key = `${t.bookedOn}|${norm}|${t.amountMinor}`;
+      const group = repeats.get(key) ?? { rows: [], merchant: t.merchant, day: t.bookedOn };
+      group.rows.push(t);
+      repeats.set(key, group);
     }
-  }
 
-  /* -------------------------------------------------------------------------
-     RULE 14: UNUSUAL_LOCATION
-     Icon: lucide:map-pin
-     ------------------------------------------------------------------------- */
-  const locationTxs = sorted.filter((t) => t.location?.country || t.location?.city);
-  if (locationTxs.length >= 10) {
-    const historicalCountries = new Set<string>();
-    for (let i = 0; i < locationTxs.length; i++) {
-      const t = locationTxs[i];
-      const country = t.location?.country;
-      if (country && i >= 10 && !historicalCountries.has(country)) {
-        insights.push({
-          rule_id: "UNUSUAL_LOCATION",
-          title: "New Geographic Location",
-          description: `Transaction initiated in new country "${country}".`,
-          severity: "medium",
-          transaction_ids: [t.id],
-          supporting_metrics: {
-            country,
-            city: t.location?.city ?? "Unknown",
-            prior_countries_count: historicalCountries.size,
-          },
-          icon: "lucide:map-pin",
-        });
-      }
-      if (country) historicalCountries.add(country);
+    for (const [key, group] of repeats.entries()) {
+      if (group.rows.length < 2) continue;
+      const norm = key.split("|")[1];
+      const days = repeatDays.get(norm) ?? new Set<string>();
+      days.add(group.day);
+      repeatDays.set(norm, days);
     }
-  }
 
-  /* -------------------------------------------------------------------------
-     RULE 15: RAPID_LOCATION_CHANGE
-     Icon: lucide:plane
-     ------------------------------------------------------------------------- */
-  const geoTxs = sorted.filter(
-    (t) =>
-      t.location?.lat !== undefined &&
-      t.location?.lon !== undefined &&
-      (t.timestamp || t.bookedOn.includes("T")),
-  );
+    for (const [key, group] of repeats.entries()) {
+      const count = group.rows.length;
+      if (count < 2) continue;
 
-  const speedLimitKmH = options.travelSpeedThresholdKmH ?? 800;
+      const mag = Math.abs(group.rows[0].amountMinor);
+      // Two identical coffees are not a finding.
+      if (mag < 2000) continue;
+      // A subscription billed on a schedule is already explained elsewhere.
+      if (group.rows.some((r) => predictableRecurringTxIds.has(r.id))) continue;
 
-  for (let i = 1; i < geoTxs.length; i++) {
-    const prev = geoTxs[i - 1];
-    const curr = geoTxs[i];
-    const hours = (parseTransactionDate(curr).getTime() - parseTransactionDate(prev).getTime()) / (1000 * 60 * 60);
+      /*
+       * Some merchants split every purchase into several equal lines, and that
+       * billing style should not read as an anomaly every time. But the test
+       * has to be conservative in both directions: an airline appears on four
+       * days all year and books repeats on three of them, which by ratio alone
+       * looks like a habit and would have buried the very charge this rule
+       * exists to surface — the same CHF 1'766.50 taken four times over. So
+       * judge the habit only from a merchant seen across enough days, and never
+       * let it explain away a third identical charge.
+       */
+      const norm = key.split("|")[1];
+      const active = activeDays.get(norm)?.size ?? 1;
+      const repeated = repeatDays.get(norm)?.size ?? 0;
+      if (count < 3 && active >= 8 && repeated / active > 0.25) continue;
 
-    if (hours > 0 && hours < 24) {
-      const dist = haversineDistanceKm(
-        prev.location!.lat!,
-        prev.location!.lon!,
-        curr.location!.lat!,
-        curr.location!.lon!,
-      );
-      const speed = dist / hours;
-      if (speed > speedLimitKmH && dist > 200) {
-        insights.push({
-          rule_id: "RAPID_LOCATION_CHANGE",
-          title: "Implausible Travel Velocity",
-          description: `Consecutive transactions separated by ${Math.round(dist)} km within ${hours.toFixed(1)} hours (required speed: ${Math.round(speed)} km/h).`,
-          severity: "high",
-          transaction_ids: [prev.id, curr.id],
-          supporting_metrics: {
-            distance_km: Math.round(dist),
-            time_delta_hours: Number(hours.toFixed(2)),
-            required_speed_kmh: Math.round(speed),
-            threshold_speed_kmh: speedLimitKmH,
-          },
-          icon: "lucide:plane",
-        });
-      }
+      const severity: AnomalySeverity = count >= 3 ? "high" : "medium";
+      insights.push({
+        rule_id: "REPEAT_CHARGE",
+        title: "Charged the same amount more than once",
+        description: `${group.merchant} charged ${formatMoney(mag, group.rows[0].currency)} ${count} times on ${formatDay(group.day)}, totalling ${formatMoney(mag * count, group.rows[0].currency)}.`,
+        severity,
+        transaction_ids: group.rows.map((r) => r.id),
+        supporting_metrics: {
+          charge_count: count,
+          amount_minor: mag,
+          total_minor: mag * count,
+          merchant_active_days: active,
+          merchant_repeat_days: repeated,
+        },
+        icon: "lucide:copy",
+      });
     }
   }
 
@@ -1282,7 +1188,7 @@ export function analyzeTransactionAnomalies(
             title: "Savings Rate Shift",
             description: `Monthly savings rate shifted from ${(baselineMedian * 100).toFixed(1)}% to ${(curRate * 100).toFixed(1)}% (${ppDiff.toFixed(1)} percentage point shift).`,
             severity,
-            transaction_ids: [],
+            transaction_ids: representativeIds(curMonth, () => true),
             supporting_metrics: {
               month: curMonth,
               current_savings_rate: Number((curRate * 100).toFixed(1)),
@@ -1329,7 +1235,7 @@ export function analyzeTransactionAnomalies(
             title: "Category Share Composition Shift",
             description: `"${cat}" represented ${curShare.toFixed(1)}% of total monthly spend in ${curMonth} (baseline median was ${baselineShareMedian.toFixed(1)}%).`,
             severity: "medium",
-            transaction_ids: [],
+            transaction_ids: representativeIds(curMonth, (t) => t.category === cat),
             supporting_metrics: {
               category: cat,
               month: curMonth,
@@ -1379,7 +1285,7 @@ export function analyzeTransactionAnomalies(
             title: "Merchant Spending Concentration",
             description: `Merchant "${merchantName}" captured ${curShare.toFixed(1)}% of total monthly spend (+${ppDiff.toFixed(1)} pp above baseline).`,
             severity: "low",
-            transaction_ids: [],
+            transaction_ids: representativeIds(curMonth, (t) => normalizeMerchant(t.merchant) === norm),
             supporting_metrics: {
               merchant: merchantName,
               month: curMonth,
@@ -1528,7 +1434,7 @@ export function analyzeTransactionAnomalies(
             title: "Payment Method Utilization Shift",
             description: `Share of spending via "${acc}" shifted by ${ppDiff.toFixed(1)} pp in ${curMonth} (${curShare.toFixed(1)}% vs baseline ${baselineMedian.toFixed(1)}%).`,
             severity: "low",
-            transaction_ids: [],
+            transaction_ids: representativeIds(curMonth, (t) => t.account === acc),
             supporting_metrics: {
               account_or_method: acc,
               month: curMonth,
@@ -1578,7 +1484,7 @@ export function analyzeTransactionAnomalies(
               title: "Sustained Expense Growth Trend",
               description: `Category "${cat}" exhibited steady growth over 4 consecutive months (+${(avgGrowthRate * 100).toFixed(0)}% average monthly expansion).`,
               severity,
-              transaction_ids: [],
+              transaction_ids: representativeIds(allMonths[i], (t) => t.category === cat),
               supporting_metrics: {
                 category: cat,
                 consecutive_growing_periods: 4,
@@ -1658,13 +1564,16 @@ export function analyzeTransactionAnomalies(
     }
   }
 
-  let finalInsights = rawInsights;
+  // Collapse before filtering, so a target set narrows whole findings rather
+  // than the fragments they were assembled from.
+  let finalInsights = consolidateInsights(insights, sorted);
+
   if (options.targetTransactionIds) {
     const targetSet =
       options.targetTransactionIds instanceof Set
         ? options.targetTransactionIds
         : new Set(options.targetTransactionIds);
-    finalInsights = rawInsights.filter((r) =>
+    finalInsights = finalInsights.filter((r) =>
       r.transaction_ids.some((id) => targetSet.has(id)),
     );
   }
@@ -1673,4 +1582,125 @@ export function analyzeTransactionAnomalies(
     ...r,
     emoji: RULE_EMOJIS[r.rule_id] ?? "⚠️",
   }));
+}
+
+/* =========================================================================
+   CONSOLIDATION
+   ========================================================================= */
+
+/**
+ * Rules that describe *one transaction's amount*, strongest first. When two of
+ * these cover the same rows, only the strongest is kept — they are four ways of
+ * saying "this charge was big", and stacking them buries the finding that
+ * actually adds something.
+ *
+ * Rules absent from this list are never suppressed: a category overspend or a
+ * balance drawdown on the same day is a different observation about a different
+ * unit of analysis, not a restatement.
+ */
+const AMOUNT_RULE_PRECEDENCE = [
+  "REPEAT_CHARGE",
+  "UNUSUALLY_LARGE_TRANSACTION",
+  "AMOUNT_SPIKE",
+  "UNUSUAL_FINANCIAL_IMPACT",
+];
+
+type RawInsight = Omit<AnomalyInsight, "emoji">;
+
+/**
+ * Rules that already emit one finding per event rather than per transaction.
+ * Merging these by (day, merchant) would fuse genuinely separate findings —
+ * four charges of CHF 1'766.50 and four of CHF 98.00 on one airline day are two
+ * facts, and the merged description could only state one of them.
+ */
+const EVENT_SHAPED_RULES = new Set(["REPEAT_CHARGE"]);
+
+/**
+ * Turns per-transaction findings into per-event findings.
+ *
+ * Without this, one afternoon of airline bookings — four identical charges plus
+ * four identical fees — produced fifteen findings across six rules, and the
+ * reader had to work out for themselves that it was all one purchase. Two
+ * passes fix that: merge a rule's own findings when they describe the same
+ * merchant on the same day, then drop the weaker amount rules once a stronger
+ * one already covers those rows.
+ *
+ * Exported for its own tests; `analyzeTransactionAnomalies` applies it already.
+ */
+export function consolidateInsights(
+  insights: RawInsight[],
+  transactions: TransactionInput[],
+): RawInsight[] {
+  if (insights.length === 0) return [];
+
+  const byId = new Map<number, TransactionInput>();
+  for (const t of transactions) byId.set(t.id, t);
+
+  /** The (day, merchant) an insight sits on, or null when it spans several. */
+  const eventKeyOf = (insight: RawInsight): string | null => {
+    let key: string | null = null;
+    for (const id of insight.transaction_ids) {
+      const t = byId.get(id);
+      if (!t) return null;
+      const here = `${t.bookedOn}|${normalizeMerchant(t.merchant)}`;
+      if (key === null) key = here;
+      else if (key !== here) return null;
+    }
+    return key;
+  };
+
+  // Pass A — merge a rule's findings that land on the same merchant and day.
+  const merged: RawInsight[] = [];
+  const mergedByKey = new Map<string, RawInsight>();
+
+  for (const insight of insights) {
+    const eventKey = EVENT_SHAPED_RULES.has(insight.rule_id) ? null : eventKeyOf(insight);
+    if (eventKey === null) {
+      merged.push(insight);
+      continue;
+    }
+    const key = `${insight.rule_id}|${eventKey}`;
+    const existing = mergedByKey.get(key);
+    if (!existing) {
+      const copy = { ...insight, transaction_ids: [...insight.transaction_ids] };
+      mergedByKey.set(key, copy);
+      merged.push(copy);
+      continue;
+    }
+    const ids = new Set(existing.transaction_ids);
+    for (const id of insight.transaction_ids) ids.add(id);
+    existing.transaction_ids = [...ids].sort((a, b) => a - b);
+    // The merged finding now speaks for several charges, so the count belongs
+    // in the metrics even when the individual rule never tracked one.
+    existing.supporting_metrics = {
+      ...existing.supporting_metrics,
+      merged_transaction_count: existing.transaction_ids.length,
+    };
+    if (rank(insight.severity) > rank(existing.severity)) {
+      existing.severity = insight.severity;
+    }
+  }
+
+  // Pass B — drop an amount rule whose rows a stronger amount rule already owns.
+  const strongest = new Map<number, number>(); // transaction id -> best precedence
+  for (const insight of merged) {
+    const precedence = AMOUNT_RULE_PRECEDENCE.indexOf(insight.rule_id);
+    if (precedence === -1) continue;
+    for (const id of insight.transaction_ids) {
+      const best = strongest.get(id);
+      if (best === undefined || precedence < best) strongest.set(id, precedence);
+    }
+  }
+
+  return merged.filter((insight) => {
+    const precedence = AMOUNT_RULE_PRECEDENCE.indexOf(insight.rule_id);
+    if (precedence === -1) return true;
+    // Survives if it is the strongest claim on at least one of its own rows —
+    // so a finding covering rows nothing else reached is never lost.
+    return insight.transaction_ids.some((id) => strongest.get(id) === precedence);
+  });
+}
+
+function rank(severity: AnomalySeverity): number {
+  return severity === "high" ? 3 : severity === "medium" ? 2 : 1;
 }

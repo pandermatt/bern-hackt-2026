@@ -4,7 +4,7 @@ import {
   calculateMAD,
   calculateMedian,
   calculatePercentile,
-  detectRecurringPatterns,
+  consolidateInsights,
   fitLinearSlope,
   normalizeMerchant,
   type TransactionInput,
@@ -59,55 +59,44 @@ describe("Anomaly Detection Rules Evaluation", () => {
     expect(amountSpike?.icon).toBe("lucide:arrow-up");
   });
 
-  it("triggers DUPLICATE_TRANSACTION when identical charges happen simultaneously", () => {
+  it("triggers REPEAT_CHARGE when one merchant bills the same amount twice in a day", () => {
+    // Statements carry no time of day, so the replaced duplicate rule — which
+    // wanted two charges within five minutes — could never fire on real rows.
     const txs: TransactionInput[] = [
-      { id: 101, bookedOn: "2025-02-01T10:00:00Z", timestamp: 1738404000000, kind: "expense", amountMinor: -4500, currency: "CHF", account: "KK-Konto", merchant: "Starbucks", category: "Food & Drink", description: "Coffee" },
-      { id: 102, bookedOn: "2025-02-01T10:02:00Z", timestamp: 1738404120000, kind: "expense", amountMinor: -4500, currency: "CHF", account: "KK-Konto", merchant: "Starbucks", category: "Food & Drink", description: "Coffee" },
+      { id: 101, bookedOn: "2025-02-01", kind: "expense", amountMinor: -176650, currency: "CHF", account: "KK-Konto", merchant: "SWISS", category: "Travel", description: "Flight" },
+      { id: 102, bookedOn: "2025-02-01", kind: "expense", amountMinor: -176650, currency: "CHF", account: "KK-Konto", merchant: "SWISS", category: "Travel", description: "Flight" },
     ];
 
-    const results = analyzeTransactionAnomalies(txs);
-    const dup = results.find((r) => r.rule_id === "DUPLICATE_TRANSACTION");
+    const repeat = analyzeTransactionAnomalies(txs).find((r) => r.rule_id === "REPEAT_CHARGE");
 
-    expect(dup).toBeDefined();
-    expect(dup?.transaction_ids).toEqual([101, 102]);
-    expect(dup?.icon).toBe("lucide:copy");
-    expect(dup?.severity).toBe("medium");
+    expect(repeat).toBeDefined();
+    expect(repeat?.transaction_ids).toEqual([101, 102]);
+    expect(repeat?.icon).toBe("lucide:copy");
+    expect(repeat?.severity).toBe("medium");
+    expect(repeat?.supporting_metrics.charge_count).toBe(2);
+    expect(repeat?.supporting_metrics.total_minor).toBe(353300);
   });
 
-  it("triggers RAPID_LOCATION_CHANGE when geographic distance exceeds speed threshold", () => {
+  it("escalates REPEAT_CHARGE to high once the same amount lands three times", () => {
+    const txs: TransactionInput[] = [1, 2, 3].map((n) => ({
+      id: 100 + n, bookedOn: "2025-02-01", kind: "expense" as const, amountMinor: -176650,
+      currency: "CHF", account: "KK-Konto", merchant: "SWISS", category: "Travel", description: "Flight",
+    }));
+
+    const repeat = analyzeTransactionAnomalies(txs).find((r) => r.rule_id === "REPEAT_CHARGE");
+
+    expect(repeat?.severity).toBe("high");
+    expect(repeat?.transaction_ids).toHaveLength(3);
+  });
+
+  it("leaves small same-day repeats alone", () => {
+    // Two identical CHF 4.50 coffees are a Tuesday, not a finding.
     const txs: TransactionInput[] = [
-      {
-        id: 201,
-        bookedOn: "2025-03-01T12:00:00Z",
-        kind: "expense",
-        amountMinor: -2000,
-        currency: "CHF",
-        account: "KK-Konto",
-        merchant: "Zürich Cafe",
-        category: "Food & Drink",
-        description: "Coffee",
-        location: { city: "Zurich", country: "CH", lat: 47.3769, lon: 8.5417 },
-      },
-      {
-        id: 202,
-        bookedOn: "2025-03-01T13:00:00Z",
-        kind: "expense",
-        amountMinor: -3500,
-        currency: "EUR",
-        account: "KK-Konto",
-        merchant: "London Shop",
-        category: "Shopping",
-        description: "Retail",
-        location: { city: "London", country: "GB", lat: 51.5074, lon: -0.1278 },
-      },
+      { id: 111, bookedOn: "2025-02-01", kind: "expense", amountMinor: -450, currency: "CHF", account: "KK-Konto", merchant: "Starbucks", category: "Food & Drink", description: "Coffee" },
+      { id: 112, bookedOn: "2025-02-01", kind: "expense", amountMinor: -450, currency: "CHF", account: "KK-Konto", merchant: "Starbucks", category: "Food & Drink", description: "Coffee" },
     ];
 
-    const results = analyzeTransactionAnomalies(txs, { travelSpeedThresholdKmH: 500 });
-    const rapidTravel = results.find((r) => r.rule_id === "RAPID_LOCATION_CHANGE");
-
-    expect(rapidTravel).toBeDefined();
-    expect(rapidTravel?.severity).toBe("high");
-    expect(rapidTravel?.icon).toBe("lucide:plane");
+    expect(analyzeTransactionAnomalies(txs).some((r) => r.rule_id === "REPEAT_CHARGE")).toBe(false);
   });
 
   it("triggers RECURRING_PAYMENT_CHANGE when a subscription changes price", () => {
@@ -137,32 +126,6 @@ describe("Anomaly Detection Rules Evaluation", () => {
 
     expect(missing).toBeDefined();
     expect(missing?.icon).toBe("lucide:calendar-x");
-  });
-
-  it("triggers VELOCITY_SPIKE when many transactions occur in a short window", () => {
-    const txs: TransactionInput[] = [];
-    const baseTime = 1738404000000;
-    for (let i = 0; i < 6; i++) {
-      txs.push({
-        id: 500 + i,
-        bookedOn: new Date(baseTime + i * 60000).toISOString(),
-        timestamp: baseTime + i * 60000,
-        kind: "expense",
-        amountMinor: -1000,
-        currency: "CHF",
-        account: "KK-Konto",
-        merchant: `Shop ${i}`,
-        category: "Shopping",
-        description: `Tx ${i}`,
-      });
-    }
-
-    const results = analyzeTransactionAnomalies(txs);
-    const vel = results.find((r) => r.rule_id === "VELOCITY_SPIKE");
-
-    expect(vel).toBeDefined();
-    expect(vel?.icon).toBe("lucide:gauge");
-    expect(vel?.transaction_ids.length).toBeGreaterThanOrEqual(5);
   });
 
   it("evaluates anomaly distribution on full synthetic dataset without over-flagging normal transactions", () => {
@@ -215,8 +178,97 @@ describe("Anomaly Detection Rules Evaluation", () => {
 
     const results = analyzeTransactionAnomalies(syntheticTxs);
     const flaggedIds = new Set(results.flatMap((r) => r.transaction_ids));
-    
+
     // Normal recurring rent/salary and routine groceries should not all be flagged
     expect(flaggedIds.size).toBeLessThan(syntheticTxs.length * 0.15);
+
+    // The rent is identical all twelve months; flagging it would mean the
+    // recurring-payment suppression has stopped working.
+    const rentIds = syntheticTxs.filter((t) => t.merchant === "Immobilien AG").map((t) => t.id);
+    for (const id of rentIds) {
+      expect(flaggedIds.has(id)).toBe(false);
+    }
+  });
+});
+
+describe("consolidateInsights", () => {
+  const tx = (id: number, bookedOn: string, merchant: string): TransactionInput => ({
+    id, bookedOn, kind: "expense", amountMinor: -100000, currency: "CHF",
+    account: "KK-Konto", merchant, category: "Travel", description: "x",
+  });
+
+  const insight = (
+    rule_id: string,
+    transaction_ids: number[],
+    severity: "low" | "medium" | "high" = "medium",
+  ) => ({
+    rule_id, title: rule_id, description: rule_id, severity,
+    transaction_ids, supporting_metrics: {}, icon: "lucide:arrow-up",
+  });
+
+  const rows = [tx(1, "2025-09-18", "SWISS"), tx(2, "2025-09-18", "SWISS"), tx(3, "2025-09-19", "SWISS")];
+
+  it("merges a rule's findings that land on the same merchant and day", () => {
+    const out = consolidateInsights(
+      [insight("AMOUNT_SPIKE", [1]), insight("AMOUNT_SPIKE", [2])],
+      rows,
+    );
+
+    expect(out).toHaveLength(1);
+    expect(out[0].transaction_ids).toEqual([1, 2]);
+    expect(out[0].supporting_metrics.merged_transaction_count).toBe(2);
+  });
+
+  it("keeps separate days apart", () => {
+    const out = consolidateInsights(
+      [insight("AMOUNT_SPIKE", [1]), insight("AMOUNT_SPIKE", [3])],
+      rows,
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  it("takes the strongest severity into the merged finding", () => {
+    const out = consolidateInsights(
+      [insight("AMOUNT_SPIKE", [1], "low"), insight("AMOUNT_SPIKE", [2], "high")],
+      rows,
+    );
+    expect(out[0].severity).toBe("high");
+  });
+
+  it("drops a weaker amount rule once a stronger one covers the same rows", () => {
+    const out = consolidateInsights(
+      [insight("AMOUNT_SPIKE", [1]), insight("REPEAT_CHARGE", [1])],
+      rows,
+    );
+    expect(out.map((i) => i.rule_id)).toEqual(["REPEAT_CHARGE"]);
+  });
+
+  it("keeps an amount rule that reaches a row nothing stronger did", () => {
+    const out = consolidateInsights(
+      [insight("AMOUNT_SPIKE", [3]), insight("REPEAT_CHARGE", [1])],
+      rows,
+    ).map((i) => i.rule_id);
+
+    expect(out).toContain("AMOUNT_SPIKE");
+    expect(out).toContain("REPEAT_CHARGE");
+  });
+
+  it("never suppresses a finding about a different unit of analysis", () => {
+    // A category overspend on the same day is not a restatement of the charge.
+    const out = consolidateInsights(
+      [insight("REPEAT_CHARGE", [1]), insight("CATEGORY_SPENDING_SPIKE", [1])],
+      rows,
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  it("leaves already-event-shaped findings unmerged", () => {
+    // Two amounts billed repeatedly on one day are two findings; merging them
+    // would leave a single description that can only name one of the amounts.
+    const out = consolidateInsights(
+      [insight("REPEAT_CHARGE", [1]), insight("REPEAT_CHARGE", [2])],
+      rows,
+    );
+    expect(out).toHaveLength(2);
   });
 });
