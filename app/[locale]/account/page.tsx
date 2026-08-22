@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 
+import { getAnomalyScanState } from "@/app/actions/anomalies";
 import { AnomalyScanControls } from "@/components/anomaly-scan-controls";
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
@@ -26,6 +27,10 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
 
   const user = await getCurrentUser();
   if (!user) return redirect({ href: "/login", locale });
+
+  // Resolved on the server: the controls poll a run's *progress*, which says
+  // nothing about whether the statements have moved on since it finished.
+  const { outdated } = await getAnomalyScanState();
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -77,7 +82,7 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
         </div>
       </div>
 
-      <AnomalyScanControls />
+      <AnomalyScanControls outdated={outdated} />
 
       <div className="card mt-8 overflow-hidden border-danger/30">
         <div className="border-b border-danger/20 bg-danger-soft px-4 py-3 sm:px-5">

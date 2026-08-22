@@ -1,6 +1,8 @@
 "use client";
 
+import { TriangleAlert } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -36,10 +38,11 @@ function formatWhen(value: Date | string | null, locale: string, never: string):
   }).format(date);
 }
 
-export function AnomalyScanControls() {
+export function AnomalyScanControls({ outdated = false }: { outdated?: boolean }) {
   const t = useTranslations("AnomalyScan");
   const tPhases = useTranslations("ScanPhases");
   const locale = useLocale();
+  const router = useRouter();
   const [status, setStatus] = useState<ScanStatus | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -47,6 +50,10 @@ export function AnomalyScanControls() {
   // once a run that had already finished is replaced by a new one.
   const [watch, setWatch] = useState(0);
   const cancelled = useRef(false);
+  // `outdated` is a server render, and a scan finishing is exactly what makes
+  // it wrong. Tracks the transition so the page can be refreshed once, rather
+  // than on every poll.
+  const wasRunning = useRef(false);
 
   useEffect(() => {
     cancelled.current = false;
@@ -60,7 +67,15 @@ export function AnomalyScanControls() {
       if (cancelled.current) return;
       setStatus(next);
       setLoaded(true);
-      if (next?.status === "running") timer = setTimeout(tick, POLL_MS);
+      if (next?.status === "running") {
+        wasRunning.current = true;
+        timer = setTimeout(tick, POLL_MS);
+      } else if (wasRunning.current) {
+        // The run just ended, so whatever the server said about being out of
+        // date no longer holds. One refresh, on the edge only.
+        wasRunning.current = false;
+        router.refresh();
+      }
     }
 
     void tick();
@@ -71,7 +86,7 @@ export function AnomalyScanControls() {
       cancelled.current = true;
       if (timer) clearTimeout(timer);
     };
-  }, [watch]);
+  }, [watch, router]);
 
   const running = status?.status === "running";
 
@@ -125,6 +140,16 @@ export function AnomalyScanControls() {
             {running ? t("running") : pending ? t("starting") : t("run")}
           </button>
         </div>
+
+        {/* The re-run button above is always available — this only says when
+            pressing it would actually change something. Hidden while a scan is
+            in flight, because "out of date" is about to stop being true. */}
+        {outdated && !running && (
+          <p className="mt-3 flex items-start gap-2 text-[13px] text-brand-ink">
+            <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+            <span>{t("outdated")}</span>
+          </p>
+        )}
 
         {running && (
           <div className="mt-4">

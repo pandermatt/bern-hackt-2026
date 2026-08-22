@@ -5,12 +5,13 @@ import { getTranslations } from "next-intl/server";
 
 import { getAnomalyRuleDetail } from "@/app/actions/anomalies";
 import { AnomalyIcon } from "@/components/anomaly-icon";
+import { ResolveToggle } from "@/components/resolve-toggle";
 import { Section } from "@/components/section";
 import type { Transaction } from "@/db/schema";
 import { Link, redirect } from "@/i18n/navigation";
 import type { AnomalySeverity } from "@/lib/anomaly-engine";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDay, formatMoney } from "@/lib/insights";
+import { formatDay, formatMoney, groupByDayMerchant } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 
@@ -32,17 +33,49 @@ const SEVERITY_CLASSES: Record<AnomalySeverity, string> = {
 /**
  * Close to the ledger's own row, so a transaction looks like itself in both
  * places — but flat, because here every row already shares one finding and
- * carries no badges of its own.
+ * carries no badges of its own. The date has moved up to the group heading,
+ * which is where it is now said once instead of on every line.
+ *
+ * A server component: the amounts and merchant names never leave the server.
+ * Only the toggle beside it is a client component, and it is handed ids.
  */
-function Row({ row }: { row: Transaction }) {
+function Row({
+  row,
+  ruleId,
+  resolved,
+  label,
+}: {
+  row: Transaction;
+  ruleId: string;
+  resolved: boolean;
+  label: string;
+}) {
   const inflow = row.amountMinor > 0;
 
   return (
-    <li className="flex items-baseline gap-3 px-4 py-2.5 sm:px-5">
-      <span className="w-[11ch] shrink-0 font-mono text-[12px] text-text-subtle tabular-nums">
-        {formatDay(row.bookedOn)}
+    <li
+      className={`flex items-baseline gap-3 px-4 py-2.5 sm:px-5 ${
+        // The same "switched off" treatment the hidden category chips wear, so
+        // a thing you have dealt with looks the same everywhere in the app.
+        resolved ? "opacity-60" : ""
+      }`}
+    >
+      <span className="self-center">
+        <ResolveToggle
+          ruleId={ruleId}
+          transactionIds={[row.id]}
+          resolved={resolved}
+          label={label}
+          className="size-[16px]"
+        />
       </span>
-      <span className="min-w-0 flex-1 truncate text-[13.5px] text-text">{row.merchant}</span>
+      <span
+        className={`min-w-0 flex-1 truncate text-[13.5px] text-text ${
+          resolved ? "line-through" : ""
+        }`}
+      >
+        {row.description || row.merchant}
+      </span>
       <span
         className={`shrink-0 font-mono text-[13px] tabular-nums ${
           inflow ? "text-positive" : "text-text"
@@ -52,6 +85,100 @@ function Row({ row }: { row: Transaction }) {
         {formatMoney(row.amountMinor)}
       </span>
     </li>
+  );
+}
+
+/**
+ * The rows of one section, folded into (booking day, merchant) groups.
+ *
+ * That pair is the unit `consolidateInsights` merges findings on, so it is the
+ * boundary the engine itself already treats as "one event" — four charges of a
+ * single duplicate billing belong to one heading and resolve together.
+ *
+ * Three scopes of control, and they nest: the page header ticks off the whole
+ * rule, a group heading ticks off its day at its merchant, a row ticks off
+ * itself. A group counts as resolved only when every row in it is, so the
+ * heading's state can never claim more than the rows underneath it.
+ */
+function GroupedRows({
+  rows,
+  ruleId,
+  resolvedIds,
+  t,
+}: {
+  rows: Transaction[];
+  ruleId: string;
+  resolvedIds: Set<number>;
+  t: Awaited<ReturnType<typeof getTranslations<"Anomalies">>>;
+}) {
+  const groups = groupByDayMerchant(rows);
+
+  return (
+    <ul className="divide-y divide-surface">
+      {groups.map((group) => {
+        const ids = group.rows.map((row) => row.id);
+        const groupResolved = ids.every((id) => resolvedIds.has(id));
+
+        return (
+          <li key={group.key}>
+            <div className="flex items-center gap-3 bg-surface-muted px-4 py-2.5 sm:px-5">
+              <ResolveToggle
+                ruleId={ruleId}
+                transactionIds={ids}
+                resolved={groupResolved}
+                label={t(groupResolved ? "unresolveGroup" : "resolveGroup", {
+                  merchant: group.merchant,
+                  day: formatDay(group.bookedOn),
+                })}
+              />
+              <div className="min-w-0 flex-1">
+                <p
+                  className={`truncate text-[14px] font-medium text-text ${
+                    groupResolved ? "line-through opacity-70" : ""
+                  }`}
+                >
+                  {group.merchant}
+                </p>
+                <p className="font-mono text-[12px] text-text-subtle tabular-nums">
+                  {formatDay(group.bookedOn)}
+                  {/* Only worth saying when the group is more than its one
+                      row — otherwise the count restates the line below it. */}
+                  {group.rows.length > 1 &&
+                    ` · ${t("count", { count: group.rows.length })}`}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-[13px] text-text tabular-nums">
+                {formatMoney(group.totalMinor)}
+              </span>
+            </div>
+
+            {/* A group of one is its own heading already — a single row
+                underneath would be the same line twice, with a second toggle
+                that does exactly what the first does. */}
+            {group.rows.length > 1 && (
+              <ul className="divide-y divide-surface border-t border-surface">
+                {group.rows.map((row) => (
+                  <Row
+                    key={row.id}
+                    row={row}
+                    ruleId={ruleId}
+                    resolved={resolvedIds.has(row.id)}
+                    /* Named by the line the row actually shows, not by the
+                       merchant: two salary payments from one employer on one
+                       day are two buttons, and naming both after the merchant
+                       and the amount gives them the same accessible name. */
+                    label={t(resolvedIds.has(row.id) ? "unresolveOne" : "resolveOne", {
+                      amount: formatMoney(row.amountMinor),
+                      line: row.description || row.merchant,
+                    })}
+                  />
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -80,6 +207,13 @@ export default async function AnomalyRulePage({
   if (!detail) notFound();
 
   const explanation = explain.has(detail.ruleId) ? explain(detail.ruleId) : null;
+
+  const resolvedIds = new Set(detail.resolvedIds);
+  const allIds = [
+    ...(detail.focus?.rows ?? []).map((row) => row.id),
+    ...detail.others.map((row) => row.id),
+  ];
+  const allResolved = allIds.length > 0 && allIds.every((id) => resolvedIds.has(id));
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -114,6 +248,26 @@ export default async function AnomalyRulePage({
           >
             {t("count", { count: detail.transactionCount })}
           </span>
+
+          {/* The whole rule, in one control. `allResolved` is what makes this a
+              real toggle rather than a one-way sweep — clicking a full ring
+              puts everything back, which is the only way out of resolving 40
+              rows by mistake. */}
+          <span className="inline-flex items-center gap-2">
+            <ResolveToggle
+              ruleId={detail.ruleId}
+              transactionIds={allIds}
+              resolved={allResolved}
+              label={t(allResolved ? "unresolveAll" : "resolveAll")}
+              className="size-[20px]"
+            />
+            <span className="text-[13px] font-medium text-text-muted">
+              {t("resolvedOf", {
+                resolved: detail.resolvedIds.length,
+                total: detail.transactionCount,
+              })}
+            </span>
+          </span>
           {/* `includeTransfers` is load-bearing: some rules attach only to
               transfer rows, which the ledger hides unless asked. */}
           <Link
@@ -140,11 +294,12 @@ export default async function AnomalyRulePage({
             <p className="border-b border-surface px-4 py-3 text-[13px] text-text-muted sm:px-5">
               {detail.focus.description}
             </p>
-            <ul className="divide-y divide-surface">
-              {detail.focus.rows.map((row) => (
-                <Row key={row.id} row={row} />
-              ))}
-            </ul>
+            <GroupedRows
+              rows={detail.focus.rows}
+              ruleId={detail.ruleId}
+              resolvedIds={resolvedIds}
+              t={t}
+            />
           </Section>
         )}
 
@@ -155,11 +310,12 @@ export default async function AnomalyRulePage({
             meta={t("count", { count: detail.others.length })}
             panelClassName=""
           >
-            <ul className="divide-y divide-surface">
-              {detail.others.map((row) => (
-                <Row key={row.id} row={row} />
-              ))}
-            </ul>
+            <GroupedRows
+              rows={detail.others}
+              ruleId={detail.ruleId}
+              resolvedIds={resolvedIds}
+              t={t}
+            />
           </Section>
         )}
       </div>

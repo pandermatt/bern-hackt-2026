@@ -34,6 +34,8 @@ export async function generateSyntheticTransactionsAction(options?: {
     // languages at once.
     revalidatePath("/[locale]/dashboard", "page");
     revalidatePath("/[locale]/account", "page");
+    // The import just re-bound (or dropped) every finding.
+    revalidatePath("/[locale]/anomalies", "page");
     const yearsText =
       yearsCount > 1 ? `the last ${yearsCount} years` : "the last 12 months";
 
@@ -63,6 +65,8 @@ export async function loadDemoCsvAction(): Promise<ActionState> {
     const { count } = await loadDemoCsvForUser(user.id);
     revalidatePath("/[locale]/dashboard", "page");
     revalidatePath("/[locale]/account", "page");
+    // The import just re-bound (or dropped) every finding.
+    revalidatePath("/[locale]/anomalies", "page");
     return {
       success: true,
       message: `Successfully loaded ${count} demo transactions from CSV files!`,

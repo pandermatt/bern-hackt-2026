@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import { transactions, users, type NewTransaction } from "../db/schema";
+import { rebindAnomalies } from "../lib/anomaly-sync";
 import { hashPassword } from "../lib/password";
 import { toRecords } from "./lib/csv";
 import {
@@ -172,6 +173,15 @@ async function main() {
     for (let i = 0; i < rows.length; i += 100) {
       db.insert(transactions).values(rows.slice(i, i + 100)).run();
     }
+    /*
+     * The delete-then-insert above reissues every id, so the account's stored
+     * anomaly findings now point at rows that no longer exist. Re-point them by
+     * the natural key they carry. This runs on every boot -- `npm run start` is
+     * `db:push && seed && next start` -- and without it a re-seed of the very
+     * same statements voided the last scan, which is what made people re-run
+     * the detection after every deploy.
+     */
+    rebindAnomalies(db, target.id);
   });
   write();
 
