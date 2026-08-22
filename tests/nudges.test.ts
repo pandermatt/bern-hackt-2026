@@ -87,6 +87,28 @@ describe("rankNudges", () => {
     ).toEqual([]);
   });
 
+  it("stays quiet when the unassigned pool is under CHF 100", () => {
+    // A ceremony over CHF 99.99 is not worth one of the three slots; the
+    // Savings page still shows and allocates it.
+    expect(
+      rankNudges(
+        input({
+          savings: { month: "2025-03", monthEnded: true, freeMinor: 9_999 },
+        }),
+      ),
+    ).toEqual([]);
+
+    // The gate is on the pool, not the single month: CHF 100 sitting
+    // unassigned earns the prompt even if the month that just ended only
+    // contributed a few francs of it.
+    const [nudge] = rankNudges(
+      input({
+        savings: { month: "2025-03", monthEnded: true, freeMinor: 10_000 },
+      }),
+    );
+    expect(nudge).toMatchObject({ kind: "free-money", amountMinor: 10_000 });
+  });
+
   it("puts the worst overspend first", () => {
     const nudges = rankNudges(
       input({

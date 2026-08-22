@@ -219,7 +219,7 @@ async function main() {
   // to re-run against a database that already holds these statements.
   const write = sqlite.transaction(() => {
     db.delete(transactions).where(eq(transactions.userId, target.id)).run();
-    // Chunked: one 929-row statement binds ~11,000 parameters, close enough to
+    // Chunked: one 938-row statement binds ~11,000 parameters, close enough to
     // SQLITE_MAX_VARIABLE_NUMBER to be a build flag away from failing.
     for (let i = 0; i < rows.length; i += 100) {
       db.insert(transactions).values(rows.slice(i, i + 100)).run();

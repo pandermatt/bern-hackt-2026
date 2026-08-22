@@ -35,8 +35,8 @@ describe("the shipped statements", () => {
     // have no sibling account, so all of their rows survive — the two identical
     // same-day Swiss tickets in the Revolut file carry disambiguated names
     // ("Swiss (2)") precisely so this dedupe cannot eat one of them.
-    expect(rawRows).toHaveLength(941);
-    expect(deduped).toHaveLength(929);
+    expect(rawRows).toHaveLength(950);
+    expect(deduped).toHaveLength(938);
   });
 
   it("has no duplicates inside a single export", () => {
@@ -53,7 +53,7 @@ describe("the shipped statements", () => {
       return acc;
     }, {});
 
-    expect(counts).toEqual({ expense: 857, income: 60, transfer: 12 });
+    expect(counts).toEqual({ expense: 866, income: 60, transfer: 12 });
   });
 
   it("totals what the dashboard reports", () => {
@@ -62,7 +62,7 @@ describe("the shipped statements", () => {
         .filter((row) => row.type === kind)
         .reduce((total, row) => total + toMinor(row.base_amount), 0);
 
-    expect(sum("expense")).toBe(13614592);
+    expect(sum("expense")).toBe(15115792);
     expect(sum("income")).toBe(14901135);
     expect(sum("transfer")).toBe(4185064);
   });

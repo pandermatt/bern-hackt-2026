@@ -602,11 +602,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   identical Swiss tickets bought together — same day, merchant and amount —
   are one key, and the dedupe would eat the second; it ships with " (2)"
   appended to its name. Do the same in any future conversion.
-- **Salary lands every month of the covered range.** The 2026 statements only
-  carried May–July paydays, so Jan–Apr and Aug rows were added by hand on the
-  same pattern (CHF 5'617.70 from Employer AG, 22nd–25th, a weekday). Keep
-  the every-month invariant if the range grows — the balance line and the
-  income tiles are read for it.
+- **Salary, rent and Google One land every month of the covered range.** The
+  2026 statements only carried May–July paydays and rents and a Jan–Apr
+  Google One run, so the missing months were added by hand on the same
+  patterns: salary (CHF 5'617.70) and Miete (CHF 3'000) together on the
+  payday, 22nd–25th and a weekday — in the real months the rent leaves the
+  account the day the salary arrives — and Google One (CHF 3) on the 23rd.
+  Keep the every-month invariant if the range grows — the balance line, the
+  income tiles and the recurring-payment rules are read for it.
 - **The opening balance is CHF 20'000** — `OPENING_BALANCE_MINOR` in
   `scripts/lib/statement.ts`, shared by both importers and pinned by
   `tests/demo-data.test.ts`. Change it there and nowhere else.
@@ -642,8 +645,8 @@ Unchanged from the template this app grew out of, and still exactly true.
   with `ERR_REQUIRE_ASYNC_MODULE`. Keep the wrapper.
 - **`naturalKey` — `date|type|source|target|amount|name` — is what makes the
   import idempotent.** A credit-card payment appears in *both* account exports,
-  once per side; without the dedupe those 12 lines count twice. 941 raw lines →
-  929 rows. `transactions.externalId` stores the key, unique per user.
+  once per side; without the dedupe those 12 lines count twice. 950 raw lines →
+  938 rows. `transactions.externalId` stores the key, unique per user.
 - **`MERCHANTS` in `scripts/lib/statement.ts` is the single source of both the
   category and the canonical merchant name.** The exports spell the same
   merchant several ways; grouping on the raw label silently splits the ranking.

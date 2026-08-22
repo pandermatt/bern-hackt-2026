@@ -203,19 +203,19 @@ describe("Demo CSV Loader", () => {
   it("loads and classifies every shipped statement", async () => {
     const { count } = await loadDemoCsvForUser(user1.id);
 
-    // Shipped CSVs have 929 unique transaction keys after deduplicating CC
+    // Shipped CSVs have 938 unique transaction keys after deduplicating CC
     // payments, plus the prepended opening-balance row — the same set
     // `npm run seed` imports, because both importers discover the same
     // directory. This number moving in one importer but not the other is
     // exactly the drift the discovery change exists to prevent.
-    expect(count).toBe(930);
+    expect(count).toBe(939);
 
     const rows = await db
       .select()
       .from(transactions)
       .where(eq(transactions.userId, user1.id));
 
-    expect(rows.length).toBe(930);
+    expect(rows.length).toBe(939);
 
     const categories = new Set(rows.map((r) => r.category));
     expect(categories.has("Food & Drink")).toBe(true);

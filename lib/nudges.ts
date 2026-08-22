@@ -76,6 +76,19 @@ export function isOverBudget(row: BudgetRow): boolean {
   return row.limitMinor !== null && row.usedMinor > row.limitMinor;
 }
 
+/**
+ * The least unassigned money worth a nudge: CHF 100.
+ *
+ * The gate is on the *pool* — everything the ended months left over that the
+ * pots do not yet hold — not on the single month's surplus: CHF 500 sitting
+ * unassigned is worth a prompt even if the month that just ended only added
+ * CHF 12 of it. Below the floor the tip is noise (a ceremony over fifty
+ * rappen) and costs one of only three slots. The money is not hidden either
+ * way: the Savings page still shows and allocates any positive amount, this
+ * only keeps the entry page quiet about it.
+ */
+export const FREE_MONEY_MIN_MINOR = 10_000;
+
 export type NudgeInput = {
   budget: BudgetRow[];
   anomalies: {
@@ -88,6 +101,7 @@ export type NudgeInput = {
   savings: {
     month: string | null;
     monthEnded: boolean;
+    /** Pooled across every ended month, less what the pots already hold. */
     freeMinor: number;
   };
 };
@@ -127,7 +141,9 @@ export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
   // yet — the same contract `monthSurplus` states and `allocateSurplus`
   // enforces on the server.
   const tips: NudgeSpec[] =
-    input.savings.month && input.savings.monthEnded && input.savings.freeMinor > 0
+    input.savings.month &&
+    input.savings.monthEnded &&
+    input.savings.freeMinor >= FREE_MONEY_MIN_MINOR
       ? [
           {
             id: `free-money:${input.savings.month}`,

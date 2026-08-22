@@ -1,8 +1,12 @@
 name,type,source_id,source_label,target_id,target_label,transaction_date,value_date,amount,currency,status,exchange_rate,base_amount,base_currency,description
 Lohnzahlung Employer AG,income,EmployerAG,Employer AG,Account2,ZKB Privatkonto,2026-01-23,2026-01-23,5617.7,CHF,settled,1.0,5617.7,CHF,
+Miete,expense,Account2,ZKB Privatkonto,Rent,Rent,2026-01-23,2026-01-23,3000,CHF,settled,1.0,3000,CHF,
 Lohnzahlung Employer AG,income,EmployerAG,Employer AG,Account2,ZKB Privatkonto,2026-02-24,2026-02-24,5617.7,CHF,settled,1.0,5617.7,CHF,
+Miete,expense,Account2,ZKB Privatkonto,Rent,Rent,2026-02-24,2026-02-24,3000,CHF,settled,1.0,3000,CHF,
 Lohnzahlung Employer AG,income,EmployerAG,Employer AG,Account2,ZKB Privatkonto,2026-03-24,2026-03-24,5617.7,CHF,settled,1.0,5617.7,CHF,
+Miete,expense,Account2,ZKB Privatkonto,Rent,Rent,2026-03-24,2026-03-24,3000,CHF,settled,1.0,3000,CHF,
 Lohnzahlung Employer AG,income,EmployerAG,Employer AG,Account2,ZKB Privatkonto,2026-04-24,2026-04-24,5617.7,CHF,settled,1.0,5617.7,CHF,
+Miete,expense,Account2,ZKB Privatkonto,Rent,Rent,2026-04-24,2026-04-24,3000,CHF,settled,1.0,3000,CHF,
 Belastung TWINT: MOUNTAIN VISION AG LAAX GR 2,expense,Account2,ZKB Privatkonto,Mountain_Vision,Mountain Vision (Laax),2026-05-17,2026-05-17,79.75,CHF,settled,1.0,79.75,CHF,
 Miete,expense,Account2,ZKB Privatkonto,Rent,Rent,2026-05-22,2026-05-22,3000,CHF,settled,1.0,3000,CHF,
 Lohnzahlung Employer AG,income,EmployerAG,Employer AG,Account2,ZKB Privatkonto,2026-05-22,2026-05-22,5617.7,CHF,settled,1.0,5617.7,CHF,
@@ -52,3 +56,4 @@ Belastung TWINT: COOP-2848 ZH SIHLCITY FOOD ZURICH,expense,Account2,ZKB Privatko
 Belastung TWINT: POLIZEIINSPEKTORAT/BERN BERN,expense,Account2,ZKB Privatkonto,Polizeiinspektorat_Bern,Polizeiinspektorat Bern,2026-08-21,2026-08-21,16,CHF,settled,1.0,16,CHF,
 Belastung TWINT: HOSTPOINT RAPPERSWIL,expense,Account2,ZKB Privatkonto,Hostpoint,Hostpoint,2026-08-21,2026-08-21,5,CHF,settled,1.0,5,CHF,
 Lohnzahlung Employer AG,income,EmployerAG,Employer AG,Account2,ZKB Privatkonto,2026-08-21,2026-08-21,5617.7,CHF,settled,1.0,5617.7,CHF,
+Miete,expense,Account2,ZKB Privatkonto,Rent,Rent,2026-08-21,2026-08-21,3000,CHF,settled,1.0,3000,CHF,

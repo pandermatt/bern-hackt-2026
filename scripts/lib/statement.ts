@@ -445,7 +445,7 @@ export function classify(slug: string, label: string): Rule {
 /**
  * The statement line's identity. Deduplicating on this is what stops the 12
  * credit-card payments — which appear byte-identical in both account exports —
- * from counting twice. Verified against the shipped files: 941 rows in, 929
+ * from counting twice. Verified against the shipped files: 950 rows in, 938
  * distinct keys out, and no duplicates *within* any single file — the Revolut
  * converter appends " (2)" to the second of two same-day, same-amount rows at
  * one merchant precisely so this key stays distinct.
