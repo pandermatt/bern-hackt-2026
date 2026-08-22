@@ -420,6 +420,9 @@
     "Transfer": "Übertrag"
   },
   "Metadata": {
+    "siteTitle": "Persönliche Finanz-Insights",
+    "siteTagline": "Sehen Sie, wo Ihr Geld wirklich hingeht.",
+    "siteDescription": "Private Ausgaben-Insights aus Ihren eigenen Kontoauszügen.",
     "login": "Anmelden",
     "register": "Konto erstellen",
     "account": "Kontoeinstellungen",
