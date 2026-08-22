@@ -10,7 +10,7 @@ import {
 import {
   GridComponent,
   LegendComponent,
-  RadarComponent,
+  MarkLineComponent,
   TooltipComponent,
 } from "echarts/components";
 import * as echarts from "echarts/core";
@@ -48,6 +48,10 @@ echarts.use([
   GridComponent,
   RadarComponent,
   LegendComponent,
+  // The balance chart's zero baseline. With bars diverging both ways, the
+  // category axis stays at the bottom (labels can't sit mid-plot), so the
+  // zero line has to be drawn as a mark of its own.
+  MarkLineComponent,
   TooltipComponent,
   // The bar ↔ donut morph: series sharing a `seriesKey` hand their shapes to
   // each other across a `replaceMerge` update instead of fading out and in.
@@ -78,11 +82,10 @@ export type ChartTokens = {
   /** Money in / money out. Direction, not identity — never a series slot. */
   flowIn: string;
   flowOut: string;
-  /** Blue Stone. A threshold or reference line, not a series. */
-  accent: string;
-  /** Text-safe good/bad. `--flow-out` is a 3:1 fill, not a legible 11px label. */
-  positive: string;
-  danger: string;
+  /** `--pistachio-edge`: the stroke a `flowIn` (Pistachio) *fill* must wear —
+   * at 2:1 on white the fill alone is not perceptible. A stroked line doesn't
+   * need it; a bar does. */
+  flowInEdge: string;
 };
 
 const SERIES_TOKENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `--chart-${n}`);
@@ -102,9 +105,7 @@ function readTokens(): ChartTokens {
     ink: read("--chart-ink"),
     flowIn: read("--flow-in"),
     flowOut: read("--flow-out"),
-    accent: read("--accent"),
-    positive: read("--positive"),
-    danger: read("--danger"),
+    flowInEdge: read("--pistachio-edge"),
   };
 }
 

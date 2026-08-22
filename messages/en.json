@@ -133,16 +133,12 @@
   },
   "Trend": {
     "heading": "Month by month",
-    "meta": "Money in against money out",
-    "seriesIn": "In",
-    "seriesOut": "Out",
-    "chartLabel": "Money in and money out in Swiss francs for each month from {first} to {last}. The table below the chart carries the same figures.",
-    "tableLabel": "Money in and out, by month",
+    "meta": "Net balance per month",
+    "chartLabel": "Net balance in Swiss francs for each month from {first} to {last} — bars above the zero line are months that kept money, bars below are months that overspent. The table below the chart carries the same figures.",
+    "tableLabel": "Net balance, by month",
     "month": "Month",
-    "in": "In",
-    "out": "Out",
     "net": "Net",
-    "footnote": "Amounts in CHF."
+    "footnote": "Amounts in CHF. Net is money in minus money out."
   },
   "TopCategories": {
     "heading": "Top categories",

@@ -133,16 +133,12 @@
   },
   "Trend": {
     "heading": "Monat für Monat",
-    "meta": "Geld ein gegen Geld aus",
-    "seriesIn": "Ein",
-    "seriesOut": "Aus",
-    "chartLabel": "Geldeingang und Geldausgang in Schweizer Franken pro Monat, von {first} bis {last}. Die Tabelle unter dem Diagramm enthält dieselben Zahlen.",
-    "tableLabel": "Geld ein und aus, nach Monat",
+    "meta": "Nettosaldo pro Monat",
+    "chartLabel": "Nettosaldo in Schweizer Franken pro Monat, von {first} bis {last} — Balken über der Nulllinie sind Monate mit Überschuss, Balken darunter Monate mit Mehrausgaben. Die Tabelle unter dem Diagramm enthält dieselben Zahlen.",
+    "tableLabel": "Nettosaldo nach Monat",
     "month": "Monat",
-    "in": "Ein",
-    "out": "Aus",
     "net": "Netto",
-    "footnote": "Beträge in CHF."
+    "footnote": "Beträge in CHF. Netto ist Geldeingang minus Geldausgang."
   },
   "TopCategories": {
     "heading": "Top-Kategorien",

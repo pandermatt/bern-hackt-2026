@@ -15,16 +15,18 @@ import { formatMoney, type MonthPoint } from "@/lib/insights";
 import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
- * Money in against money out, month by month, as two overlaid areas.
+ * The month's net balance — money in minus money out — as bars diverging from
+ * a zero line.
  *
- * Deliberately **not** broken down by category. The donut below tells the
- * category story. This chart answers the one question it cannot — whether a
- * month earned more than it spent — and a nine-band stack was drowning that in
- * detail.
+ * Deliberately **not** broken down by category (the donut below owns that
+ * story), and deliberately balance-only: this chart answers the one question
+ * "did the month keep money or overspend", and the sign carries it twice —
+ * position against the zero line and the in/out direction pair. One series, so
+ * no legend box; the heading names it.
  *
- * The areas overlap rather than stack. Stacking income on top of spending sums
- * to a number that means nothing; overlaying them makes the gap between the
- * two curves the thing you actually read, which is the month's net.
+ * `--flow-in` / `--flow-out` because a balance is a direction, not a category.
+ * The positive bars are Pistachio *fills*, so they wear `--pistachio-edge` —
+ * at 2:1 on white the fill alone does not make a shape perceptible.
  */
 
 /**
@@ -36,10 +38,11 @@ const HEIGHT = 320;
 /**
  * On a 390px screen the card leaves ~310px of canvas, and a 58px left gutter
  * spends a fifth of it on axis labels. The narrow gutter is paid for by the
- * `2.5k` formatter below.
+ * `2.5k` formatter below. No legend strip — a single series needs none — so
+ * the bottom holds only the month labels.
  */
-const GRID = { left: 58, right: 14, top: 16, bottom: 46 };
-const GRID_NARROW = { left: 40, right: 10, top: 16, bottom: 40 };
+const GRID = { left: 58, right: 14, top: 16, bottom: 30 };
+const GRID_NARROW = { left: 40, right: 10, top: 16, bottom: 26 };
 
 /** Rounds a rappen amount up to a tidy gridline so the axis reads cleanly. */
 function niceCeiling(value: number): number {
@@ -48,69 +51,57 @@ function niceCeiling(value: number): number {
   return Math.ceil(value / (magnitude / 2)) * (magnitude / 2);
 }
 
+/** Unsigned `formatMoney` plus a real minus glyph — the app-wide convention. */
+function signedMoney(rappen: number): string {
+  return `${rappen < 0 ? "−" : ""}${formatMoney(rappen)}`;
+}
+
 function buildOption(
   series: MonthPoint[],
   tokens: ChartTokens,
   narrow: boolean,
-  labels: { month: (point: MonthPoint) => string; in: string; out: string },
+  labels: { month: (point: MonthPoint) => string },
 ): EChartsOption {
-  const peak = niceCeiling(
-    Math.max(1, ...series.flatMap((point) => [point.income, point.expense])),
-  );
-
-  const area = (colour: string) => ({
-    color: {
-      type: "linear" as const,
-      x: 0, y: 0, x2: 0, y2: 1,
-      // Thin on purpose. Two overlapping fills multiply where they cross, and
-      // at 0.45 the shared region went muddy enough to read as a third colour.
-      // The strokes carry the series; the fill is only there to say which side
-      // of the line is "under".
-      colorStops: [
-        { offset: 0, color: withAlpha(colour, 0.28) },
-        { offset: 1, color: withAlpha(colour, 0.03) },
-      ],
-    },
-  });
-
-  const line = (name: string, colour: string, values: number[]) => ({
-    name,
-    type: "line" as const,
-    smooth: true,
-    // The stroke carries the series; the fill only shades the space under it,
-    // which is why the fill can be transparent enough for both to show.
-    lineStyle: { width: 2, color: colour },
-    itemStyle: { color: colour },
-    areaStyle: area(colour),
-    showSymbol: false,
-    symbol: "circle",
-    symbolSize: 7,
-    emphasis: { focus: "series" as const },
-    data: values,
-  });
+  const nets = series.map((point) => point.net);
+  const peak = niceCeiling(Math.max(1, ...nets));
+  const lowest = Math.min(0, ...nets);
+  const floor = lowest < 0 ? -niceCeiling(-lowest) : 0;
 
   return {
     animationDuration: 600,
     grid: narrow ? GRID_NARROW : GRID,
-    legend: {
-      bottom: 0,
-      icon: "roundRect",
-      itemWidth: 10,
-      itemHeight: 10,
-      itemGap: narrow ? 12 : 16,
-      textStyle: { color: tokens.textMuted, fontSize: 12 },
+    tooltip: {
+      trigger: "axis",
+      // The whole month column is the hit target, not just the bar — a small
+      // near-zero bar would otherwise be almost impossible to hover.
+      axisPointer: { type: "shadow" },
+      confine: true,
+      backgroundColor: tokens.surface,
+      borderColor: tokens.line,
+      textStyle: { color: tokens.text, fontSize: 12 },
+      formatter: (params: unknown) => {
+        const [point] = params as { dataIndex: number }[];
+        const month = series[point.dataIndex];
+        if (!month) return "";
+        // Month plus year: the axis can afford the ambiguity of a bare "Nov"
+        // across several years, the tooltip cannot.
+        return `${labels.month(month)} ${month.month.slice(0, 4)}<br/>${signedMoney(month.net)}`;
+      },
     },
     xAxis: {
       type: "category",
       data: series.map(labels.month),
-      boundaryGap: false,
-      axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
+      // The default puts a category axis on the value axis's zero — which,
+      // with negative months, floats the month labels into the middle of the
+      // plot. The axis stays at the bottom; the markLine below draws the zero.
+      axisLine: { onZero: false, lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
       axisTick: { show: false },
       axisLabel: { color: tokens.ink, fontSize: 11, interval: narrow ? 1 : "auto" },
     },
     yAxis: {
       type: "value",
       max: peak,
+      min: floor,
       axisLabel: {
         color: withAlpha(tokens.ink, 0.75),
         fontSize: 10,
@@ -120,18 +111,48 @@ function buildOption(
         formatter: (value: number) => {
           const francs = Math.round(value / 100);
           if (!narrow || Math.abs(francs) < 1000) {
-            return francs.toLocaleString("de-CH");
+            return francs.toLocaleString("de-CH").replace("-", "−");
           }
           const thousands = francs / 1000;
           // A trailing `.0` costs a character and says nothing.
-          return `${Number(thousands.toFixed(1))}k`;
+          return `${Number(thousands.toFixed(1))}k`.replace("-", "−");
         },
       },
       splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
     },
     series: [
-      line(labels.in, tokens.flowIn, series.map((point) => point.income)),
-      line(labels.out, tokens.flowOut, series.map((point) => point.expense)),
+      {
+        type: "bar",
+        barMaxWidth: narrow ? 16 : 28,
+        data: series.map((point) => ({
+          value: point.net,
+          // Direction pair, not category slots: positive months in `flow-in`,
+          // negative in `flow-out`. The rounded end is the data end, so it
+          // flips to the bottom on a negative bar.
+          itemStyle:
+            point.net >= 0
+              ? {
+                  color: tokens.flowIn,
+                  borderColor: tokens.flowInEdge,
+                  borderWidth: 1,
+                  borderRadius: [4, 4, 0, 0],
+                }
+              : {
+                  color: tokens.flowOut,
+                  borderRadius: [0, 0, 4, 4],
+                },
+        })),
+        // The zero baseline the bars diverge from — heavier than the grid so
+        // "above or below" is readable at a glance.
+        markLine: {
+          silent: true,
+          symbol: "none",
+          animation: false,
+          label: { show: false },
+          lineStyle: { color: withAlpha(tokens.ink, 0.45), width: 1, type: "solid" as const },
+          data: [{ yAxis: 0 }],
+        },
+      },
     ],
   };
 }
@@ -148,10 +169,8 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   const labels = useMemo(
     () => ({
       month: (point: MonthPoint) => tMonths(`short${Number(point.month.slice(5, 7))}`),
-      in: t("seriesIn"),
-      out: t("seriesOut"),
     }),
-    [t, tMonths],
+    [tMonths],
   );
 
   const option = useMemo(
@@ -181,14 +200,18 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
           canvas fails. Also the relief a sub-3:1 fill requires. */}
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
-      <div className="sr-only">
-        <table aria-label={t("tableLabel")}>
-          <thead>
-            <tr>
-              <th scope="col">{t("month")}</th>
-              <th scope="col">{t("in")}</th>
-              <th scope="col">{t("out")}</th>
-              <th scope="col">{t("net")}</th>
+      <table className="sr-only" aria-label={t("tableLabel")}>
+        <thead>
+          <tr>
+            <th scope="col">{t("month")}</th>
+            <th scope="col">{t("net")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {series.map((point) => (
+            <tr key={point.month}>
+              <th scope="row">{point.month}</th>
+              <td>{signedMoney(point.net)}</td>
             </tr>
           </thead>
           <tbody>
