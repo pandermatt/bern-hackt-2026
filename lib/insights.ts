@@ -70,7 +70,10 @@ export type ForecastPoint = {
   label: string;
   /** Spending that month, a positive magnitude. `null` past the statements. */
   actual: number | null;
-  /** The projected run rate, from the last recorded month on. `null` before. */
+  /**
+   * The run rate for that calendar month, from the last recorded month on —
+   * `average` shaped by `seasonalFactors`. `null` before.
+   */
   projected: number | null;
 };
 
@@ -85,7 +88,7 @@ export type SpendForecast = {
   actualMonths: number;
   /** Recorded plus projected for the anchor year. */
   yearTotal: number;
-  /** `average * 12` — the next year is projection all the way down. */
+  /** The next year summed — it is projection all the way down. */
   nextYearTotal: number;
 };
 
@@ -413,12 +416,71 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
  * January of the year after. A forecast anchored on the calendar would show an
  * empty current year and predict nothing.
  *
- * The projection is deliberately the plainest one that can be explained in a
- * tile: the mean of the recorded months, held flat. It carries no seasonality
- * and no trend, which is the honest shape for twelve points — and it is the
- * number the tile prints above the chart, so the figure and the dashed line
- * say the same thing rather than two things.
+ * The projection is the mean of the recorded months, shaped by the statements'
+ * own seasonality — see `seasonalFactors`. It carries no *trend*, which is the
+ * honest shape for twelve points, and the twelve factors average exactly 1, so
+ * the mean of the dashed line is still the number the tile prints above the
+ * chart. The tile says one thing; it just no longer draws it as a ruler.
  */
+/** At most this much of an observed deviation carries into a forecast. */
+const SEASONAL_DAMPING = 0.6;
+
+/** The furthest a projected month may sit from the run rate, either way. */
+const SEASONAL_LIMIT = 0.4;
+
+/**
+ * Twelve multipliers on the run rate, one per calendar month: how a December
+ * compares with an ordinary month across every year of statements there is.
+ *
+ * A flat projection is not wrong, but it is the one shape a year of spending
+ * never has, and a ruler drawn across the tile reads as a placeholder rather
+ * than as a forecast. This is the cheapest honest way to give it a pulse —
+ * the wobble is the account's own December and its own August, not noise.
+ *
+ * Two things keep it a shape rather than a replay. The twelve are **centred on
+ * exactly 1**, which is what keeps the projected year summing to the run rate
+ * and the tile printing one number instead of two; and they are **damped by a
+ * single factor**, tightened until the widest month sits inside
+ * `SEASONAL_LIMIT`, so one CHF 6'000 bike gentles the whole curve instead of
+ * becoming a permanent January.
+ *
+ * A calendar month the statements never reached gets 1. No information is the
+ * flat run rate, not an invented one.
+ */
+function seasonalFactors(buckets: Map<string, number>): number[] {
+  const amounts = [...buckets.values()];
+  const mean = amounts.reduce((sum, value) => sum + value, 0) / amounts.length;
+  // A history of nothing but zero-franc months has no shape to read, and is
+  // also the divide-by-zero.
+  if (mean <= 0) return Array<number>(12).fill(1);
+
+  const sums = Array<number>(12).fill(0);
+  const counts = Array<number>(12).fill(0);
+  for (const [month, amount] of buckets) {
+    const index = Number(month.slice(5, 7)) - 1;
+    sums[index] += amount;
+    counts[index] += 1;
+  }
+
+  const raw = sums.map((sum, index) =>
+    counts[index] === 0 ? 1 : sum / counts[index] / mean,
+  );
+
+  // Centred first, so the twelve average exactly 1 whatever the coverage.
+  const scale = 12 / raw.reduce((sum, factor) => sum + factor, 0);
+  const centred = raw.map((factor) => factor * scale);
+
+  // One damping for all twelve, tightened until the widest month sits inside
+  // the limit. Squeezing the whole shape rather than clipping its peak is what
+  // keeps the mean at exactly 1 — clamping one month and rescaling the rest
+  // hands the peak back most of what the clamp took, and a year with a CHF
+  // 6'000 bike in it came out at twice the run rate every January.
+  const widest = Math.max(...centred.map((factor) => Math.abs(factor - 1)));
+  const damping = widest > 0 ? Math.min(SEASONAL_DAMPING, SEASONAL_LIMIT / widest) : 0;
+
+  return centred.map((factor) => 1 + (factor - 1) * damping);
+}
+
 export function spendForecast(rows: Transaction[]): SpendForecast | null {
   const buckets = new Map<string, number>();
 
@@ -454,6 +516,11 @@ export function spendForecast(rows: Transaction[]): SpendForecast | null {
     months.reduce((sum, value) => sum + value, 0) / months.length,
   );
 
+  // Read from every recorded month, not just the anchor year's: the months
+  // being projected are exactly the ones the anchor year has no figure for,
+  // so a second year of statements is where the shape actually comes from.
+  const factors = seasonalFactors(buckets);
+
   const points: ForecastPoint[] = actuals.map((actual, index) => {
     const month = `${year + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
     return {
@@ -463,7 +530,12 @@ export function spendForecast(rows: Transaction[]): SpendForecast | null {
       // The last recorded month carries both figures on purpose: the solid
       // line and the dashed one share that vertex, so the join is a change of
       // stroke rather than a gap with a jump across it.
-      projected: month > last ? average : month === last ? actual : null,
+      projected:
+        month > last
+          ? Math.round(average * factors[index % 12])
+          : month === last
+            ? actual
+            : null,
     };
   });
 
@@ -477,7 +549,11 @@ export function spendForecast(rows: Transaction[]): SpendForecast | null {
     year,
     actualMonths: months.length,
     yearTotal,
-    nextYearTotal: average * 12,
+    // Summed off the points rather than `average * 12`, so the note under the
+    // tile is the total of the line drawn above it to the rappen.
+    nextYearTotal: points
+      .slice(12)
+      .reduce((sum, point) => sum + (point.projected ?? 0), 0),
   };
 }
 

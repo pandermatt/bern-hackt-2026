@@ -14,8 +14,10 @@ import { formatMoney, type SpendForecast, type Totals } from "@/lib/insights";
  * the Income tile's note breaks the two apart under the total.
  *
  * The fourth tile is the forecast: the average month's spending, over a
- * sparkline of the year the statements end in and the year after. The figure
- * and the dashed line are the same number, so the tile says one thing.
+ * sparkline of the year the statements end in and the year after. The dashed
+ * half undulates with the account's own seasonality, but its twelve factors
+ * average exactly 1 — so the printed figure is the mean of the line above it
+ * and the tile still says one thing.
  */
 export function SummaryCards({
   totals,

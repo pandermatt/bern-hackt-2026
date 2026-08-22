@@ -14,7 +14,8 @@ import { formatMoney, type SpendForecast } from "@/lib/insights";
 
 /**
  * Twenty-four months of spending inside a summary tile: solid where the
- * statements reach, then dashed at the run rate to the end of the year after.
+ * statements reach, then dashed at the run rate — shaped by the statements'
+ * own seasonality, see `seasonalFactors` — to the end of the year after.
  *
  * The stroke change is the whole message — it is where recorded stops and
  * projected starts — so the two are separate series over one axis rather than
