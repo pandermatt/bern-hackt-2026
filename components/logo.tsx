@@ -41,8 +41,15 @@ export function Logo({ href = "/" }: { href?: "/" | "/home" }) {
         {/* The wordmark is the first thing to go on a phone: at 402px this
             header also has to carry four nav tabs and the account controls,
             and the signet on its own is a sufficient logo. The `sr-only` name
-            below is deliberately outside this, so it survives at every width. */}
-        <span aria-hidden="true" className="hidden items-center sm:inline-flex">
+            below is deliberately outside this, so it survives at every width.
+
+            `app-shell:` brings it back in the installed app, where the tabs
+            have moved to the bottom bar and the header has the room again —
+            the crowding this hides from is the only reason it hides. */}
+        <span
+          aria-hidden="true"
+          className="hidden items-center sm:inline-flex app-shell:inline-flex"
+        >
           {site.name}
         </span>
         <span className="sr-only">{site.name}</span>
