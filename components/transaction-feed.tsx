@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import {
   Fragment,
+  startTransition,
   useCallback,
   useEffect,
   useRef,
@@ -83,8 +84,34 @@ export function TransactionFeed({
       const next = await loadLedgerChunk(from, filters);
       // Before the lock opens, so the next caller cannot re-request `from`.
       offset.current = next.nextOffset;
-      setChunks((previous) => [...previous, { offset: from, content: next.content }]);
-      setNextOffset(next.nextOffset);
+      /*
+       * The append is a transition, and this is the whole fix for the ledger
+       * throwing the reader back to the top.
+       *
+       * `next.content` is a server-rendered element that arrived over a Flight
+       * stream. Awaiting the action resolves its *result*; the element inside
+       * is a lazy reference to a row of that stream which may still be in
+       * flight. Rendering it therefore suspends — and as a plain synchronous
+       * update that means React hides everything already on screen and shows
+       * the nearest fallback above this component, which is the route's own
+       * `loading.tsx`. The page collapses from 16 000px to the skeleton's
+       * 2 300, the browser clamps the scroll offset to the shorter document,
+       * and when the chunk lands you are back at the top of the ledger. The
+       * rows never left the DOM; they were `display: none` for a moment.
+       *
+       * Wrapped in a transition, React renders the new chunk in the background
+       * and keeps the current page on screen until it is ready, so the
+       * boundary never flips. This is the case React's "a component suspended
+       * while responding to synchronous input" warning describes.
+       *
+       * It reproduces on a phone and not on a desk because it is a race with
+       * the network: against a local server the stream is complete before the
+       * `await` resolves and nothing ever suspends.
+       */
+      startTransition(() => {
+        setChunks((previous) => [...previous, { offset: from, content: next.content }]);
+        setNextOffset(next.nextOffset);
+      });
     } catch {
       // Leave the offset where it is so the retry button can try again.
       setFailed(true);
