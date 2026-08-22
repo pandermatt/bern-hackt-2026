@@ -518,7 +518,7 @@
 @keyframes pot-spark-burst {
   0% {
     opacity: 1;
-    transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateY(0) scale(1);
+    transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateY(0) scale(1.4);
   }
   100% {
     opacity: 0;
@@ -531,12 +531,17 @@
   position: absolute;
   top: 24%;
   left: 50%;
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: var(--spark-colour);
+  /* A bright core plus a soft halo — a flat 8px dot reads as a smudge, this
+     reads as a spark. */
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--spark-colour) 60%, white),
+    0 0 6px 1px var(--spark-colour);
   opacity: 0;
-  animation: pot-spark-burst 850ms var(--spark-delay, 0ms) ease-out forwards;
+  animation: pot-spark-burst 950ms var(--spark-delay, 0ms) ease-out forwards;
 }
 
 @keyframes pot-glow-pulse {
@@ -545,7 +550,7 @@
     filter: drop-shadow(0 0 0 transparent);
   }
   55% {
-    filter: drop-shadow(0 0 16px var(--pot-glow-colour));
+    filter: drop-shadow(0 0 10px var(--pot-glow-colour)) drop-shadow(0 0 26px var(--pot-glow-colour));
   }
   100% {
     filter: drop-shadow(0 0 0 transparent);

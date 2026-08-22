@@ -33,7 +33,7 @@ const SPARK_COUNT = 12;
 function randomSparks(): Spark[] {
   return Array.from({ length: SPARK_COUNT }, (_, index) => ({
     angle: (360 / SPARK_COUNT) * index + (Math.random() * 20 - 10),
-    distance: 34 + Math.random() * 22,
+    distance: 44 + Math.random() * 34,
     delay: Math.random() * 90,
     colour: `var(--chart-${(index % 10) + 1})`,
   }));
@@ -188,6 +188,7 @@ function PotSlot({
   const full = potFill(pot.savedMinor, pot.targetMinor) >= 1;
   const wasFull = useRef(full);
   const [celebration, setCelebration] = useState<Spark[] | null>(null);
+  const liRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     if (full && !wasFull.current) {
@@ -195,6 +196,10 @@ function PotSlot({
       // this effect already does genuine side-effect work (the timer), which
       // is the one place React's stricter rules allow it.
       setCelebration(randomSparks());
+      // The action that fills a pot — saving the allocator, confirming a
+      // transfer — happens below the pots grid, so without this the burst
+      // plays entirely off-screen above whatever the reader is looking at.
+      liRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       const timer = setTimeout(() => setCelebration(null), CELEBRATION_MS);
       wasFull.current = true;
       return () => clearTimeout(timer);
@@ -204,6 +209,7 @@ function PotSlot({
 
   return (
     <li
+      ref={liRef}
       data-pot-id={pot.id}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
