@@ -253,7 +253,7 @@
   },
   "Budget": {
     "title": "Budget",
-    "subtitle": "Set a monthly limit per category and watch {month} against it.",
+    "subtitle": "Set a monthly limit per category — <savings>savings goals</savings> live on their own page.",
     "subtitleEmpty": "No statements imported yet.",
     "month": "Month",
     "emptyTitle": "Nothing to budget yet",
@@ -263,7 +263,7 @@
     "radarMeta": "{spent} spent of {limit} in {month}",
     "limitsHeading": "Monthly limits",
     "limitsNote": "Leave a field empty for no limit.",
-    "useSuggestions": "Use suggestions",
+    "useSuggestions": "Suggest amounts",
     "suggested": "Suggested {amount} / month",
     "spent": "spent",
     "shareOfLimit": "{share}% of limit",

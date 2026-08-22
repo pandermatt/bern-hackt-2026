@@ -7,7 +7,7 @@ import { BudgetEditor } from "@/components/budget-editor";
 import { BudgetMonthPicker } from "@/components/budget-month-picker";
 import { BudgetRadar } from "@/components/budget-radar";
 import { Section } from "@/components/section";
-import { redirect } from "@/i18n/navigation";
+import { Link, redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/insights";
 
@@ -50,21 +50,27 @@ export default async function BudgetPage({
       {/* The dashboard's and the anomalies page's own heading size. This used
           to be 22px, which put the page title below the section headings that
           sit under it. */}
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
-            {t("title")}
-          </h1>
-          <p className="mt-1 text-[13.5px] text-text-muted">
-            {month ? t("subtitle", { month }) : t("subtitleEmpty")}
-          </p>
-        </div>
-
-        {month && months.length > 1 && (
-          <Suspense fallback={null}>
-            <BudgetMonthPicker months={months} month={month} />
-          </Suspense>
-        )}
+      <div className="mb-5">
+        <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
+          {t("title")}
+        </h1>
+        <p className="mt-1 text-[13.5px] text-text-muted">
+          {month
+            ? /* One sentence with the link inside it, rather than two
+                 fragments spliced around it: German puts "Sparziele"
+                 elsewhere in the clause than English does. */
+              t.rich("subtitle", {
+                savings: (chunks) => (
+                  <Link
+                    href="/savings"
+                    className="font-medium text-accent hover:underline"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })
+            : t("subtitleEmpty")}
+        </p>
       </div>
 
       {rows.length === 0 ? (
@@ -96,6 +102,17 @@ export default async function BudgetPage({
             }
             panelClassName="p-4 sm:p-5"
           >
+            {/* The month lives with the chart it refits, not up beside the
+                page title — the radar's rim is refitted to whichever month is
+                picked, and every figure in the panel follows it. */}
+            {month && months.length > 1 && (
+              <div className="mb-3 flex justify-end">
+                <Suspense fallback={null}>
+                  <BudgetMonthPicker months={months} month={month} />
+                </Suspense>
+              </div>
+            )}
+
             <BudgetRadar rows={rows} />
           </Section>
 

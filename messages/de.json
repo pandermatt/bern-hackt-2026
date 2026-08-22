@@ -253,7 +253,7 @@
   },
   "Budget": {
     "title": "Budget",
-    "subtitle": "Legen Sie pro Kategorie ein Monatslimit fest und verfolgen Sie {month} dagegen.",
+    "subtitle": "Legen Sie pro Kategorie ein Monatslimit fest — <savings>Sparziele</savings> finden Sie auf einer eigenen Seite.",
     "subtitleEmpty": "Noch keine Kontoauszüge importiert.",
     "month": "Monat",
     "emptyTitle": "Noch nichts zu budgetieren",
@@ -263,7 +263,7 @@
     "radarMeta": "{spent} von {limit} ausgegeben in {month}",
     "limitsHeading": "Monatslimits",
     "limitsNote": "Lassen Sie ein Feld leer für kein Limit.",
-    "useSuggestions": "Vorschläge übernehmen",
+    "useSuggestions": "Beträge vorschlagen",
     "suggested": "Vorschlag {amount} / Monat",
     "spent": "ausgegeben",
     "shareOfLimit": "{share}% des Limits",
