@@ -11,8 +11,10 @@ import {
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
+import { initials } from "@/components/merchant-avatar";
 import { Section } from "@/components/section";
 import { categoryIcon } from "@/lib/category-icons";
+import { merchantDomain, merchantSlug } from "@/lib/merchant-brands";
 import {
   formatMoney,
   slotsOf,
@@ -120,6 +122,42 @@ const MEDIAN_SYMBOL = "Ø";
 /** Below this share a wedge is thinner than its own label, so labels are
  * placed selectively — same rule the year donut uses. */
 const WEDGE_LABEL_THRESHOLD = 0.04;
+
+/** Merchant names land in a tooltip's HTML string, and "H&M" is data there,
+ * not markup. */
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ] as string,
+  );
+}
+
+/**
+ * The hovered segment's merchant name with its brand mark — the same mark the
+ * ledger rows wear (`MerchantAvatar`), on the same fixed white tile
+ * (`--logo-tile`), rebuilt as an HTML string because the ECharts tooltip is
+ * DOM built from markup, not a React subtree. Inline styles rather than
+ * Tailwind utilities: classes that appear only inside a JS string are not
+ * something the build's class scan is guaranteed to keep. The CSS variables
+ * resolve normally — the tooltip lives inside the themed document.
+ *
+ * Merchants without a mark get the monogram fallback; the folded "Other
+ * merchants" bucket gets no tile at all, because it is not a merchant.
+ */
+function merchantTitleHtml(rawName: string, displayName: string): string {
+  const tile =
+    "width:20px;height:20px;border-radius:4px;flex:none;border:1px solid var(--line);";
+  const mark =
+    rawName === FOLDED_MERCHANTS
+      ? ""
+      : merchantDomain(rawName)
+        ? `<img src="/api/merchant-icon/${merchantSlug(rawName)}" alt="" width="20" height="20" style="${tile}background:var(--logo-tile);object-fit:contain;padding:2px" />`
+        : `<span style="${tile}display:inline-flex;align-items:center;justify-content:center;background:var(--surface-muted);font-size:9px;font-weight:600;color:var(--text-muted)">${initials(rawName)}</span>`;
+  return `<div style="display:flex;align-items:center;gap:6px">${mark}<span>${escapeHtml(displayName)}</span></div>`;
+}
 
 /**
  * The "Other" bucket: every category that did not earn a bar, folded into one
@@ -229,11 +267,10 @@ function buildOption(
         category.total > 0
           ? Math.round((merchant.amount / category.total) * 100)
           : 0;
-      return `${text.merchantName(merchant.merchant)}<br/>${text.merchantTip(
-        formatMoney(merchant.amount),
-        share,
-        name,
-      )}`;
+      return `${merchantTitleHtml(
+        merchant.merchant,
+        text.merchantName(merchant.merchant),
+      )}${text.merchantTip(formatMoney(merchant.amount), share, name)}`;
     },
   };
 

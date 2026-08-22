@@ -278,12 +278,27 @@ Unchanged from the template this app grew out of, and still exactly true.
   and unreadable as text; the fill it labels is fine because a 2.5px stroke
   with a translucent area is not text.
 - **The two charts answer different questions, and neither should grow into
-  the other.** "Month by month" is money **in against out** over time — two
-  overlaid areas, no category breakdown. The donut carries the category story —
-  and since the ranked "Where it goes" list was dropped as a second telling of
-  it, the donut is the **only** thing carrying it, which is why its legend now
-  shows at every width rather than only from `sm` up. A category breakdown was
-  tried in the trend chart and drowned the in-versus-out reading in nine bands;
+  the other.** "Month by month" is the **net balance** over time — one bar per
+  month diverging from a zero line, coloured by the `--flow-in`/`--flow-out`
+  direction pair, no category breakdown, **one year at a time** behind a
+  prev/next year pager. (It was two overlaid in/out areas before being reduced
+  to balance-only bars.) Hovering a column widens it in place and hangs its
+  amount off the data end — that label *is* the tooltip, so the chart has no
+  floating one. The per-column width is why the bars are an ECharts `custom`
+  series (`renderItem`): a `bar` series has one width for the whole series,
+  and its zero baseline rides an empty companion `bar` series because a custom
+  series cannot carry a `markLine`. Above the bars, a slim aligned panel
+  carries the **running account balance** (`MonthPoint.balance`, the running
+  sum of the nets) as an ink line — its own auto-scaled axis in its own grid,
+  because the stock is routinely thirty times the flows and a shared scale
+  squashes the bars into slivers, while a second axis on one plot would be a
+  dual-axis chart. The synthetic generator's solvency pass raises salaries
+  until that balance ends positive, so demo data always has a line worth
+  reading. The donut carries the category
+  story — and since the ranked "Where it goes" list was dropped as a second
+  telling of it, the donut is the **only** thing carrying it, which is why its
+  legend now shows at every width rather than only from `sm` up. A category
+  breakdown was tried in the trend chart and drowned its reading in nine bands;
   if you want detail there, add a second chart rather than another dimension to
   this one.
 - **A visually hidden table needs a wrapper `<div className="sr-only">`.**
@@ -508,13 +523,11 @@ Unchanged from the template this app grew out of, and still exactly true.
   Pistachio itself there rather than the darkened step.)
 - **A Pistachio fill needs `--pistachio-edge` as a stroke.** At 2:1 the fill
   alone does not make a shape perceptible against white; the edge brings it to
-  3.4:1. `--pistachio` and `--pistachio-edge` currently have **no consumer** —
-  they belonged to the paired-bar chart's inflow bars and its legend swatch,
-  both of which the ECharts rewrite removed. They are kept because they are two
-  of the five brand colours, not because something is drawing with them; if you
-  reach for Pistachio as a fill again, bring the edge with it. Note the edge has
-  to be *lighter* than the fill in `.dark`, not darker — its job is to separate
-  the fill from the ground, and the ground moved.
+  3.4:1. The consumer today is the balance chart's positive bars — `--flow-in`
+  *is* Pistachio, and as a bar it is a fill where the old trend chart used it
+  as a stroke, so `useChartTokens()` exposes the edge as `flowInEdge`. Note the
+  edge has to be *lighter* than the fill in `.dark`, not darker — its job is to
+  separate the fill from the ground, and the ground moved.
 - `--positive` (`#5F7000`) is Pistachio darkened to 5.5:1 for amounts set as
   **text**. Don't use the bright Pistachio for a figure, and don't use
   `--positive` where the brand colour should show.

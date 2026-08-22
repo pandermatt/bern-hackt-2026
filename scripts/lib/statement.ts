@@ -6,6 +6,7 @@
  */
 
 export const CATEGORIES = [
+  "Opening balance",
   "Housing",
   "Health & Insurance",
   "Utilities & Telecom",
@@ -30,6 +31,47 @@ export const CATEGORIES = [
 export type Category = (typeof CATEGORIES)[number];
 
 export type Rule = { name: string; category: Category };
+
+/**
+ * The demo account's opening balance: CHF 10'000, booked the day before the
+ * first statement line by both importers (`scripts/seed.ts` and
+ * `lib/demo-loader.ts`), so the effective balance — the running sum of
+ * monthly nets — starts at the figure instead of at zero.
+ *
+ * Kind `income`, because the balance excludes transfers (only one side of a
+ * transfer between own accounts is recorded). Dated into the month *before*
+ * the statements, so no statement month's net carries a 10'000 spike — the
+ * carried-in money gets a month of its own, which is also what the ledger
+ * shows. It does mean the whole-range "Net" total includes it: with an
+ * opening balance, net-of-everything *is* the account's closing balance.
+ */
+export const OPENING_BALANCE_MINOR = 1_000_000;
+export const OPENING_BALANCE_LABEL = "Opening balance";
+
+function dayBefore(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+/** The row both importers prepend. Not a statement line, so it bypasses
+ * `classify` — the income-means-Refund rule must not catch it. */
+export function openingBalanceRow(userId: number, firstBookedOn: string) {
+  return {
+    userId,
+    externalId: "opening-balance",
+    bookedOn: dayBefore(firstBookedOn),
+    kind: "income" as const,
+    amountMinor: OPENING_BALANCE_MINOR,
+    currency: "CHF",
+    originalAmountMinor: OPENING_BALANCE_MINOR,
+    account: "Privatkonto",
+    merchant: OPENING_BALANCE_LABEL,
+    category: "Opening balance" as Category,
+    description: "Balance carried into the first statement",
+    createdAt: new Date(),
+  };
+}
 
 /**
  * Merchant slug (`target_id` for an expense, `source_id` for income) →

@@ -5,6 +5,7 @@ import {
   Globe,
   HeartPulse,
   House,
+  Landmark,
   Smartphone,
   type LucideIcon,
 } from "lucide-react";
@@ -28,6 +29,7 @@ export const ABSTRACT_GLYPHS: Record<string, LucideIcon> = {
   "Mobile Provider": Smartphone,
   "Employer AG": Banknote,
   "Credit card payment": CreditCard,
+  "Opening balance": Landmark,
   Taxi: Car,
   "Taxi Services": Car,
   "Unknown Digital Merchant UK": Globe,
@@ -36,7 +38,9 @@ export const ABSTRACT_GLYPHS: Record<string, LucideIcon> = {
 /** Words that never carry the initial: "H&M" is HM, "Local Bakery & Café" is LB. */
 const SKIP = new Set(["&", "and", "the", "die", "der", "das", "of", "at"]);
 
-function initials(name: string): string {
+/** Exported for the top-categories tooltip, which draws the same monogram but
+ * as an HTML string — the ECharts tooltip cannot host a React component. */
+export function initials(name: string): string {
   const words = name
     .split(/[\s,._-]+/)
     .filter((word) => word && !SKIP.has(word.toLowerCase()));

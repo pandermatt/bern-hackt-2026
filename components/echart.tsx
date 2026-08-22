@@ -2,6 +2,7 @@
 
 import {
   BarChart,
+  CustomChart,
   LineChart,
   PieChart,
   RadarChart,
@@ -10,13 +11,18 @@ import {
 import {
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   RadarComponent,
   TooltipComponent,
 } from "echarts/components";
 import * as echarts from "echarts/core";
 import { UniversalTransition } from "echarts/features";
 import { CanvasRenderer } from "echarts/renderers";
-import type { EChartsOption } from "echarts";
+import type {
+  CustomSeriesRenderItem,
+  CustomSeriesRenderItemReturn,
+  EChartsOption,
+} from "echarts";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -41,6 +47,10 @@ import { useHydrated } from "@/lib/use-hydrated";
 // charts use — the barrel import is the whole library and roughly triples this.
 echarts.use([
   BarChart,
+  // The balance chart's bars: a plain bar series has one width for the whole
+  // series, and its hover interaction is a single column growing wider — only
+  // `renderItem` can size a bar per data item.
+  CustomChart,
   LineChart,
   PieChart,
   RadarChart,
@@ -48,6 +58,10 @@ echarts.use([
   GridComponent,
   RadarComponent,
   LegendComponent,
+  // The balance chart's zero baseline. With bars diverging both ways, the
+  // category axis stays at the bottom (labels can't sit mid-plot), so the
+  // zero line has to be drawn as a mark of its own.
+  MarkLineComponent,
   TooltipComponent,
   // The bar ↔ donut morph: series sharing a `seriesKey` hand their shapes to
   // each other across a `replaceMerge` update instead of fading out and in.
@@ -78,6 +92,10 @@ export type ChartTokens = {
   /** Money in / money out. Direction, not identity — never a series slot. */
   flowIn: string;
   flowOut: string;
+  /** `--pistachio-edge`: the stroke a `flowIn` (Pistachio) *fill* must wear —
+   * at 2:1 on white the fill alone is not perceptible. A stroked line doesn't
+   * need it; a bar does. */
+  flowInEdge: string;
   /** Blue Stone. A threshold or reference line, not a series. */
   accent: string;
   /** Text-safe good/bad. `--flow-out` is a 3:1 fill, not a legible 11px label. */
@@ -102,6 +120,7 @@ function readTokens(): ChartTokens {
     ink: read("--chart-ink"),
     flowIn: read("--flow-in"),
     flowOut: read("--flow-out"),
+    flowInEdge: read("--pistachio-edge"),
     accent: read("--accent"),
     positive: read("--positive"),
     danger: read("--danger"),
@@ -242,4 +261,8 @@ export function EChart({
   );
 }
 
-export type { EChartsOption };
+export type {
+  CustomSeriesRenderItem,
+  CustomSeriesRenderItemReturn,
+  EChartsOption,
+};

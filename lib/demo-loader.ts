@@ -6,7 +6,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { transactions, type NewTransaction } from "@/db/schema";
 import { toRecords } from "@/scripts/lib/csv";
-import { classify, naturalKey, toMinor } from "@/scripts/lib/statement";
+import {
+  classify,
+  naturalKey,
+  openingBalanceRow,
+  toMinor,
+} from "@/scripts/lib/statement";
 
 const DEMO_FILES = [
   "jeanine_2025_Account1_2025.csv",
@@ -60,6 +65,16 @@ export async function loadDemoCsvForUser(userId: number): Promise<{ count: numbe
         createdAt: new Date(),
       });
     }
+  }
+
+  // The opening balance, dated the day before the earliest statement line —
+  // see the note on `openingBalanceRow`.
+  if (rows.length > 0) {
+    const first = rows.reduce(
+      (min, row) => (row.bookedOn < min ? row.bookedOn : min),
+      rows[0].bookedOn,
+    );
+    rows.unshift(openingBalanceRow(userId, first));
   }
 
   // Clear existing rows for this user and insert in batches

@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   ArrowRight,
   Flame,
-  Calendar,
   Layers,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,6 +19,7 @@ import {
   loadDemoCsvAction,
 } from "@/app/actions/demo-data";
 import { Link } from "@/i18n/navigation";
+import { useHydrated } from "@/lib/use-hydrated";
 
 const LOG_COUNT_STEPS = [50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000] as const;
 
@@ -31,26 +31,40 @@ function Filename({ children }: { children: React.ReactNode }) {
     </code>
   );
 }
-const START_YEARS = [2021, 2022, 2023, 2024, 2025, 2026] as const;
+const YEARS_CHOICES = [1, 2, 3, 5] as const;
 
 export function DemoDataControls() {
   const t = useTranslations("DemoData");
+  const tMonths = useTranslations("Months");
   const router = useRouter();
   const [isFakerPending, startFakerTransition] = useTransition();
   const [isCsvPending, startCsvTransition] = useTransition();
 
   const [stepIndex, setStepIndex] = useState<number>(3); // 500 default
-  const [startYear, setStartYear] = useState<number>(2025);
   const [yearsCount, setYearsCount] = useState<number>(1);
   const [lastActionStatus, setLastActionStatus] = useState<string | null>(null);
+  // The range labels read the clock, and the server render's clock is not the
+  // browser's — near a month boundary the two would disagree, so the ranges
+  // fill in after hydration.
+  const hydrated = useHydrated();
 
   const targetCount = LOG_COUNT_STEPS[stepIndex];
+
+  // Mirrors the generator's window: `n` years ending today, day-exact.
+  const rangeLabel = (n: number): string => {
+    if (!hydrated) return "…";
+    const end = new Date();
+    const start = new Date(end);
+    start.setFullYear(start.getFullYear() - n);
+    start.setDate(start.getDate() + 1);
+    const label = (d: Date) => `${tMonths(`short${d.getMonth() + 1}`)} ${d.getFullYear()}`;
+    return `${label(start)} – ${label(end)}`;
+  };
 
   const handleGenerateFaker = () => {
     startFakerTransition(async () => {
       try {
         const result = await generateSyntheticTransactionsAction({
-          startYear,
           yearsCount,
           targetCount,
         });
@@ -152,45 +166,25 @@ export function DemoDataControls() {
             </button>
           </div>
 
-          {/* Controls: Start Year, Duration, Log Slider */}
+          {/* Controls: Time Span, Log Slider */}
           <div className="rounded-lg border border-line-strong/60 bg-surface-muted/20 p-4 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Start Year Selector */}
-              <div>
-                <label className="flex items-center gap-1.5 text-xs font-medium text-text mb-1.5">
-                  <Calendar className="size-3.5 text-text-muted" /> {t("startYear")}
-                </label>
-                <select
-                  value={startYear}
-                  onChange={(e) => setStartYear(Number(e.target.value))}
-                  disabled={isBusy}
-                  className="w-full h-10 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:outline-none focus:ring-1 focus:ring-accent sm:h-8 sm:text-[13px]"
-                >
-                  {START_YEARS.map((yr) => (
-                    <option key={yr} value={yr}>
-                      {yr}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Number of Years */}
-              <div>
-                <label className="flex items-center gap-1.5 text-xs font-medium text-text mb-1.5">
-                  <Layers className="size-3.5 text-text-muted" /> {t("duration")}
-                </label>
-                <select
-                  value={yearsCount}
-                  onChange={(e) => setYearsCount(Number(e.target.value))}
-                  disabled={isBusy}
-                  className="w-full h-10 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:outline-none focus:ring-1 focus:ring-accent sm:h-8 sm:text-[13px]"
-                >
-                  <option value={1}>{t("year1", { range: `${startYear}` })}</option>
-                  <option value={2}>{t("year2", { range: `${startYear} – ${startYear + 1}` })}</option>
-                  <option value={3}>{t("year3", { range: `${startYear} – ${startYear + 2}` })}</option>
-                  <option value={5}>{t("year5", { range: `${startYear} – ${startYear + 4}` })}</option>
-                </select>
-              </div>
+            {/* How far back from today the history reaches */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-text mb-1.5">
+                <Layers className="size-3.5 text-text-muted" /> {t("duration")}
+              </label>
+              <select
+                value={yearsCount}
+                onChange={(e) => setYearsCount(Number(e.target.value))}
+                disabled={isBusy}
+                className="w-full h-10 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:outline-none focus:ring-1 focus:ring-accent sm:h-8 sm:text-[13px]"
+              >
+                {YEARS_CHOICES.map((n) => (
+                  <option key={n} value={n}>
+                    {t(`year${n}`, { range: rangeLabel(n) })}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Log Scale Slider */}

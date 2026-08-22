@@ -54,6 +54,14 @@ export type MonthPoint = {
   income: number;
   expense: number;
   net: number;
+  /**
+   * The effective account balance at the end of this month: the running sum of
+   * every month's net from the start of the history. Transfers are excluded
+   * with the nets they are summed from — only one side of a transfer between
+   * own accounts is recorded, so counting it would fake an outflow the
+   * portfolio never had.
+   */
+  balance: number;
 };
 
 export type Slice = {
@@ -349,15 +357,19 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
   if (buckets.size === 0) return [];
 
   const series: MonthPoint[] = [];
+  let balance = 0;
 
   for (const month of monthAxis([...buckets.keys()])) {
     const bucket = buckets.get(month) ?? { income: 0, expense: 0 };
+    const net = bucket.income - bucket.expense;
+    balance += net;
     series.push({
       month,
       label: MONTH_LABELS[Number(month.slice(5, 7)) - 1],
       income: bucket.income,
       expense: bucket.expense,
-      net: bucket.income - bucket.expense,
+      net,
+      balance,
     });
   }
 

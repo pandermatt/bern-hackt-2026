@@ -32,7 +32,8 @@ beforeEach(async () => {
 
 describe("Synthetic Transaction Generator (Faker)", () => {
   it("generates realistic transactions spanning all 12 months", () => {
-    const rows = generateYearlyTransactions(user1.id, { startYear: 2025, seed: 42 });
+    // A year-end endDate makes the window exactly the calendar year.
+    const rows = generateYearlyTransactions(user1.id, { endDate: "2025-12-31", seed: 42 });
 
     expect(rows.length).toBeGreaterThan(200);
 
@@ -47,7 +48,7 @@ describe("Synthetic Transaction Generator (Faker)", () => {
 
   it("scales transaction volume according to targetCount and spans multiple years", () => {
     const target500 = generateYearlyTransactions(user1.id, {
-      startYear: 2023,
+      endDate: "2024-12-31",
       yearsCount: 2,
       targetCount: 500,
       seed: 123,
@@ -60,9 +61,61 @@ describe("Synthetic Transaction Generator (Faker)", () => {
     expect(years.has("2024")).toBe(true);
   });
 
+  it("books everything inside the day-exact window ending on endDate", () => {
+    const rows = generateYearlyTransactions(user1.id, {
+      endDate: "2026-08-22",
+      yearsCount: 1,
+      targetCount: 500,
+      seed: 314,
+    });
+
+    for (const row of rows) {
+      expect(row.bookedOn >= "2025-08-23").toBe(true);
+      expect(row.bookedOn <= "2026-08-22").toBe(true);
+    }
+    // Both partial edge months are populated, not skipped.
+    const months = new Set(rows.map((r) => r.bookedOn.slice(0, 7)));
+    expect(months.has("2025-08")).toBe(true);
+    expect(months.has("2026-08")).toBe(true);
+  });
+
+  it("defaults the window to ending today and never books the future", () => {
+    const rows = generateYearlyTransactions(user1.id, { seed: 271 });
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    for (const row of rows) {
+      expect(row.bookedOn <= today).toBe(true);
+    }
+  });
+
+  it("ends the history with a positive effective account balance", () => {
+    // The balance the dashboard reports: income minus expenses, transfers
+    // excluded — the same sum `monthlySeries` accumulates. Dense histories are
+    // the regression risk: variable spending scales with targetCount, salary
+    // does not, so the solvency pass has to close the gap.
+    const shapes: [number, number, number][] = [
+      [42, 500, 1],
+      [7, 10000, 3],
+      [99, 25000, 5],
+    ];
+    for (const [seed, targetCount, yearsCount] of shapes) {
+      const rows = generateYearlyTransactions(user1.id, {
+        yearsCount,
+        targetCount,
+        seed,
+        endDate: "2026-08-22",
+      });
+      const balance = rows
+        .filter((r) => r.kind !== "transfer")
+        .reduce((sum, r) => sum + r.amountMinor, 0);
+      expect(balance).toBeGreaterThan(0);
+    }
+  });
+
   it("injects rich financial anomalies into the transaction history", () => {
     const rows = generateYearlyTransactions(user1.id, {
-      startYear: 2025,
+      endDate: "2025-12-31",
       targetCount: 500,
       seed: 777,
     });
@@ -83,7 +136,7 @@ describe("Synthetic Transaction Generator (Faker)", () => {
   });
 
   it("assigns valid categories, accounts, and signed minor amounts", () => {
-    const rows = generateYearlyTransactions(user1.id, { startYear: 2025, seed: 100 });
+    const rows = generateYearlyTransactions(user1.id, { endDate: "2025-12-31", seed: 100 });
     const validCategories = new Set<string>(CATEGORIES);
 
     for (const row of rows) {
@@ -110,7 +163,7 @@ describe("Synthetic Transaction Generator (Faker)", () => {
 
   it("persists generated transactions into the database scoped to user", async () => {
     const { count } = await saveGeneratedTransactionsForUser(user1.id, {
-      startYear: 2025,
+      endDate: "2025-12-31",
       targetCount: 250,
       seed: 999,
     });
@@ -134,20 +187,43 @@ describe("Demo CSV Loader", () => {
   it("loads and classifies statements from Account 1 and Account 3 CSVs", async () => {
     const { count } = await loadDemoCsvForUser(user1.id);
 
-    // Shipped CSVs have 513 unique transaction keys after deduplicating CC payments
-    expect(count).toBe(513);
+    // Shipped CSVs have 513 unique transaction keys after deduplicating CC
+    // payments, plus the prepended opening-balance row.
+    expect(count).toBe(514);
 
     const rows = await db
       .select()
       .from(transactions)
       .where(eq(transactions.userId, user1.id));
 
-    expect(rows.length).toBe(513);
+    expect(rows.length).toBe(514);
 
     const categories = new Set(rows.map((r) => r.category));
     expect(categories.has("Food & Drink")).toBe(true);
     expect(categories.has("Housing")).toBe(true);
     expect(categories.has("Salary")).toBe(true);
     expect(categories.has("Transport")).toBe(true);
+  });
+
+  it("starts the history with a CHF 10'000 opening balance", async () => {
+    await loadDemoCsvForUser(user1.id);
+
+    const rows = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.userId, user1.id));
+
+    const opening = rows.filter((r) => r.category === "Opening balance");
+    expect(opening).toHaveLength(1);
+    expect(opening[0].amountMinor).toBe(1_000_000);
+    expect(opening[0].kind).toBe("income");
+
+    // Booked before every statement line, so the balance starts at the figure
+    // and no statement month's net carries the spike.
+    const earliest = rows
+      .map((r) => r.bookedOn)
+      .sort()[0];
+    expect(opening[0].bookedOn).toBe(earliest);
+    expect(rows.every((r) => r === opening[0] || r.bookedOn > opening[0].bookedOn)).toBe(true);
   });
 });
