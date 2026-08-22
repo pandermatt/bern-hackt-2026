@@ -1,3 +1,4 @@
+import { MerchantAvatar } from "@/components/merchant-avatar";
 import { Section } from "@/components/section";
 import { Link } from "@/i18n/navigation";
 import { formatMoney, type Slice } from "@/lib/insights";
@@ -43,14 +44,27 @@ export function BreakdownList({
         <ol className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
           {slices.map((slice, index) => (
             <li key={slice.key}>
-              <div className="flex items-baseline justify-between gap-3">
-                <Link
-                  href={`/?${linkParam}=${encodeURIComponent(slice.key)}`}
-                  className="-my-2 truncate py-2 text-[13.5px] font-medium text-text hover:text-accent hover:underline sm:my-0 sm:py-0"
-                  title={slice.key}
-                >
-                  {slice.key}
-                </Link>
+              {/* `items-center`, not `items-baseline`: a flex container's
+                  baseline is its first item's, and a bare <img>'s baseline is
+                  its bottom edge — the amount would drop by most of the tile's
+                  height. At 13.5px against 13px the visual cost is under a
+                  pixel. */}
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2">
+                  {/* Shown at every width here, unlike the ledger: each row
+                      gets a whole line for its name, and this is the page's
+                      most glanceable block. */}
+                  {linkParam === "merchant" && (
+                    <MerchantAvatar name={slice.key} size={20} />
+                  )}
+                  <Link
+                    href={`/?${linkParam}=${encodeURIComponent(slice.key)}`}
+                    className="-my-2 truncate py-2 text-[13.5px] font-medium text-text hover:text-accent hover:underline sm:my-0 sm:py-0"
+                    title={slice.key}
+                  >
+                    {slice.key}
+                  </Link>
+                </span>
                 <span className="shrink-0 font-mono text-[13px] tabular-nums text-text">
                   {formatMoney(slice.amount)}
                 </span>

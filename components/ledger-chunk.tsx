@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { MerchantAvatar } from "@/components/merchant-avatar";
 import type { Transaction } from "@/db/schema";
 import type {
   AnomalyInsight,
@@ -248,6 +249,17 @@ function TransactionRow({
         hasAnomaly ? anomalyRowClasses : "hover:bg-surface-hover"
       }`}
     >
+      {/* A plain sibling rather than a wrapper, which works precisely because
+          the tile is hidden below `sm`: there the <li> is `flex-col` and an
+          avatar would stack *above* the text, but it never renders. From `sm`
+          up the <li> is `flex-row sm:items-center`, so it lands inline ahead of
+          the text block with no extra element.
+
+          Hidden on mobile by the layout note above: a 32px tile plus its gap
+          takes a third of the ~140px the merchant name, the description and the
+          badges already fight over at 375px. */}
+      <MerchantAvatar name={row.merchant} className="hidden sm:inline-flex" />
+
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
           <p className="truncate text-[14px] font-medium text-text">

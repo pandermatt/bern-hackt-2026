@@ -27,6 +27,13 @@
   --surface-muted: #f5f5f7;
   --surface-hover: #fafafa;
 
+  /* The ground under a merchant's brand mark. Constant across both themes on
+     purpose: a favicon is drawn for a white page, and the black-glyph ones
+     (Apple, Nike) disappear against the dark theme's #1c1c1c. Same reasoning as
+     `.on-brand` — a fixed ground needs a fixed treatment. `ring-line` is what
+     keeps the tile from floating on the dark page. */
+  --logo-tile: #ffffff;
+
   --line: #e5e5ea;
   --line-strong: #d1d1d6;
 
@@ -161,6 +168,9 @@
   --surface-muted: #2b2b2b;
   --surface-hover: #242424;
 
+  /* Deliberately not re-derived: see the note in `:root`. */
+  --logo-tile: #ffffff;
+
   --line: #333333;
   /* Control borders need 3:1 against the surface to be perceivable; the light
      theme's #c2c2c2 lands at 1.2:1 here. This is 3.3:1. */
@@ -239,6 +249,7 @@
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
   --color-surface-hover: var(--surface-hover);
+  --color-logo-tile: var(--logo-tile);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-text: var(--text);
