@@ -362,6 +362,22 @@
   }
 }
 
+/* The chat's typing indicator: three dots breathing in sequence. Animates
+   between visible states, so it is safe under the no-shell-animation rule,
+   and the reduced-motion block below flattens it like everything else. */
+@keyframes chat-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

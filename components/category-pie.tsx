@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import {
   EChart,
   slotColor,
-  tooltipStyle,
   useChartTokens,
   withAlpha,
   type ChartTokens,
@@ -35,16 +34,6 @@ const LABEL_THRESHOLD = 0.04;
 function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
   return {
     animationDuration: 600,
-    tooltip: {
-      trigger: "item",
-      ...tooltipStyle(tokens),
-      formatter: (params) => {
-        const point = params as { name: string; value: number; percent?: number };
-        return `${point.name}<br/><strong>${formatMoney(point.value)}</strong> · ${
-          point.percent?.toFixed(1) ?? "0"
-        }%`;
-      },
-    },
     legend: {
       type: "scroll",
       bottom: 0,
@@ -154,8 +143,12 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
         </div>
       </div>
 
-      <table className="sr-only">
-        <caption>Share of spending by category, whole range</caption>
+      {/* No <caption>: the caption box lives outside the table's clipped box,
+          so it escapes sr-only's 1px clip and floats visibly on the page. */}
+      <table
+        className="sr-only"
+        aria-label="Share of spending by category, whole range"
+      >
         <thead>
           <tr>
             <th scope="col">Category</th>

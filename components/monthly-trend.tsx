@@ -4,7 +4,6 @@ import { useMemo } from "react";
 
 import {
   EChart,
-  tooltipStyle,
   useChartTokens,
   withAlpha,
   type ChartTokens,
@@ -65,7 +64,6 @@ function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
     itemStyle: { color: colour },
     areaStyle: area(colour),
     showSymbol: false,
-    // A visible dot at the hovered month, so the crosshair reading is exact.
     symbol: "circle",
     symbolSize: 7,
     emphasis: { focus: "series" as const },
@@ -75,27 +73,6 @@ function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
   return {
     animationDuration: 600,
     grid: GRID,
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "line", lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
-      ...tooltipStyle(tokens),
-      formatter: (params) => {
-        const rows = Array.isArray(params) ? params : [params];
-        const index = rows[0]?.dataIndex ?? 0;
-        const point = series[index];
-        if (!point) return "";
-        const negative = point.net < 0;
-        return [
-          `${point.month}`,
-          `${rows[0]?.marker ?? ""}In<span style="float:right;padding-left:18px"><strong>${formatMoney(point.income)}</strong></span>`,
-          `${rows[1]?.marker ?? ""}Out<span style="float:right;padding-left:18px"><strong>${formatMoney(point.expense)}</strong></span>`,
-          // The gap between the curves, named.
-          `<span style="opacity:.75">Net</span><span style="float:right;padding-left:18px;color:${
-            negative ? tokens.flowOut : tokens.flowIn
-          }"><strong>${negative ? "−" : "+"}${formatMoney(point.net)}</strong></span>`,
-        ].join("<br/>");
-      },
-    },
     legend: {
       bottom: 0,
       icon: "roundRect",
@@ -161,8 +138,9 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. Also the relief a sub-3:1 fill requires. */}
-      <table className="sr-only">
-        <caption>Money in and out, by month</caption>
+      {/* No <caption>: the caption box lives outside the table's clipped box,
+          so it escapes sr-only's 1px clip and floats visibly on the page. */}
+      <table className="sr-only" aria-label="Money in and out, by month">
         <thead>
           <tr>
             <th scope="col">Month</th>
