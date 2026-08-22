@@ -33,6 +33,37 @@ never through the UI.
   "tighten" this to NOT NULL** without a deliberate migration plan — and for
   the same reason, do not add a NOT NULL column to `transactions` once it has
   rows.
+- **`budgets`, `savings_goals` and `savings_allocations` are the writable
+  tables.** `transactions` is read-only in the
+  UI; budget limits are not. Its `userId` is **NOT NULL**, unlike
+  `transactions.userId` — that column is nullable because it was added to a
+  populated table and `drizzle-kit push` deploys without `--force`, whereas
+  `budgets` is created empty, so the constraint costs nothing. The unique index
+  on `(user_id, category)` is what makes saving an upsert rather than a
+  read-then-write race. The two savings tables are created empty for the same
+  reason and follow the same shape.
+- **An allocation is keyed by `(goal_id, month)`, not appended as a log.** The
+  page's question is "how much of March have I already put away", and with a
+  log that answer changes meaning the moment someone revises an allocation.
+  One row per goal per month makes revising an upsert and keeps the month's
+  remaining balance a subtraction rather than a reconciliation.
+- **`updateSavingsGoal` changes the target and nothing else.** The name picks
+  the pot's glyph, and there is no icon column to override that with, so
+  renaming would silently repaint the card. Delete and re-add is the honest way
+  to change what a goal *is*. A target below what is already saved is allowed —
+  the pot reads over 100%, which is true; money is never discarded to make a
+  number fit.
+- **Deleting a goal releases its money rather than destroying it.** A month's
+  surplus is a property of the statements, so cascading the allocations away
+  makes those francs allocatable again. The confirm dialog says so, because it
+  is the opposite of what "delete" usually means.
+- **An unset limit is `null`, and zero is a real budget of nothing.** Clearing
+  a field deletes the row; it does not store 0. Don't collapse the two — a
+  category budgeted at nothing and a category with no budget render, sort and
+  warn differently. **Savings allocations are the opposite**: putting zero
+  francs in a pot and putting nothing in it are the same event, so there both
+  blank and `0` delete the row. The distinction is about whether the value
+  carries meaning, not about house style.
 - **Money is signed integer minor units** (`amount_minor`, rappen), never
   `real`. The EUR lines in the source arrive as `46.96976052505031`, and
   summing a few hundred IEEE-754 doubles drifts. Income is positive, expenses
@@ -111,10 +142,76 @@ Unchanged from the template this app grew out of, and still exactly true.
   also what makes the colour slots stable — see the design-system notes. Totals,
   breakdowns and the ledger follow the filter.
 - Filters are validated with zod and parsed with `safeParse(…).data ?? default`,
-  so a junk query string renders defaults rather than throwing.
+  so a junk query string renders defaults rather than throwing. `?month=` on
+  the budget page is checked against the months that exist and falls back to
+  the default rather than rendering an empty page.
+- **Mutations use the `{ ok }` envelope; reads return data directly.**
+  `saveBudgets` and the three actions in `app/actions/savings.ts` are the app's
+  only mutations — that envelope is what the client raises a `sonner` toast
+  off. Each runs its deletes and upserts inside one `db.transaction`, so a
+  half-saved budget or a half-allocated month is not a state the page can land
+  in.
+- **`allocateSurplus` recomputes the month's surplus server-side.** It is the
+  one number that bounds the whole operation, and a client that posts its own
+  ceiling has no ceiling. The action also intersects the posted goal ids with
+  the ones this account owns, so a guessed id cannot fund someone else's pot.
+  The running total in `SavingsAllocator` is a convenience, not the check —
+  verified by replaying the action's own POST with a tampered amount.
 
 ## Rendering
 
+- **A pot is inline SVG in a server component, not a chart.** It is one number
+  between 0 and 1; putting the ECharts boundary and a canvas around a rectangle
+  buys nothing. The jar is a `clipPath` and the money is a rect whose top edge
+  moves, so it renders in the server HTML and needs no hydration. `potFill`
+  clamps at 1 — over-funding a goal is allowed, but a 130% fill paints outside
+  the jar.
+- **The pot is one cylinder drawn from one viewing angle.** `RY` is the
+  perspective squash, and the *same* ellipse is reused for the mouth, the
+  liquid's surface and the base. Change it in one place or the vessel stops
+  being a solid. The body is `--surface-muted`, not `--surface`: on a card that
+  is already `--surface` the walls would vanish in both themes.
+- **The pot always ships a progress bar underneath it.** A cylinder is a poor
+  instrument for reading a proportion — the eye compares lengths on a shared
+  baseline far better than areas in a jar — so the pot carries the identity and
+  the bar carries the precision. Don't drop it for tidiness; it is the same
+  "relief" argument as the charts' `sr-only` tables.
+- **Goal glyphs are Font Awesome Free, deep-imported.**
+  `@fortawesome/free-solid-svg-icons/faCar`, never the barrel — the barrel is
+  ~2000 definitions, the same reasoning as `echarts/charts`. `lib/goal-icon.ts`
+  guesses from the goal's name in German and English; there is no icon column,
+  because a picker is a second field to fill in for something the name already
+  says. **Free has no palm tree** (`fa-tree-palm` is Pro), so holidays get
+  `fa-umbrella-beach`.
+- **A glyph's box is not always square** — `fa-laptop` is 640×512 — so fit on
+  `max(width, height)` rather than assuming 512. A `clipPath` resolves in the
+  user space of the element that references it, so the clip must sit on an
+  **untransformed** group or the waterline scales with the glyph.
+- **The glyph is drawn twice, clipped at the waterline: `--accent` above,
+  `--chart-ink` below.** It sits on the wall, so the level rises past it as the
+  goal fills, and it has to stay legible on whichever of the ten hues it ends
+  up under. Don't use the accent for the submerged half — the brand colour is a
+  teal and three of the fills are teals, so the glyph vanished into its own
+  liquid. Ink only ever darkens (or, in `.dark`, only ever lightens) whatever
+  it lands on.
+- **`potFill` clamps and `potPercent` does not, on purpose.** The jar has a
+  rim, so the drawing stops at 1; the label must not, or a pot holding CHF 300
+  against a CHF 200 goal reads a flat, useless 100%. Both come off the same two
+  amounts — `potPercent` is the one that gets printed, and the progress bar
+  (being a track) uses the clamped one.
+- **A pot at 100% is sealed with a lid.** `full` swaps the open mouth — rim
+  ellipse plus the inner shade of the far wall — for a lid band, crown and
+  knob. The lid is the pot's own material rather than the goal's colour: it
+  says "closed", and a second tinted shape would compete with the fill for
+  that reading. The knob has to sit above the crown (`LID_Y - RY`), or the
+  crown ellipse simply paints over it.
+- **Guard the liquid on `fill > 0`.** The surface at zero sits on the base
+  ellipse's *centre*, so drawing "from the surface down" still paints a
+  crescent along the floor — an empty pot with a sliver of colour in it.
+- **A pot's colour comes from its row id, not its position.** `potSlot` keys on
+  the id so deleting one goal does not repaint the rest. Goals have no chart
+  counterpart to agree with, so any stable mapping does — this one is stable
+  because ids are.
 - **The dashboard is server-rendered apart from the filter bar, the two
   charts, and the theme switch.** Everything else stays on the server. The
   charts are the deliberate exception described below; the rule they came from
@@ -148,6 +245,38 @@ Unchanged from the template this app grew out of, and still exactly true.
   theme changes; it returns `null` until mounted, so the first frame is already
   in the right palette. Don't duplicate the palette into TypeScript — that is
   what breaks "restyle by editing tokens".
+- **The budget radar's rim is refitted per month, but capped.** The rings are
+  francs on one shared scale, and the rim follows that month's own peak so a
+  quiet month draws a dial it fills — bounded at `OUTLIER_CAP` × the largest
+  limit. Both halves are load-bearing: a fixed rim leaves most months drawing
+  a tiny shape in a big empty dial, and an uncapped one lets a single runaway
+  category (CHF 8'200 against limits averaging CHF 770) push every dashed ring
+  into a knot at the hub, which is the one thing the chart exists to show.
+  Past the rim the spending clamps, the outer tick grows a `+`, and the real
+  figure is printed under the category name, in the tooltip, and in the
+  `sr-only` table. A percent-of-budget scale solves the framing outright but
+  was rejected: the axis has to read in francs.
+- **The radar's radius is measured, not a percentage.** ECharts resolves
+  `radius: "65%"` against `min(width, height) / 2`, but what has to fit outside
+  the dial is a *text label*, and text does not scale with the container. One
+  percentage that frames the dial nicely at 1280px clips "Marketplace" at
+  402px. `BudgetRadar` observes its own box, measures the widest axis label
+  with `measureText`, and subtracts — which is why `NAME_FONT` is pinned on
+  both the rich style and the ruler. If those two ever disagree the radius is
+  computed against the wrong width.
+- **Below `sm` the radar changes shape, not just size.** Shorter box (a radar
+  is bounded by the narrower side, so the desktop height is only dead space),
+  smaller type, names broken at their last space, and only the rim tick — six
+  axis numbers queue up one short spoke, and the series paints over them. The
+  rim tick goes too once the dial is under 60px.
+- **Every category name carries its share of budget underneath it.** A franc
+  scale cannot separate "half the budget" from "twice it" for a small category
+  near the hub, so the shape carries magnitude and the printed percentage
+  carries the verdict. Neither alone is the chart; don't drop one for tidiness.
+- **The percentage under each axis name is `--positive`/`--danger`, not the
+  chart fills.** They are 13px glyphs. `--chart-2` (#a5c400) is 2:1 on white
+  and unreadable as text; the fill it labels is fine because a 2.5px stroke
+  with a translucent area is not text.
 - **The two charts answer different questions, and neither should grow into
   the other.** "Month by month" is money **in against out** over time — two
   overlaid areas, no category breakdown. The donut carries the category story —
@@ -157,6 +286,17 @@ Unchanged from the template this app grew out of, and still exactly true.
   tried in the trend chart and drowned the in-versus-out reading in nine bands;
   if you want detail there, add a second chart rather than another dimension to
   this one.
+- **A visually hidden table needs a wrapper `<div className="sr-only">`.**
+  `sr-only` sets `width: 1px`, and a `<table>` ignores that — its intrinsic
+  content width wins — so an absolutely positioned 520px table sat in the
+  layout and gave the whole page a horizontal scrollbar on a phone. The div
+  takes the class and clips the table inside it. Same reason the `<caption>`
+  escaped: a table is not an ordinary block.
+- **The `sr-only` tables carry `aria-label`, not `<caption>`.** A caption box
+  belongs to the table *wrapper*, which is not reliably clipped along with the
+  `sr-only` box — Safari paints it as a stray line of text under the chart.
+  `aria-label` gives a screen reader the identical name and renders nothing
+  anywhere. Don't reintroduce `<caption>` on a visually hidden table.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.
@@ -439,6 +579,15 @@ Unchanged from the template this app grew out of, and still exactly true.
 - Month labels are the hardcoded `MONTH_LABELS` array, not
   `Intl.DateTimeFormat` — `en-GB` returns `"Sept"`, four characters where every
   other month has three, which breaks the chart's column rhythm.
+- **`dialog` and `alert-dialog` are not interchangeable.** An alert dialog is
+  an interruption that demands an explicit choice — right for "delete this, are
+  you sure", wrong for a form, where dismissing without choosing is a normal
+  thing to want. Retargeting a pot is a form, so it uses `Dialog`; deleting one
+  is a confirmation, so it uses `AlertDialog`.
+- **On a pot card, retarget sits left and delete sits right.** The reversible
+  action and the irreversible one go as far apart as the card allows, and both
+  are always visible rather than revealed on hover — a hover affordance does
+  not exist on a touch screen.
 - **shadcn `asChild` gotcha**: `AlertDialogAction`/`AlertDialogCancel` wrap a
   `Button`, so the Button's variant classes land on the same element and
   `cn()` cannot merge them. Overrides there need Tailwind v4's trailing
