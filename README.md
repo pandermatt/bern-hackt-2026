@@ -146,6 +146,47 @@ Rasterizing needs `librsvg2-bin` and `imagemagick`:
 apt-get install -y librsvg2-bin imagemagick
 ```
 
+### Merchant logos
+
+Rows in the ledger and the "Top merchants" list carry the merchant's own brand
+mark. There is no URL anywhere in a statement, so the chain is **canonical name
+→ domain → icon**, and the middle step is a hand-checked table in
+`lib/merchant-brands.ts`. A name mapped to `null` there is a decision, not a
+gap — an abstract line (`Rent`, `Krankenkasse`), a local business with no
+findable mark, or a domain neither icon service has.
+
+Those fall back in two steps. A line with no merchant behind it at all gets a
+Lucide glyph from `ABSTRACT_GLYPHS` in `components/merchant-avatar.tsx` — a
+house for rent, a banknote for salary — because initials say nothing about it.
+Everything else keeps its initials, which is the point: five restaurants sharing
+one fork glyph would repeat the category chip already in the row and lose the
+one thing a monogram is good at, telling Molino from Luce. A test asserts every
+glyph belongs to a merchant with no logo, so one can never become dead code.
+`tests/merchant-brands.test.ts` fails if a merchant the importer can emit has no
+entry at all, so adding one to `scripts/lib/statement.ts` and forgetting the
+brand map is caught rather than silently blank.
+
+`app/api/merchant-icon/[slug]/route.ts` fetches each mark once and caches it in
+**`data/merchant-icons/`**, next to the database and driven by the same
+`DATABASE_PATH` — so on a container host it belongs on the persistent volume,
+or every redeploy re-fetches. 57 icons, about 680 KB. The directory is safe to
+delete at any time; it rebuilds itself on the next page load. Do that to retry a
+merchant recorded as a miss.
+
+The route takes a **slug, never a domain**, and resolves it against the table.
+`proxy.ts` excludes `/api` from its matcher, so the handler runs without the
+cookie check — accepting a hostname from the URL would make it an open proxy
+pointed at the server.
+
+Two upstreams are tried in order: DuckDuckGo's `ip3` service, then Google's.
+DuckDuckGo covers 47 of the 56 mapped merchants and Google 6 of the 9 it misses,
+including SBB. A 404 is cached as a miss; a timeout, a 5xx or a 429 is not —
+a cold dashboard asks for every icon at once, and treating that burst's
+rate-limit replies as "no icon exists" would cache the wrong answer for good.
+
+The marks belong to their owners and are used nominatively, to label the
+merchant a transaction was with.
+
 ## Statement import
 
 `npm run seed` reads every `.csv` in `scripts/seed-data/` and writes normalized
