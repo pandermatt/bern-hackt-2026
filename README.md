@@ -401,9 +401,10 @@ Every other route requires a session.
   Appearance rather than in the header; the provider still defaults to the
   system setting, so a first visit follows the OS until someone picks a side.
 - `app/budget/page.tsx` — per-category monthly limits, suggested from the
-  account's own averages, with a radar of the month against them. The set limit
-  is an outline; what was spent is a translucent fill, so anything poking
-  outside the line is over budget.
+  account's own averages, with a radar of the month against them. Every spoke
+  is that category's spend as a percentage of its own limit, so the budget is
+  the dashed 100% ring all the way round; what was spent is a translucent fill,
+  and anything poking outside the ring is over budget.
 - `app/globals.css` — the design tokens, mapped onto shadcn's token names.
 
 Schema changes go through `npm run db:push`. There is no migrations folder and

@@ -73,12 +73,12 @@ export default async function BudgetPage({
                 id="radar-heading"
                 className="text-[15px] font-semibold text-text"
               >
-                {month} against your budget
+                Spending against budget
               </h2>
               <p className="text-[12.5px] text-text-muted">
                 {budgeted === 0
-                  ? "No limits set — the outline is the suggestion"
-                  : `${formatMoney(totalUsed)} spent of ${formatMoney(totalLimit)}`}
+                  ? "No limits set — the ring is your own monthly average"
+                  : `${formatMoney(totalUsed)} spent of ${formatMoney(totalLimit)} in ${month}`}
               </p>
             </div>
 
@@ -89,7 +89,7 @@ export default async function BudgetPage({
             <p className="mt-1 font-mono text-[11.5px] text-text-subtle">
               {over.length > 0
                 ? `Over budget in ${over.map((row) => row.category).join(", ")}.`
-                : "Each spoke is scaled to its own category — compare the fill against the outline, not one spoke against another."}
+                : "Every spoke is a share of that category's own budget, so the dashed ring is 100% all the way round."}
             </p>
           </section>
 

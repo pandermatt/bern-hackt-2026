@@ -80,6 +80,9 @@ export type ChartTokens = {
   flowOut: string;
   /** Blue Stone. A threshold or reference line, not a series. */
   accent: string;
+  /** Text-safe good/bad. `--flow-out` is a 3:1 fill, not a legible 11px label. */
+  positive: string;
+  danger: string;
 };
 
 const SERIES_TOKENS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `--chart-${n}`);
@@ -100,6 +103,8 @@ function readTokens(): ChartTokens {
     flowIn: read("--flow-in"),
     flowOut: read("--flow-out"),
     accent: read("--accent"),
+    positive: read("--positive"),
+    danger: read("--danger"),
   };
 }
 
