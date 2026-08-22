@@ -72,8 +72,9 @@ Everything that names the app lives in `lib/site.ts`. To rebrand a clone:
    forms the session cookie name, so changing it signs out existing sessions
    once.
 2. **`package.json`** — the `name` field.
-3. **`app/icon.svg`** — then regenerate `favicon.ico`, `apple-icon.png` and the
-   three `public/icon-*.png` files from it (see Icons below).
+3. **`public/icon.svg`** — then regenerate `app/favicon.ico`,
+   `public/apple-icon.png` and the three `public/icon-*.png` files from it (see
+   Icons below).
 4. **`LICENSE`** — the copyright holder.
 5. `components/landing.tsx` — the three selling points are still hardcoded.
 6. `lib/signet.ts` and `app/globals.css` — the PostFinance mark and palette.
@@ -123,21 +124,29 @@ Nothing else hardcodes the product name.
 
 ### Icons
 
-`app/icon.svg` is the source of truth; the other two are rasterized from it:
+`public/icon.svg` is the source of truth; everything else is rasterized from it.
+
+All of these are **root paths under `public/`**, and have to be. Next's metadata
+file convention emits an icon's `<link>` relative to the segment the file sits
+in, so an `icon.svg` under `app/[locale]/` is only ever served at `/de/icon.svg`
+— and `app/manifest.ts` is locale-independent and cannot name a path like that.
+The layout declares both files explicitly in `generateMetadata` instead.
+`app/favicon.ico` is the one that stays on a convention: it is already at the
+`app/` root.
 
 ```bash
-rsvg-convert -w 32 -h 32 app/icon.svg -o /tmp/i32.png   # also 16, 48
+rsvg-convert -w 32 -h 32 public/icon.svg -o /tmp/i32.png   # also 16, 48
 magick /tmp/i16.png /tmp/i32.png /tmp/i48.png app/favicon.ico
-sed 's/ rx="7"//' app/icon.svg | rsvg-convert -w 180 -h 180 -o app/apple-icon.png
-rsvg-convert -w 192 -h 192 app/icon.svg -o public/icon-192.png
-rsvg-convert -w 512 -h 512 app/icon.svg -o public/icon-512.png
+sed 's/ rx="7"//' public/icon.svg | rsvg-convert -w 180 -h 180 -o public/apple-icon.png
+rsvg-convert -w 192 -h 192 public/icon.svg -o public/icon-192.png
+rsvg-convert -w 512 -h 512 public/icon.svg -o public/icon-512.png
 rsvg-convert -w 512 -h 512 /tmp/maskable.svg -o public/icon-maskable-512.png
 ```
 
 `apple-icon.png` drops the rounded corners because iOS applies its own mask.
 `public/icon-maskable-512.png` is square-cornered *and* scales the signet to
 78%, keeping it inside the circular safe zone Android crops to — at full size
-the arms graze the edge. Build its source SVG by taking `app/icon.svg`, dropping
+the arms graze the edge. Build its source SVG by taking `public/icon.svg`, dropping
 the `rx`, and multiplying the group's `scale` by `0.78`.
 
 Rasterizing needs `librsvg2-bin` and `imagemagick`:
@@ -307,17 +316,19 @@ truncates tables between tests.
 `app/manifest.ts` plus `public/sw.js` make the app installable to a home screen
 or dock. The worker is registered by `components/sw-register.tsx` **in
 production only** — in development it would sit in front of HMR and serve stale
-modules.
+modules. That gating is why the whole feature, install control included, only
+comes alive against `npm run build && npm start`; there is no
+`beforeinstallprompt` without a registered worker.
 
 What the worker does, and deliberately does not do:
 
 - **Never caches page responses.** The dashboard is per-account HTML; keeping it
   in Cache Storage would leave one person's finances readable on a shared device
   after sign-out. Navigations go to the network, and fall back to the precached
-  `/offline` page only when that fails.
+  offline page only when that fails.
 - Caches `/_next/static/` (content-hashed, so it can never go stale).
-- Precaches `/offline` with `credentials: "omit"`, so the stored copy is always
-  the signed-out render.
+- Precaches the offline page with `credentials: "omit"`, so the stored copy is
+  always the signed-out render.
 
 `/sw.js` and `/offline` are both in the proxy's public allowlist — the worker
 registers before anyone signs in. `next.config.ts` sends `no-store` for
@@ -327,6 +338,43 @@ in `public/sw.js` whenever you change it.
 Offline means *the shell and a useful message*, not a working dashboard —
 transactions live server-side, and caching them would defeat the point of not
 caching page responses.
+
+### The offline page is precached per locale
+
+`localePrefix` is `"always"`, so there is no `/offline` — only `/de/offline` and
+`/en/offline`. Precaching the bare path broke that twice over, and the worker now
+fetches both prefixed URLs by name:
+
+- Omitting credentials means no `NEXT_LOCALE` cookie, so the redirect always
+  landed on the **default** locale and English visitors got a German offline page.
+- The stored response carried `redirected: true`. A navigation request uses
+  `redirect: "manual"`, and the browser refuses to satisfy one with a redirected
+  response — so the fallback failed and Chrome showed its own error page instead,
+  which is the exact thing the offline page exists to replace. `cachePut` in
+  `public/sw.js` rebuilds each response before storing it, which drops the flag.
+
+The locale list in `public/sw.js` mirrors `i18n/routing.ts` and has to be updated
+alongside it. A worker is a plain script served from `public/`, outside the module
+graph, so it cannot import the real one.
+
+### Installing from inside the app
+
+`components/install-app.tsx` renders a row on `/account` with three mutually
+exclusive states, because no single control works everywhere:
+
+- **Chromium** fires `beforeinstallprompt`. The event is captured when it fires
+  (it cannot be requested later), held in state, and spent by the button.
+- **iOS Safari** has no such API — installing is Share → Add to Home Screen, by
+  hand — so the button opens a dialog with the steps. `appleWebApp` in the
+  layout's `generateMetadata` is what makes the resulting icon open standalone.
+- **Anything else** gets a sentence pointing at the browser's own menu and no
+  button, rather than a control that cannot do anything.
+
+The manifest carries an explicit `id` and `scope`. `start_url` stays `"/"`
+even though that path is never a rendered page: the launch navigation carries the
+`NEXT_LOCALE` cookie, so the proxy routes each install to its own locale, and `/`
+forwards a signed-in visitor to `/home` once `getCurrentUser` confirms the
+session. A hardcoded `/de` would launch every English install in German.
 
 ## Authentication
 

@@ -727,9 +727,50 @@ export type SavingsPot = {
   savedMinor: number;
   /** Allocated out of the month being viewed, so the row can show it back. */
   monthMinor: number;
+  /** `YYYY-MM-DD`, or null for a goal with no deadline. */
+  targetOn: string | null;
+  /**
+   * The Dauersparauftrag: what the holder means to put in monthly. A
+   * suggestion for splitting a surplus — it never moves money on its own.
+   */
+  monthlyMinor: number | null;
   /** Palette slot, 1-based. Stable per goal — see `potSlot`. */
   slot: number;
 };
+
+/**
+ * Whether a string is a real calendar day, not merely `\d{4}-\d{2}-\d{2}`.
+ *
+ * "2026-02-30" and "2026-13-01" both match the shape and neither exists, and
+ * a target date is user input. Leap years come from `daysInMonth`, so February
+ * is right without constructing a `Date` — this module never does.
+ */
+export function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  if (month < 1 || month > 12 || day < 1) return false;
+  return day <= daysInMonth(value.slice(0, 7));
+}
+
+/**
+ * Pots in the order they are wanted: soonest deadline first.
+ *
+ * A pot with no target date sorts **last**, not first. `null` is "eventually",
+ * and eventually is never sooner than a date — sorting undated pots to the top
+ * would bury the one that is actually due. Ties break on id so the order is
+ * stable and a pot does not jump when a sibling is edited.
+ */
+export function byTargetDate(a: SavingsPot, b: SavingsPot): number {
+  if (a.targetOn !== b.targetOn) {
+    if (a.targetOn === null) return 1;
+    if (b.targetOn === null) return -1;
+    // `YYYY-MM-DD` sorts correctly as text, which is half the reason it is
+    // stored that way.
+    return a.targetOn < b.targetOn ? -1 : 1;
+  }
+  return a.id - b.id;
+}
 
 /**
  * A pot's colour slot.

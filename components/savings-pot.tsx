@@ -1,9 +1,11 @@
+import { CalendarDays, Repeat } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { SavingsGoalDelete } from "@/components/savings-goal-delete";
 import { SavingsGoalEdit } from "@/components/savings-goal-edit";
 import { goalIcon, iconPath } from "@/lib/goal-icon";
 import {
+  formatDay,
   formatMoney,
   potFill,
   potPercent,
@@ -88,7 +90,7 @@ export function SavingsPot({ pot }: { pot: Pot }) {
     `${ICON_CENTRE_Y - (icon.height * iconScale) / 2}) scale(${iconScale})`;
 
   return (
-    <li className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
+    <div className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
       {/* Always visible rather than revealed on hover: a hover affordance is
           not reachable on a touch screen. Retarget on the left, delete on the
           right — the reversible action and the irreversible one as far apart
@@ -99,6 +101,8 @@ export function SavingsPot({ pot }: { pot: Pot }) {
           name={pot.name}
           targetMinor={pot.targetMinor}
           savedMinor={pot.savedMinor}
+          targetOn={pot.targetOn}
+          monthlyMinor={pot.monthlyMinor}
         />
       </span>
       <span className="absolute top-1.5 right-1.5">
@@ -258,6 +262,22 @@ export function SavingsPot({ pot }: { pot: Pot }) {
         {t("potOfTarget", { target: formatMoney(pot.targetMinor) })} · {percent}%
       </p>
 
+      {/* The deadline the pots are ordered by, so the order is legible rather
+          than mysterious — and the standing order beside it, which is a plan
+          rather than a balance and so never joins the amount above. */}
+      <p className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[11px] text-text-subtle">
+        <span className="inline-flex items-center gap-1">
+          <CalendarDays className="size-3" aria-hidden />
+          {pot.targetOn ? t("potDue", { date: formatDay(pot.targetOn) }) : t("potNoDue")}
+        </span>
+        {pot.monthlyMinor !== null && (
+          <span className="inline-flex items-center gap-1 text-accent">
+            <Repeat className="size-3" aria-hidden />
+            {t("potMonthly", { amount: formatMoney(pot.monthlyMinor) })}
+          </span>
+        )}
+      </p>
+
       {/* The same number the pot draws, as a bar. A cylinder is a poor
           instrument for reading a proportion — the eye is much better at
           comparing lengths on a shared baseline than areas in a jar — so the
@@ -271,7 +291,7 @@ export function SavingsPot({ pot }: { pot: Pot }) {
           style={{ width: `${Math.max(fill * 100, fill > 0 ? 3 : 0)}%`, background: colour }}
         />
       </div>
-    </li>
+    </div>
   );
 }
 

@@ -10,10 +10,55 @@
  * Bump CACHE when this file changes so the activate handler can drop the old
  * one.
  */
-const CACHE = "beyond-money-v1";
-const OFFLINE_URL = "/offline";
+const CACHE = "beyond-money-v2";
 
-const PRECACHE = [OFFLINE_URL, "/icon.svg", "/icon-192.png"];
+/*
+ * Mirrors `i18n/routing.ts`, which cannot be imported here — a service worker
+ * is a plain script served from public/, outside the module graph. A locale
+ * added there and forgotten here loses only its offline page (the fallback
+ * below covers it), but keep the two lists together anyway.
+ */
+const LOCALES = ["de", "en"];
+const DEFAULT_LOCALE = "de";
+
+/*
+ * Prefixed, because `localePrefix` is "always" and a bare "/offline" is a
+ * redirect to "/de/offline". Precaching the redirect used to break this twice
+ * over: the stored copy was whatever the *default* locale rendered, so an
+ * English visitor's offline page came back in German, and it was a redirected
+ * response — see the note in `cachePut`.
+ */
+const OFFLINE_URLS = LOCALES.map((locale) => `/${locale}/offline`);
+const DEFAULT_OFFLINE_URL = `/${DEFAULT_LOCALE}/offline`;
+
+const PRECACHE = [...OFFLINE_URLS, "/icon.svg", "/icon-192.png"];
+
+/** The offline page matching a navigation's locale, else the default's. */
+function offlineUrlFor(pathname) {
+  const locale = pathname.split("/")[1];
+  return LOCALES.includes(locale) ? `/${locale}/offline` : DEFAULT_OFFLINE_URL;
+}
+
+/*
+ * A navigation request has `redirect: "manual"`, and the browser refuses to
+ * satisfy one with a response whose `redirected` flag is set — it fails the
+ * fetch and shows its own error page, which is precisely what the offline page
+ * exists to prevent. Rebuilding the response drops the flag; everything a
+ * cached page needs (status, headers, body) is copied across.
+ */
+async function cachePut(cache, url, response) {
+  if (!response.ok) return;
+
+  const body = await response.blob();
+  await cache.put(
+    url,
+    new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }),
+  );
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -30,7 +75,7 @@ self.addEventListener("install", (event) => {
             credentials: "omit",
             cache: "no-store",
           });
-          if (response.ok) await cache.put(url, response);
+          await cachePut(cache, url, response);
         }),
       );
       await self.skipWaiting();
@@ -66,8 +111,10 @@ self.addEventListener("fetch", (event) => {
           return await fetch(request);
         } catch {
           const cache = await caches.open(CACHE);
+          // Answer in the language of the page they were trying to reach.
           return (
-            (await cache.match(OFFLINE_URL)) ??
+            (await cache.match(offlineUrlFor(url.pathname))) ??
+            (await cache.match(DEFAULT_OFFLINE_URL)) ??
             new Response("Offline", { status: 503 })
           );
         }

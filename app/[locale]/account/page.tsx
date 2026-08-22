@@ -5,6 +5,7 @@ import { getAnomalyScanState } from "@/app/actions/anomalies";
 import { AnomalyScanControls } from "@/components/anomaly-scan-controls";
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
+import { InstallApp } from "@/components/install-app";
 import { LanguageSelector } from "@/components/language-selector";
 import { ProfileSettings } from "@/components/profile-settings";
 import { ThemeSetting } from "@/components/theme-setting";
@@ -83,6 +84,7 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
       </div>
 
       <AnomalyScanControls outdated={outdated} />
+      <InstallApp />
 
       <div className="card mt-8 overflow-hidden border-danger/30">
         <div className="border-b border-danger/20 bg-danger-soft px-4 py-3 sm:px-5">

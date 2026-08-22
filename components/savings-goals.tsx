@@ -3,7 +3,8 @@ import { useTranslations } from "next-intl";
 import type { SavingsOverview } from "@/app/actions/savings";
 import { SavingsAllocator } from "@/components/savings-allocator";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
-import { SavingsPot } from "@/components/savings-pot";
+import { StandingOrderDialog } from "@/components/standing-order-dialog";
+import { SavingsPotsGrid } from "@/components/savings-pots-grid";
 import { Section } from "@/components/section";
 import { formatMoney } from "@/lib/insights";
 
@@ -11,8 +12,9 @@ import { formatMoney } from "@/lib/insights";
  * Sparziele: what the account is saving for, and where a finished month's
  * leftover money goes.
  *
- * Server-rendered apart from the three controls, like the rest of the app —
- * the pots are SVG the server can draw, and only the forms need a client.
+ * Server-rendered apart from the controls that need one — the pots are SVG
+ * the server can draw, but the grid around them is a client component too,
+ * since dragging one pot onto another to move money is genuine interactivity.
  *
  * The allocator appears **only for a month that has ended and came out
  * ahead**. Offering to put away money from a month still in progress is
@@ -41,13 +43,21 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
     <Section
       id="savings"
       heading={t("heading")}
+      /* The meta slot holds the running total and the standing-order button
+         together: both are about the pots as a set rather than any one of
+         them, and the section heading is the only place that is true. */
       meta={
-        pots.length > 0
-          ? t("savedOfTarget", {
-              saved: formatMoney(savedMinor),
-              target: formatMoney(targetMinor),
-            })
-          : t("subtitle")
+        <span className="flex items-center gap-3">
+          <span className="text-[12.5px] text-text-muted">
+            {pots.length > 0
+              ? t("savedOfTarget", {
+                  saved: formatMoney(savedMinor),
+                  target: formatMoney(targetMinor),
+                })
+              : t("subtitle")}
+          </span>
+          <StandingOrderDialog pots={pots} />
+        </span>
       }
     >
       {pots.length === 0 ? (
@@ -55,18 +65,18 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
           {t("empty")}
         </p>
       ) : (
-        <ul className="grid grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-3 sm:px-5 md:grid-cols-4 lg:grid-cols-5">
-          {pots.map((pot) => (
-            <SavingsPot key={pot.id} pot={pot} />
-          ))}
-        </ul>
+        <SavingsPotsGrid pots={pots} />
       )}
 
       {canAllocate && pots.length > 0 ? (
-        // Keyed on the month: the allocator holds typed-but-unsaved amounts,
-        // and switching months has to start it over.
+        // Keyed on the month *and* on what is already allocated: the allocator
+        // holds typed-but-unsaved amounts, so switching months has to start it
+        // over, and so does anything that moves money outside the allocator
+        // itself — dragging a pot onto another one can change this month's
+        // already-allocated figure for both, and a stale key would leave the
+        // fields showing amounts that no longer match what is actually saved.
         <SavingsAllocator
-          key={month}
+          key={`${month}:${pots.map((pot) => `${pot.id}:${pot.monthMinor}`).join(",")}`}
           month={month}
           surplusMinor={surplus}
           pots={pots}
