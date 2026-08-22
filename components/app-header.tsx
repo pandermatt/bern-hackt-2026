@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { HeaderNav } from "@/components/header-nav";
 
 import { logout } from "@/app/actions/auth";
+import { HideOnRoute } from "@/components/hide-on-route";
 import { Logo } from "@/components/logo";
 import type { User } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
@@ -64,25 +65,32 @@ export function AppHeader({ user }: { user: User | null }) {
             </form>
           </div>
         ) : (
+          /* Each of these is dropped on the page it leads to — see
+             `HideOnRoute`. On `/login` and `/register` that leaves one
+             control, which is the one offering the *other* page. */
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
-            >
-              <LogIn className="size-3.5 text-text-subtle" />
-              <span>{t('signIn')}</span>
-            </Link>
+            <HideOnRoute route="/login">
+              <Link
+                href="/login"
+                className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
+              >
+                <LogIn className="size-3.5 text-text-subtle" />
+                <span>{t('signIn')}</span>
+              </Link>
+            </HideOnRoute>
             {/* A maximum-contrast pill rather than a brand-coloured one — the
                 redesign's choice, kept. `bg-text`/`text-bg` is that intent
                 expressed in tokens: near-black on white in light, and it
                 inverts with the theme instead of vanishing into it. */}
-            <Link
-              href="/register"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-text px-4 py-1.5 text-[13px] font-semibold text-bg shadow-2xs transition-all hover:opacity-85 active:scale-95"
-            >
-              <span>{t('getStarted')}</span>
-              <ArrowRight className="size-3.5" />
-            </Link>
+            <HideOnRoute route="/register">
+              <Link
+                href="/register"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-text px-4 py-1.5 text-[13px] font-semibold text-bg shadow-2xs transition-all hover:opacity-85 active:scale-95"
+              >
+                <span>{t('getStarted')}</span>
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </HideOnRoute>
           </div>
         )}
       </div>

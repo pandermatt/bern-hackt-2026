@@ -1,6 +1,7 @@
 import { Heart } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { HideOnRoute } from "@/components/hide-on-route";
 import { LanguageSelector } from "@/components/language-selector";
 import { LogoMark } from "@/components/logo";
 import type { User } from "@/db/schema";
@@ -70,15 +71,23 @@ export function AppFooter({ user }: { user: User | null }) {
 
           {/* The two links share a row of their own below `sm`; `sm:contents`
               drops the box at `sm` so they rejoin the parent row rather than
-              needing a second copy behind a breakpoint. */}
+              needing a second copy behind a breakpoint.
+
+              Each is dropped on the page it leads to, the same way the
+              header's pair is — the footer of `/login` offering "Anmelden"
+              points at the form the reader is looking at. */}
           {!user && (
             <div className="flex items-center gap-1 sm:contents">
-              <Link href="/login" className={FOOTER_LINK}>
-                {t("signIn")}
-              </Link>
-              <Link href="/register" className={FOOTER_LINK}>
-                {t("register")}
-              </Link>
+              <HideOnRoute route="/login">
+                <Link href="/login" className={FOOTER_LINK}>
+                  {t("signIn")}
+                </Link>
+              </HideOnRoute>
+              <HideOnRoute route="/register">
+                <Link href="/register" className={FOOTER_LINK}>
+                  {t("register")}
+                </Link>
+              </HideOnRoute>
             </div>
           )}
 
