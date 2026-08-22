@@ -201,11 +201,14 @@
     "emptyBody": "In der aktuellen Auswahl liegen keine Transaktionen. Setzen Sie einen Filter zurück, um die Ansicht zu erweitern."
   },
   "AnomalySuggestion": {
-    "runningTitle": "Ihre Transaktionen werden auf Auffälligkeiten geprüft",
-    "runningBody": "Eine Analyse läuft gerade. Die Befunde erscheinen bei den Transaktionen unten, sobald sie abgeschlossen ist.",
+    "runningTitle": "Ihre Transaktionen werden mit KI analysiert",
+    "runningBody": "Alle Regeln laufen über Ihre Historie, danach werden die Befunde formuliert. Die Ergebnisse erscheinen bei den Transaktionen unten, sobald es fertig ist — Sie müssen die Seite nicht verlassen.",
+    "doneTitle": "Analyse abgeschlossen",
+    "doneBody": "Die Befunde werden geladen — sie erscheinen gleich bei den Transaktionen unten.",
     "title": "Die Ausreisser erkennen",
-    "body": "Es wurde noch nichts analysiert. Starten Sie eine Analyse, um doppelte Belastungen, ungewöhnliche Beträge und ausgebliebene Daueraufträge in Ihren {count} Transaktionen zu markieren.",
-    "cta": "Analyse starten"
+    "body": "Es wurde noch nichts analysiert. Analysieren Sie mit KI, um doppelte Belastungen, ungewöhnliche Beträge und ausgebliebene Daueraufträge in Ihren {count} Transaktionen zu markieren.",
+    "cta": "Mit KI analysieren",
+    "retry": "Erneut versuchen"
   },
   "AnomalyScan": {
     "heading": "Anomalie-Erkennung",

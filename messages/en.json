@@ -201,11 +201,14 @@
     "emptyBody": "No transactions fall inside the current selection. Clear a filter to widen the view."
   },
   "AnomalySuggestion": {
-    "runningTitle": "Scanning your transactions for anomalies",
-    "runningBody": "A scan is running now. Findings will appear against the transactions below as soon as it finishes.",
+    "runningTitle": "Analysing your transactions with AI",
+    "runningBody": "This runs the full rule set over your history, then writes up what it finds. The results appear against the transactions below as soon as it is done — no need to leave this page.",
+    "doneTitle": "Analysis complete",
+    "doneBody": "Bringing in the findings — they will show up against the transactions below in a moment.",
     "title": "Spot the odd ones out",
-    "body": "Nothing has been analysed yet. Run a scan to flag duplicate charges, unusual amounts and missed recurring payments across your {count} transactions.",
-    "cta": "Run a scan"
+    "body": "Nothing has been analysed yet. Analyse with AI to flag duplicate charges, unusual amounts and missed recurring payments across your {count} transactions.",
+    "cta": "Analyse with AI",
+    "retry": "Try again"
   },
   "AnomalyScan": {
     "heading": "Anomaly detection",
