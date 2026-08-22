@@ -75,8 +75,19 @@ export default async function HomePage({
     /* The pistachio runs bottom-up, and that direction is the point: Pistachio
        is 2:1 on white and the palette rule is fills only, never type, so the
        saturated end sits behind the dragon where there is no text to read. The
-       chat and the nudges keep their own `bg-surface` ground. */
-    <main className="relative flex-1 bg-linear-to-b from-bg via-pistachio/25 to-pistachio">
+       chat and the nudges keep their own `bg-surface` ground.
+
+       `app-shell:-mb-30 app-shell:pb-30` is what carries the gradient under the
+       floating tab bar. `<body>` reserves the bar's height as its *own* bottom
+       padding, which paints `bg-bg` — invisible on every other page, because
+       theirs is the ground the body already has, but on this one it cut the
+       pistachio off in a white band above the bar. The negative margin lets
+       this element grow into that reserved strip and the matching padding puts
+       the clearance back inside the gradient, so the saturated end now reaches
+       the bottom of the screen and the dragon still sits clear of the glass.
+       The pair has to stay equal to the body's `pb-30`, and all three follow
+       the bar's own padding in `components/tab-bar.tsx`. */
+    <main className="relative flex-1 bg-linear-to-b from-bg via-pistachio/25 to-pistachio app-shell:-mb-30 app-shell:pb-30">
       {/* One phone-shaped column up to `lg`, where it becomes two. This is an
           entry page, not a dashboard, so it never stretches to the full width
           of a desk monitor — but a single `max-w-md` ribbon down the middle of
@@ -106,7 +117,7 @@ export default async function HomePage({
                 also what makes the deck unfold *upwards* — the auto margin
                 gives up space as the stack grows, so the dragon stays put and
                 the cards rise out of it rather than shoving it off the screen. */}
-            <div className="mt-auto pt-8">
+            <div className="mt-auto">
               {/* One arrangement for both states: the bubble, then the dragon
                   saying it. With nothing to report the all-clear line is
                   simply the only thing in the bubble. Pistachio is a fill —
@@ -125,7 +136,7 @@ export default async function HomePage({
                     alt={t(`dragonAlt.${dragon}`)}
                     width={512}
                     height={512}
-                    className="h-40 w-40 drop-shadow-sm lg:h-60 lg:w-60"
+                    className="h-40 w-40 drop-shadow-sm lg:h-64 lg:w-64"
                   />
                 }
               >

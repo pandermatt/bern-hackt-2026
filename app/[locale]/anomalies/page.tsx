@@ -60,8 +60,12 @@ function GroupRow({
 }) {
   return (
     <li>
+      {/* The flag travels with the click. It is URL state, so a rule page
+          reached from a list with the resolved ones hidden has to be told
+          that too — otherwise walking one hop in silently puts back exactly
+          what the reader just asked to be rid of. */}
       <Link
-        href={`/anomalies/${group.ruleId}`}
+        href={`/anomalies/${group.ruleId}${hideResolved ? "?hideResolved=true" : ""}`}
         className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover sm:px-5"
       >
         {/* How much of this kind has been worked through. An indicator, not a
@@ -136,15 +140,19 @@ export default async function AnomaliesPage({
           {overview.hasCompletedScan ? t("subtitle") : t("subtitleUnscanned")}
         </p>
 
-        {/* Only once there is something to hide. The toggle reads
-            `useSearchParams`, so it needs a boundary it can suspend against. */}
-        {overview.resolvedGroupCount > 0 && (
-          <div className="mt-3">
-            <Suspense fallback={null}>
-              <HideResolvedToggle resolvedGroupCount={overview.resolvedGroupCount} />
-            </Suspense>
-          </div>
-        )}
+        {/* Always, whether or not anything has been ticked off yet — it is the
+            switch that governs what this page and every rule page under it
+            show, so it has to be findable before it has anything to hide, and
+            in the same place afterwards. The count beside it is what appears
+            and disappears.
+
+            The toggle reads `useSearchParams`, so it needs a boundary it can
+            suspend against. */}
+        <div className="mt-3">
+          <Suspense fallback={null}>
+            <HideResolvedToggle resolvedCount={overview.resolvedGroupCount} />
+          </Suspense>
+        </div>
       </div>
 
       {/* Outdated *and* there are findings to show. The empty state below says
@@ -241,14 +249,12 @@ export default async function AnomaliesPage({
             <p className="mt-3 text-[15px] font-medium text-text">
               {t("allResolvedTitle")}
             </p>
+            {/* No second toggle here: the one in the header is now always on
+                the page, a few lines above this panel, and two identical
+                controls one screen apart read as two different switches. */}
             <p className="mx-auto mt-1 max-w-md text-[13px] text-text-muted">
               {t("allResolvedBody", { count: overview.resolvedGroupCount })}
             </p>
-            <Suspense fallback={null}>
-              <div className="mt-4 flex justify-center">
-                <HideResolvedToggle resolvedGroupCount={overview.resolvedGroupCount} />
-              </div>
-            </Suspense>
           </div>
         )}
 

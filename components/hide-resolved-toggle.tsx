@@ -5,28 +5,37 @@ import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
-import { useRouter } from "@/i18n/navigation";
+import { usePathname, useRouter } from "@/i18n/navigation";
 
 /**
- * Takes the finished kinds of finding out of `/anomalies`.
+ * Takes the finished findings out of the page you are on.
  *
- * **URL state, not React state.** The server computes the groups, so it needs
+ * **URL state, not React state.** The server computes what to show, so it needs
  * the flag anyway; putting it in the query string is what also makes the view
  * shareable and survive a reload — the same call
  * `components/transaction-filters.tsx` makes, and the opposite of the local
  * `hidden` set in `components/top-category-bars.tsx`, which hides nothing the
  * server had to know about.
  *
+ * It toggles on `usePathname()` rather than on a hard-coded `/anomalies`: the
+ * same control sits on a rule's own page, and a fixed pathname there would send
+ * the reader back to the overview instead of hiding anything. The flag travels
+ * between the two on the links themselves, so switching it on and walking into
+ * a rule keeps the resolved rows out of sight.
+ *
  * Reading `useSearchParams` is what makes this a client component, and what
  * requires a `<Suspense>` boundary around it.
  *
- * The router comes from `@/i18n/navigation`: a bare `next/navigation` replace
+ * Both hooks come from `@/i18n/navigation`: a bare `next/navigation` replace
  * writes an unprefixed path, and the proxy would drop an English session back
- * to German on the first click.
+ * to German on the first click — and the matching `usePathname` is the one that
+ * returns the path *without* the locale segment, which is what that router then
+ * expects to be handed back.
  */
-export function HideResolvedToggle({ resolvedGroupCount }: { resolvedGroupCount: number }) {
+export function HideResolvedToggle({ resolvedCount = 0 }: { resolvedCount?: number }) {
   const t = useTranslations("Anomalies");
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
@@ -39,11 +48,10 @@ export function HideResolvedToggle({ resolvedGroupCount }: { resolvedGroupCount:
     if (hidden) params.delete("hideResolved");
     else params.set("hideResolved", "true");
 
+    const query = params.toString();
+
     startTransition(() => {
-      router.replace(
-        { pathname: "/anomalies", query: Object.fromEntries(params) },
-        { scroll: false },
-      );
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     });
   }
 
@@ -63,10 +71,12 @@ export function HideResolvedToggle({ resolvedGroupCount }: { resolvedGroupCount:
     >
       <Icon aria-hidden className="size-3.5 shrink-0" />
       {t(hidden ? "showResolved" : "hideResolved")}
-      {/* Only when there is something to hide — a zero here would advertise a
-          control that does nothing. */}
-      {resolvedGroupCount > 0 && (
-        <span className="font-mono tabular-nums">{resolvedGroupCount}</span>
+      {/* Only when there is something to hide — a zero here would put a number
+          on a control that has nothing to act on. The control itself stays,
+          so it is in the same place on every page whether or not anything has
+          been ticked off yet. */}
+      {resolvedCount > 0 && (
+        <span className="font-mono tabular-nums">{resolvedCount}</span>
       )}
     </button>
   );

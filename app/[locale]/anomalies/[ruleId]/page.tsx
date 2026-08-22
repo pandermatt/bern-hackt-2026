@@ -1,10 +1,12 @@
-import { ArrowLeft, ListFilter } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ListFilter } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 
 import { getAnomalyRuleDetail } from "@/app/actions/anomalies";
 import { AnomalyIcon } from "@/components/anomaly-icon";
+import { HideResolvedToggle } from "@/components/hide-resolved-toggle";
 import { ResolveToggle } from "@/components/resolve-toggle";
 import { Section } from "@/components/section";
 import type { Transaction } from "@/db/schema";
@@ -217,7 +219,7 @@ export default async function AnomalyRulePage({
   searchParams,
 }: PageProps<"/[locale]/anomalies/[ruleId]">) {
   const { locale, ruleId } = await params;
-  const { tx } = await searchParams;
+  const { tx, hideResolved } = await searchParams;
 
   const t = await getTranslations({ locale, namespace: "Anomalies" });
   // Keyed by rule id. `t.has` first, so a finding from an older engine renders
@@ -245,10 +247,31 @@ export default async function AnomalyRulePage({
   ];
   const allResolved = allIds.length > 0 && allIds.every((id) => resolvedIds.has(id));
 
+  // The same literal string the overview reads, and the same flag: switching it
+  // on there and clicking into a rule has to keep the ticked-off rows out of
+  // sight, or the setting would only hold for as long as you stay on one page.
+  const hidingResolved = hideResolved === "true";
+  // Not a filter in the query: `resolvedIds` is "every finding of this rule on
+  // that row is done", which the action works out across findings, and the
+  // header's controls still need the full set to have something to reopen.
+  const shown = (rows: Transaction[]) =>
+    hidingResolved ? rows.filter((row) => !resolvedIds.has(row.id)) : rows;
+
+  const focusRows = shown(detail.focus?.rows ?? []);
+  const otherRows = shown(detail.others);
+  // Recomputed rather than taken from `detail.focus`: a total over rows the
+  // page is not showing would be a heading describing a different list.
+  const focusTotalMinor = focusRows.reduce((sum, t) => sum + Math.abs(t.amountMinor), 0);
+  const nothingLeft = focusRows.length === 0 && otherRows.length === 0;
+
+  // Keeps the switch on across the hop back, the same way the list's own rows
+  // carry it inward.
+  const backHref = hidingResolved ? "/anomalies?hideResolved=true" : "/anomalies";
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
       <Link
-        href="/anomalies"
+        href={backHref}
         className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:underline"
       >
         <ArrowLeft aria-hidden className="size-3.5" />
@@ -317,15 +340,27 @@ export default async function AnomalyRulePage({
             <ListFilter aria-hidden className="size-3.5" />
             {t("seeInLedger")}
           </Link>
+
+          {/* The same control the overview carries, in the same row as this
+              page's other whole-rule affordances. Always, not only once
+              something is resolved: it is one setting spanning both pages, and
+              a switch that appears and disappears under you is not one.
+
+              The "x of y resolved" above stays truthful while it is on — that
+              count is about the rule, not about the list, and it is the only
+              thing left saying how much is being hidden. */}
+          <Suspense fallback={null}>
+            <HideResolvedToggle resolvedCount={detail.resolvedIds.length} />
+          </Suspense>
         </div>
       </div>
 
       <div>
-        {detail.focus && (
+        {detail.focus && focusRows.length > 0 && (
           <Section
             id="focus"
             heading={t("thisFinding")}
-            meta={formatMoney(detail.focus.totalMinor)}
+            meta={formatMoney(focusTotalMinor)}
             /* No ground of its own: each group below brings its own panel, and
                a panel inside a panel reads as neither. */
             panelClassName="bg-transparent overflow-visible"
@@ -337,7 +372,7 @@ export default async function AnomalyRulePage({
               {detail.focus.description}
             </p>
             <GroupedRows
-              rows={detail.focus.rows}
+              rows={focusRows}
               ruleId={detail.ruleId}
               resolvedIds={resolvedIds}
               t={t}
@@ -345,20 +380,40 @@ export default async function AnomalyRulePage({
           </Section>
         )}
 
-        {detail.others.length > 0 && (
+        {otherRows.length > 0 && (
           <Section
             id="others"
-            heading={detail.focus ? t("otherOfThisKind") : t("allOfThisKind")}
-            meta={t("count", { count: detail.others.length })}
+            heading={
+              detail.focus && focusRows.length > 0
+                ? t("otherOfThisKind")
+                : t("allOfThisKind")
+            }
+            meta={t("count", { count: otherRows.length })}
             panelClassName="bg-transparent overflow-visible"
           >
             <GroupedRows
-              rows={detail.others}
+              rows={otherRows}
               ruleId={detail.ruleId}
               resolvedIds={resolvedIds}
               t={t}
             />
           </Section>
+        )}
+
+        {/* The rule is worked through and the toggle is what is hiding it. The
+            page cannot simply render nothing here: it still has a title, a
+            count and a ring above, and an empty space under them reads as a
+            page that failed to load rather than as a job finished. */}
+        {nothingLeft && (
+          <div className="mt-6 rounded-lg bg-surface-muted px-5 py-10 text-center">
+            <CheckCircle2 aria-hidden className="mx-auto size-6 text-accent" />
+            <p className="mt-3 text-[15px] font-medium text-text">
+              {t("allResolvedTitle")}
+            </p>
+            <p className="mx-auto mt-1 max-w-md text-[13px] text-text-muted">
+              {t("allResolvedRuleBody", { count: detail.resolvedIds.length })}
+            </p>
+          </div>
         )}
       </div>
     </main>

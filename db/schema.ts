@@ -358,6 +358,23 @@ export const savingsGoals = sqliteTable(
      * Nullable — most pots have no standing order — and positive when set.
      */
     monthlyMinor: integer("monthly_minor"),
+    /**
+     * The glyph the pot wears, as a lucide name (`"Dog"`) — one of the keys of
+     * `GOAL_ICONS` in `lib/goal-icon.ts`.
+     *
+     * Only ever written for a goal whose name the keyword rules could not
+     * place, where `lib/llm/suggest-goal-icon.ts` asked Apertus instead. A
+     * matched name needs nothing stored: the rules will reach the same answer
+     * on every render, for free.
+     *
+     * Nullable, and it stays that way — this column was added to a table that
+     * already had rows, which `drizzle-kit push` deploys without `--force`.
+     * `null` simply means nobody has named one, which is the state every goal
+     * created before this column is in, and the state a goal stays in when the
+     * model cannot be reached. Never trusted on read; `goalIcon` checks it
+     * against the map before drawing it.
+     */
+    icon: text("icon"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

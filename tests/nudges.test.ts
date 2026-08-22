@@ -23,6 +23,7 @@ function pot(overrides: Partial<SavingsPot> = {}): SavingsPot {
     monthMinor: 0,
     targetOn: null,
     monthlyMinor: null,
+    icon: null,
     slot: 1,
     ...overrides,
   };

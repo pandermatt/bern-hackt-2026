@@ -439,7 +439,8 @@
     "stateResolved": "Erledigt",
     "stateOpen": "Nicht erledigt",
     "allResolvedTitle": "Alles erledigt",
-    "allResolvedBody": "{count, plural, one {# Art von Auffälligkeit ist} other {# Arten von Auffälligkeiten sind}} erledigt und ausgeblendet. Blende sie wieder ein, um nachzusehen, was du abgehakt hast."
+    "allResolvedBody": "{count, plural, one {# Art von Auffälligkeit ist} other {# Arten von Auffälligkeiten sind}} erledigt und ausgeblendet. Blende sie wieder ein, um nachzusehen, was du abgehakt hast.",
+    "allResolvedRuleBody": "{count, plural, one {# Auffälligkeit dieser Art ist} other {Alle # Auffälligkeiten dieser Art sind}} erledigt und ausgeblendet. Blende sie wieder ein, um nachzusehen, was du abgehakt hast."
   },
   "AnomalyErrors": {
     "notSignedIn": "Melde dich an, um eine Auffälligkeit zu erledigen.",
