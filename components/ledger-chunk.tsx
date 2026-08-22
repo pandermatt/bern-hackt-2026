@@ -106,7 +106,13 @@ function Panel({ id, children }: { id: string; children: ReactNode }) {
     <div
       id={id}
       popover="auto"
-      className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface p-4 text-left shadow-lg backdrop:bg-black/30"
+      /* Top-anchored on a phone, centred from `sm`, matching the two dialogs
+         in `components/ui/`. A popover in the top layer gets `inset: 0` from
+         the UA, so `m-auto` is what centres it; replacing the top margin with
+         a fixed one and leaving the bottom auto is the same swap `sm:top-1/2`
+         makes there. `max-h` with a scroll keeps a long finding reachable —
+         the top layer does not scroll with the page behind it. */
+      className="mx-auto mt-4 mb-auto max-h-[calc(100dvh-2rem)] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-line bg-surface p-4 text-left shadow-lg backdrop:bg-black/30 sm:my-auto sm:max-h-[calc(100dvh-4rem)]"
     >
       {children}
     </div>

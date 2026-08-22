@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
 import { useRouter } from "@/i18n/navigation";
+import { monthLabel } from "@/lib/month-label";
 
 /**
  * Which month a page is showing — the budget page originally, now shared with
@@ -30,6 +31,7 @@ export function BudgetMonthPicker({
   basePath?: string;
 }) {
   const t = useTranslations("Budget");
+  const tMonths = useTranslations("Months");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
@@ -49,13 +51,16 @@ export function BudgetMonthPicker({
             router.replace(`${basePath}?${params.toString()}`, { scroll: false }),
           );
         }}
-        className={`h-9 rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[16px] sm:text-[13px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+        className={`h-9 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] sm:text-[13px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
           pending ? "opacity-60" : ""
         }`}
       >
+        {/* The value is the `YYYY-MM` the query string and the data layer
+            speak; the label is the month's name. They were the same string
+            before, which put "2025-12" in front of a reader. */}
         {[...months].reverse().map((value) => (
           <option key={value} value={value}>
-            {value}
+            {monthLabel(tMonths, value)}
           </option>
         ))}
       </select>

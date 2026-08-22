@@ -66,8 +66,29 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        /*
+         * **Top-anchored on a phone, centred from `sm`.** A dialog here is
+         * always a form, and a form on a phone means the software keyboard:
+         * that shrinks the *visual* viewport without touching the layout
+         * viewport a `fixed` element resolves `top-1/2` against, so a centred
+         * dialog stays put and the keyboard slides up over the field being
+         * typed into. Anchored to the top, the fields sit above the keyboard
+         * where they can be seen. It also fixes the taller case — centring
+         * overflows a short screen equally in both directions, and the half
+         * above the top edge cannot be scrolled back to.
+         *
+         * `max-h` with `overflow-y-auto` is the other half of that: `fixed`
+         * does not scroll with the page, so without a ceiling a dialog taller
+         * than the screen simply has an unreachable bottom. `dvh`, not `vh`,
+         * because the mobile browser chrome moves.
+         *
+         * `w-[calc(100%-2rem)]` gives it the same 1rem inset at the sides as
+         * `top-4` gives it above. `max-w-xs` won on a 320px screen before, so
+         * the dialog was flush against both edges. From `sm` the max-widths
+         * are far below this and nothing changes on a desk.
+         */
         className={cn(
-          "group/dialog-content fixed top-1/2 left-1/2 z-50 grid w-full max-w-xs -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "group/dialog-content fixed top-4 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xs -translate-x-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:top-1/2 sm:max-h-[calc(100dvh-4rem)] sm:max-w-sm sm:-translate-y-1/2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

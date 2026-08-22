@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { AnomalyIcon } from "@/components/anomaly-icon";
 import { Link } from "@/i18n/navigation";
 import { formatMoney } from "@/lib/insights";
+import { monthLabel } from "@/lib/month-label";
 import type { NudgeSpec } from "@/lib/nudges";
 
 /**
@@ -20,6 +21,7 @@ import type { NudgeSpec } from "@/lib/nudges";
  */
 export function NudgeCard({ nudge }: { nudge: NudgeSpec }) {
   const t = useTranslations("Home");
+  const tMonths = useTranslations("Months");
 
   const warning = nudge.tone === "warning";
   const tint = warning
@@ -46,7 +48,7 @@ export function NudgeCard({ nudge }: { nudge: NudgeSpec }) {
   } else {
     icon = <PiggyBank className="size-4" aria-hidden />;
     title = t("freeMoneyTitle", { amount: formatMoney(nudge.amountMinor) });
-    body = t("freeMoneyBody", { month: nudge.month });
+    body = t("freeMoneyBody", { month: monthLabel(tMonths, nudge.month) });
     href = "/budget#savings";
   }
 

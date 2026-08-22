@@ -7,6 +7,7 @@ import { StandingOrderDialog } from "@/components/standing-order-dialog";
 import { SavingsPotsGrid } from "@/components/savings-pots-grid";
 import { Section } from "@/components/section";
 import { formatMoney } from "@/lib/insights";
+import { monthLabel } from "@/lib/month-label";
 
 /**
  * Sparziele: what the account is saving for, and where a finished month's
@@ -26,7 +27,13 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
   // component, so the hook works and keeps the call site the same shape the
   // client components use.
   const t = useTranslations("Savings");
+  const tMonths = useTranslations("Months");
   const { month, monthEnded, surplusMinor, freeMinor, pots } = overview;
+
+  // The sentences below name the month; `month` itself is the `YYYY-MM` key
+  // the data layer speaks. Interpolating the key read "In 2025-12 blieb Geld
+  // übrig" — see `lib/month-label.ts`.
+  const monthName = month === null ? null : monthLabel(tMonths, month);
 
   const savedMinor = pots.reduce((sum, pot) => sum + pot.savedMinor, 0);
   const targetMinor = pots.reduce((sum, pot) => sum + pot.targetMinor, 0);
@@ -86,16 +93,18 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
           pots={pots}
         />
       ) : (
-        month !== null && (
+        /* Tested through `monthName` so the narrowing reaches the value the
+           sentences interpolate; the two are null together by construction. */
+        monthName !== null && (
           <p className="border-t border-surface px-4 py-3 text-[12.5px] text-text-muted sm:px-5">
             {!monthEnded
-              ? t("monthRunning", { month })
+              ? t("monthRunning", { month: monthName })
               : surplus < 0
-                ? t("monthOverspent", { month, amount: formatMoney(surplus) })
+                ? t("monthOverspent", { month: monthName, amount: formatMoney(surplus) })
                 : surplus === 0
-                  ? t("monthSpentAll", { month })
+                  ? t("monthSpentAll", { month: monthName })
                   : t("monthLeftOver", {
-                      month,
+                      month: monthName,
                       amount: formatMoney(surplus),
                     })}
           </p>

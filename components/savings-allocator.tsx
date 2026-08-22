@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { allocateSurplus } from "@/app/actions/savings";
 import { formatMoney, type SavingsPot } from "@/lib/insights";
+import { monthLabel } from "@/lib/month-label";
 
 /**
  * Splits a finished month's leftover money across the pots.
@@ -59,6 +60,10 @@ export function SavingsAllocator({
   pots: SavingsPot[];
 }) {
   const t = useTranslations("Savings");
+  const tMonths = useTranslations("Months");
+  // "Dezember 2025", not the `YYYY-MM` key the action is keyed on —
+  // `month` itself still goes to the server untouched. See `lib/month-label.ts`.
+  const monthName = monthLabel(tMonths, month);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [fields, setFields] = useState<Record<number, string>>(() =>
@@ -166,7 +171,7 @@ export function SavingsAllocator({
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="flex items-center gap-1.5 text-[13.5px] font-semibold text-text">
           <PiggyBank className="size-4 text-accent" aria-hidden />
-          {t("allocatorHeading", { month })}
+          {t("allocatorHeading", { month: monthName })}
         </h3>
         {/* "left over", not "free": the line below tracks what is still
             unallocated, and two numbers both calling themselves free is how a
@@ -189,7 +194,7 @@ export function SavingsAllocator({
             </span>
             <label className="shrink-0">
               <span className="sr-only">
-                {t("allocatorFieldLabel", { name: pot.name, month })}
+                {t("allocatorFieldLabel", { name: pot.name, month: monthName })}
               </span>
               <input
                 type="text"

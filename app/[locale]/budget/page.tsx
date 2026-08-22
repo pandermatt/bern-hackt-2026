@@ -10,6 +10,7 @@ import { Section } from "@/components/section";
 import { Link, redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/insights";
+import { monthLabel } from "@/lib/month-label";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,9 @@ export default async function BudgetPage({
   // `getTranslations`, not `useTranslations`: this component is async, and a
   // hook cannot be called across an await.
   const t = await getTranslations({ locale, namespace: "Budget" });
+  // The copy names the month; `month` is the `YYYY-MM` key the query string
+  // and the data layer speak. See `lib/month-label.ts`.
+  const tMonths = await getTranslations({ locale, namespace: "Months" });
 
   // The proxy only sniffs for a cookie; this is the authoritative check.
   const user = await getCurrentUser();
@@ -40,6 +44,7 @@ export default async function BudgetPage({
   if (!overview) return redirect({ href: "/login", locale });
 
   const { months, month, rows } = overview;
+  const monthName = month ? monthLabel(tMonths, month) : null;
 
   const totalUsed = rows.reduce((sum, row) => sum + row.usedMinor, 0);
   const totalLimit = rows.reduce((sum, row) => sum + (row.limitMinor ?? 0), 0);
@@ -91,13 +96,15 @@ export default async function BudgetPage({
               /* `month` is non-null whenever there are rows — `budgetRows`
                  returns [] without one — but that is not something the type
                  carries, and "no month" has nothing to say about a month
-                 anyway. */
-              budgeted === 0 || !month
+                 anyway. Tested through `monthName` rather than `month` so the
+                 narrowing reaches the value actually interpolated below; the
+                 two are null together by construction. */
+              budgeted === 0 || !monthName
                 ? t("radarNoLimits")
                 : t("radarMeta", {
                     spent: formatMoney(totalUsed),
                     limit: formatMoney(totalLimit),
-                    month,
+                    month: monthName,
                   })
             }
             panelClassName="p-4 sm:p-5"

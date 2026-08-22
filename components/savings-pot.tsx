@@ -111,7 +111,15 @@ export function SavingsPot({
   const wetClip = `pot-wet-${pot.id}`;
 
   return (
-    <div className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
+    /* `h-full` so every pot in a row is the same height. The `<li>` around
+       this in `savings-pots-grid.tsx` is a grid item and already stretches to
+       the tallest cell in its row, but this card is a *child* of it and sized
+       itself, so a goal whose "von CHF 100'000.00 · 11%" line wrapped left the
+       cards beside it visibly short. The bar below then takes `mt-auto`, which
+       is what puts every card's bar on one baseline rather than leaving the
+       gap under it — and comparing lengths on a shared baseline is the whole
+       reason that bar exists next to the jar. */
+    <div className="relative flex h-full flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
       {/* Always visible rather than revealed on hover: a hover affordance is
           not reachable on a touch screen. Retarget on the left, delete on the
           right — the reversible action and the irreversible one as far apart
@@ -327,7 +335,7 @@ export function SavingsPot({
       {/* The deadline the pots are ordered by, so the order is legible rather
           than mysterious — and the standing order beside it, which is a plan
           rather than a balance and so never joins the amount above. */}
-      <p className="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[11px] text-text-subtle">
+      <p className="mt-1 mb-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[11px] text-text-subtle">
         <span className="inline-flex items-center gap-1">
           <CalendarDays className="size-3" aria-hidden />
           {pot.targetOn ? t("potDue", { date: formatDay(pot.targetOn) }) : t("potNoDue")}
@@ -345,7 +353,12 @@ export function SavingsPot({
           comparing lengths on a shared baseline than areas in a jar — so the
           pot carries the identity and this carries the precision. */}
       <div
-        className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-muted"
+        /* `mt-auto`, not `mt-2`: the auto margin swallows whatever slack
+           `h-full` leaves a shorter card, which is what puts every bar in the
+           row on one baseline. The gap above it comes from the `mb-2` on the
+           line before — margins do not collapse in a flex container, so that
+           one is a floor the auto margin adds to rather than replaces. */
+        className="mt-auto h-2 w-full overflow-hidden rounded-full bg-surface-muted"
         aria-hidden
       >
         <div
