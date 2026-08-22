@@ -2,7 +2,6 @@ import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { logout } from "@/app/actions/auth";
-import { LanguageSelector } from "@/components/language-selector";
 import { Logo } from "@/components/logo";
 import type { User } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
@@ -32,7 +31,6 @@ export function AppHeader({ user }: { user: User | null }) {
 
         {user ? (
           <div className="flex items-center gap-2.5">
-            <LanguageSelector />
             <Link
               href="/account"
               aria-label={t('accountSettings')}
@@ -55,7 +53,6 @@ export function AppHeader({ user }: { user: User | null }) {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <LanguageSelector />
             <Link
               href="/login"
               className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}

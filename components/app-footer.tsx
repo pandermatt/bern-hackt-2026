@@ -1,6 +1,7 @@
 import { ShieldCheck, Heart } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { LanguageSelector } from "@/components/language-selector";
 import type { User } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
 import { site } from "@/lib/site";
@@ -31,8 +32,12 @@ export function AppFooter({ user }: { user: User | null }) {
             <ShieldCheck className="size-3.5" />
             <span>{t("clientScoped")}</span>
           </div>
+          {/* Signed out, this is the only place to change language — signed in,
+              it lives on /account instead, so the footer does not offer the
+              same control twice. */}
           {!user && (
             <>
+              <LanguageSelector />
               <Link
                 href="/login"
                 className="text-text-muted hover:text-text transition-colors"

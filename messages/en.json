@@ -286,6 +286,8 @@
     "appearance": "Appearance",
     "colourTheme": "Colour theme",
     "colourThemeNote": "Applies to this browser only.",
+    "language": "Language",
+    "languageNote": "Remembered in this browser.",
     "dangerZone": "Danger zone",
     "deleteAccount": "Delete account",
     "deleteAccountNote": "Permanently removes your account and every transaction in it."

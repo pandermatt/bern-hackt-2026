@@ -286,6 +286,8 @@
     "appearance": "Darstellung",
     "colourTheme": "Farbschema",
     "colourThemeNote": "Gilt nur für diesen Browser.",
+    "language": "Sprache",
+    "languageNote": "Wird in diesem Browser gespeichert.",
     "dangerZone": "Gefahrenzone",
     "deleteAccount": "Konto löschen",
     "deleteAccountNote": "Entfernt Ihr Konto und alle darin enthaltenen Transaktionen unwiderruflich."

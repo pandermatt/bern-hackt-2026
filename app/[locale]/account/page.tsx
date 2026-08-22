@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { AnomalyScanControls } from "@/components/anomaly-scan-controls";
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
+import { LanguageSelector } from "@/components/language-selector";
 import { ProfileSettings } from "@/components/profile-settings";
 import { ThemeSetting } from "@/components/theme-setting";
 import { redirect } from "@/i18n/navigation";
@@ -51,14 +52,28 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
         <div className="border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5">
           <h2 className="text-[14.5px] font-semibold text-text">{t("appearance")}</h2>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
-          <div>
-            <p className="text-[14px] font-medium text-text">{t("colourTheme")}</p>
-            <p className="mt-0.5 text-[13px] text-text-muted">
-              {t("colourThemeNote")}
-            </p>
+        {/* Two rows, so the divider is the card's own line rather than a
+            border on either row. Both wear the same segmented pill. */}
+        <div className="divide-y divide-line">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
+            <div>
+              <p className="text-[14px] font-medium text-text">{t("colourTheme")}</p>
+              <p className="mt-0.5 text-[13px] text-text-muted">
+                {t("colourThemeNote")}
+              </p>
+            </div>
+            <ThemeSetting />
           </div>
-          <ThemeSetting />
+
+          <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
+            <div>
+              <p className="text-[14px] font-medium text-text">{t("language")}</p>
+              <p className="mt-0.5 text-[13px] text-text-muted">
+                {t("languageNote")}
+              </p>
+            </div>
+            <LanguageSelector />
+          </div>
         </div>
       </div>
 
