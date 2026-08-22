@@ -1,4 +1,4 @@
-import { ChartColumn, House, TriangleAlert, Wallet } from "lucide-react";
+import { ChartColumn, House, PiggyBank, TriangleAlert, Wallet } from "lucide-react";
 
 /**
  * The app's top-level destinations, in the order they appear — read by both
@@ -17,6 +17,7 @@ export const TABS = [
   { href: "/home", key: "home", icon: House },
   { href: "/dashboard", key: "dashboard", icon: ChartColumn },
   { href: "/budget", key: "budget", icon: Wallet },
+  { href: "/savings", key: "savings", icon: PiggyBank },
   {
     href: "/anomalies",
     key: "anomalies",

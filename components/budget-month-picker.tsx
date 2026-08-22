@@ -7,9 +7,12 @@ import { useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
 
 /**
- * Which month the budget page is showing.
+ * Which month a page is showing — the budget page originally, now shared with
+ * `/savings` now that the pots moved to a page of their own. Both read the
+ * same `?month=` shape and the same `getSavingsOverview`/`getBudgetOverview`
+ * resolution rule, so `basePath` is the only thing that differs between them.
  *
- * State lives in the URL, like the dashboard's filters — a budget view is
+ * State lives in the URL, like the dashboard's filters — a month view is
  * worth linking to, and the page stays server-rendered around it. Reads
  * `useSearchParams`, so the caller wraps it in a `<Suspense>` boundary.
  *
@@ -20,9 +23,11 @@ import { useRouter } from "@/i18n/navigation";
 export function BudgetMonthPicker({
   months,
   month,
+  basePath = "/budget",
 }: {
   months: string[];
   month: string;
+  basePath?: string;
 }) {
   const t = useTranslations("Budget");
   const router = useRouter();
@@ -41,7 +46,7 @@ export function BudgetMonthPicker({
           const params = new URLSearchParams(searchParams);
           params.set("month", event.target.value);
           startTransition(() =>
-            router.replace(`/budget?${params.toString()}`, { scroll: false }),
+            router.replace(`${basePath}?${params.toString()}`, { scroll: false }),
           );
         }}
         className={`h-9 rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[13px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${

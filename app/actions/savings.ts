@@ -36,6 +36,10 @@ import {
  * The second is what the first gets filled from.
  */
 export type SavingsOverview = {
+  /** Every month there are statements for, ascending — what the page's own
+   * month picker offers, now that Savings is a page of its own rather than
+   * sharing the budget page's. */
+  months: string[];
   month: string | null;
   /** Whether the month is over. A running month has no final surplus. */
   monthEnded: boolean;
@@ -220,6 +224,7 @@ export async function getSavingsOverview(
   );
 
   return {
+    months,
     month,
     monthEnded,
     surplusMinor,

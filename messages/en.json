@@ -9,7 +9,8 @@
     "dashboard": "Dashboard",
     "budget": "Budget",
     "mainNav": "Main",
-    "home": "Home"
+    "home": "Home",
+    "savings": "Savings"
   },
   "AppFooter": {
     "tagline": "Private spending insights from your own statements.",
@@ -341,7 +342,10 @@
     "unallocateFieldLabel": "Amount to take out (CHF)",
     "unallocateHint": "Up to {amount}.",
     "unallocatedAgain": "Moved {amount} out of {from}.",
-    "monthOverspent": "{month} spent {amount} more than it earned."
+    "monthOverspent": "{month} spent {amount} more than it earned.",
+    "pageTitle": "Savings",
+    "pageSubtitle": "What you're saving for, and where a finished month's leftover money goes.",
+    "pageSubtitleEmpty": "No statements imported yet."
   },
   "SavingsErrors": {
     "notSignedInCreate": "Sign in to add a savings goal.",
@@ -787,7 +791,8 @@
     "offline": "Offline",
     "anomalies": "Anomalies",
     "budget": "Budget",
-    "home": "Home"
+    "home": "Home",
+    "savings": "Savings"
   },
   "Weekdays": {
     "short1": "Mon",
