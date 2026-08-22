@@ -327,7 +327,9 @@
     "never": "nie",
     "failed": "Letzte Analyse fehlgeschlagen: {error}",
     "unknownError": "unbekannter Fehler",
-    "noScan": "Es wurde noch keine Analyse ausgeführt — bis dahin zeigt das Dashboard keine Auffälligkeiten."
+    "noScan": "Es wurde noch keine Analyse ausgeführt — bis dahin zeigt das Dashboard keine Auffälligkeiten.",
+    "error_sessionExpired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+    "error_alreadyRunning": "Es läuft bereits eine Analyse."
   },
   "ScanPhases": {
     "Loading transactions": "Transaktionen werden geladen",
@@ -388,6 +390,119 @@
     "UNUSUALLY_LARGE_TRANSACTION": "Einer der grössten Abflüsse deiner gesamten Historie. Ein kurzer Blick zur Bestätigung lohnt sich.",
     "UNUSUAL_DAY": "Diesen Händler nutzt du sonst an anderen Wochentagen.",
     "UNUSUAL_FINANCIAL_IMPACT": "Eine einzelne Zahlung, die im Verhältnis zum Monatseinkommen ins Gewicht fällt, nicht nur zu deinen üblichen Ausgaben."
+  },
+  "AnomalyFindings": {
+    "weekday0": "Sonntag",
+    "weekday1": "Montag",
+    "weekday2": "Dienstag",
+    "weekday3": "Mittwoch",
+    "weekday4": "Donnerstag",
+    "weekday5": "Freitag",
+    "weekday6": "Samstag",
+    "AMOUNT_SPIKE": {
+      "title": "Ungewöhnlich hoher Betrag",
+      "description": "{amount} liegt um das {mad}-Fache der üblichen Streuung über dem Median dieses Händlers von {median}."
+    },
+    "UNUSUALLY_LARGE_TRANSACTION": {
+      "title": "Eine Ihrer grössten Buchungen",
+      "description": "{amount} gehört zu den grössten Einzelbuchungen Ihrer Historie."
+    },
+    "NEW_MERCHANT": {
+      "title": "Zum ersten Mal hier",
+      "description": "Erste Buchung bei {merchant} in {days} Tagen Historie."
+    },
+    "NEW_CATEGORY": {
+      "title": "Neue Kategorie",
+      "description": "Erste Buchung in {category} in {days} Tagen Historie."
+    },
+    "FREQUENCY_SPIKE": {
+      "title": "Häufiger als sonst",
+      "description": "{merchant} hat innerhalb von sieben Tagen {count, plural, one {# Mal} other {# Mal}} belastet — das {factor}-Fache Ihrer üblichen {baseline} pro Woche."
+    },
+    "CATEGORY_SPENDING_SPIKE": {
+      "title": "Mehr in dieser Kategorie",
+      "description": "{category} erreichte im {month} {amount} und liegt damit {growth}% über Ihrem üblichen Niveau."
+    },
+    "NEW_RECURRING_PAYMENT": {
+      "title": "Neue wiederkehrende Zahlung",
+      "description": "Neue regelmässige Zahlung an {merchant} von rund {amount} alle {days} Tage."
+    },
+    "RECURRING_PAYMENT_CHANGE": {
+      "title": "Wiederkehrende Zahlung geändert",
+      "description": "Die wiederkehrende Zahlung an {merchant} ging von {from} auf {to} ({change}%)."
+    },
+    "RECURRING_PAYMENT_DISAPPEARANCE": {
+      "title": "Wiederkehrende Zahlung fehlt",
+      "description": "Die wiederkehrende Zahlung an {merchant} ist überfällig — erwartet alle {interval} Tage, zuletzt vor {days} Tagen gesehen."
+    },
+    "UNUSUAL_DAY": {
+      "title": "Ungewöhnlicher Tag",
+      "description": "Das ist Ihr einziger von {visits} Besuchen bei {merchant} an einem {weekday}."
+    },
+    "REPEAT_CHARGE": {
+      "title": "Mehrfach belastet",
+      "description": "{merchant} hat am {day} {count, plural, one {# Mal} other {# Mal}} {amount} belastet, insgesamt {total}."
+    },
+    "NEW_COUNTERPARTY": {
+      "title": "Neue Empfängerin oder neuer Empfänger",
+      "description": "Übertrag an {counterparty} — dorthin haben Sie bisher nie gezahlt."
+    },
+    "LARGE_TRANSFER": {
+      "title": "Grosser Übertrag",
+      "description": "Ein Übertrag von {amount} liegt deutlich über Ihren üblichen Überträgen."
+    },
+    "INCOME_DEVIATION": {
+      "title": "Einkommen weicht ab",
+      "description": "Ein Eingang von {amount} weicht {deviation}% von Ihren üblichen {baseline} ab."
+    },
+    "MISSING_EXPECTED_INCOME": {
+      "title": "Einkommen verspätet",
+      "description": "Der erwartete Eingang von {merchant} ist {days} Tage überfällig."
+    },
+    "BALANCE_DROP": {
+      "title": "Ausgabenstarke Woche",
+      "description": "Ein Nettoabfluss von {amount} innerhalb von sieben Tagen."
+    },
+    "SAVINGS_RATE_CHANGE": {
+      "title": "Sparquote verschoben",
+      "description": "Ihre monatliche Sparquote ging von {from}% auf {to}% — eine Verschiebung um {shift} Prozentpunkte."
+    },
+    "CATEGORY_SHIFT": {
+      "title": "Anteil der Kategorie verschoben",
+      "description": "{category} machte im {month} {share}% der Ausgaben aus, üblich sind {baseline}%."
+    },
+    "MERCHANT_CONCENTRATION": {
+      "title": "Auf einen Händler konzentriert",
+      "description": "{merchant} machte {share}% der Ausgaben dieses Monats aus, {shift} Prozentpunkte mehr als sonst."
+    },
+    "ROUND_NUMBER_TRANSACTION": {
+      "title": "Grosser runder Betrag",
+      "description": "Runde {amount} bei {merchant}."
+    },
+    "REFUND_ANOMALY": {
+      "title": "Ungewöhnliche Rückerstattung",
+      "description": "Eine Rückerstattung von {amount} von {merchant} liegt um das {mad}-Fache der üblichen Streuung über Ihrer mittleren Rückerstattung."
+    },
+    "CASH_WITHDRAWAL_SPIKE": {
+      "title": "Grosser Bargeldbezug",
+      "description": "Ein Bargeldbezug von {amount} liegt deutlich über Ihren üblichen Bezügen."
+    },
+    "PAYMENT_METHOD_SHIFT": {
+      "title": "Zahlungsmittel verschoben",
+      "description": "{account} trug im {month} {share}% der Ausgaben, {shift} Prozentpunkte neben den üblichen {baseline}%."
+    },
+    "EXPENSE_GROWTH_TREND": {
+      "title": "Wächst Monat für Monat",
+      "description": "{category} ist vier Monate in Folge gewachsen, im Schnitt {growth}% pro Monat."
+    },
+    "SUBSCRIPTION_ACCUMULATION": {
+      "title": "Mehr Abonnemente",
+      "description": "{count, plural, one {# neuer wiederkehrender Dienst ist} other {# neue wiederkehrende Dienste sind}} kürzlich dazugekommen."
+    },
+    "UNUSUAL_FINANCIAL_IMPACT": {
+      "title": "Stark ins Gewicht fallend",
+      "description": "{amount} ist für dieses Konto ein extremer Betrag — {share}% eines typischen Monatseinkommens."
+    }
   },
   "DemoData": {
     "heading": "Demo- & synthetische Daten",

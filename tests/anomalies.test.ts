@@ -19,6 +19,18 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   getCurrentUser: async () => signedIn.user,
 }));
 
+/* A scan reads the locale to tell the narrative layer which language to write
+ * in, and the findings are rendered against the catalogs on the way out —
+ * outside a request there is neither a locale to resolve nor a catalog loaded,
+ * so both are supplied here from `messages/en.json`. */
+vi.mock("next-intl/server", async () => {
+  const { translator } = await import("./stubs/i18n");
+  return {
+    getLocale: async () => "en",
+    getTranslations: async (namespace: string) => translator(namespace),
+  };
+});
+
 const {
   getAnomalyOverview,
   getAnomalyRuleDetail,
@@ -159,6 +171,34 @@ describe("running a scan", () => {
     }
   });
 
+  /*
+   * A finding is read back in whichever language its reader is in, so what has
+   * to survive the round trip is not the sentence but the rule that produced it
+   * and the values that rule needs. Without them a stored finding can only be
+   * shown in the language the scan happened to run in.
+   */
+  it("stores what a finding needs to be rendered in either language", async () => {
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+
+    const stored = await db.select().from(anomalies);
+    for (const row of stored) {
+      expect(row.baseRuleId).toBe(row.ruleId);
+      expect(JSON.parse(row.params ?? "null")).toBeTruthy();
+      // Nothing here came from the model, so nothing is pinned to a language.
+      expect(row.narrativeLocale).toBeNull();
+    }
+
+    const [spike] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.externalId, "a-spike"));
+    const [found] = await getStoredAnomaliesForPage([spike.id]);
+    expect(found.base_rule_id).toBe(found.rule_id);
+    expect(found.params).toBeTruthy();
+  });
+
   it("replaces the previous scan's results rather than appending", async () => {
     await db.insert(transactions).values(history(alice.id, "a"));
 
@@ -181,7 +221,7 @@ describe("running a scan", () => {
 
     expect(await startAnomalyScan()).toEqual({
       ok: false,
-      error: "A scan is already running.",
+      error: "alreadyRunning",
     });
   });
 
@@ -564,7 +604,7 @@ describe("ownership", () => {
     });
     expect(await startAnomalyScan()).toEqual({
       ok: false,
-      error: "Your session expired. Sign in again.",
+      error: "sessionExpired",
     });
   });
 });

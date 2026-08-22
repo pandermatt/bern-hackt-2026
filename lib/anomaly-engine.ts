@@ -233,8 +233,37 @@ export function attentionFor(ruleId: string): Attention {
 
 export interface AnomalyInsight {
   rule_id: string;
+  /** English, and only a fallback — see `params`. */
   title: string;
+  /** English, and only a fallback — see `params`. */
   description: string;
+  /**
+   * The values this rule's message needs, locale-neutral.
+   *
+   * `title` and `description` above are written in English because the LLM
+   * narrative layer reads them and because a row stored before this existed
+   * still has to render. What the UI actually shows is the `AnomalyFindings`
+   * message for `rule_id`, filled with these — so a finding scanned once reads
+   * in whichever language its reader is in, rather than in the language the
+   * scan happened to run in. Amounts are pre-formatted (money is `de-CH`
+   * everywhere in this app, see `formatMoney`); anything genuinely
+   * language-dependent — a category, a month, a weekday — is passed as its key
+   * and resolved by `lib/anomaly-text.ts` against the catalogs.
+   */
+  params?: Record<string, string | number>;
+  /**
+   * The rule whose message renders this finding, when that is not `rule_id`
+   * itself. Only the narrative layer sets it — merging several findings into
+   * one leaves `rule_id` as `COMBINED_INSIGHT`, which has no message of its
+   * own, so the primary candidate's rule is kept here for the fallback.
+   */
+  base_rule_id?: string;
+  /**
+   * Which language `title` and `description` are written in, when the model
+   * wrote them. `undefined` means the engine did, in English — which is
+   * translatable from `params` and so never needs this.
+   */
+  narrative_locale?: string;
   severity: AnomalySeverity;
   kind: AnomalyKind;
   transaction_ids: number[];
@@ -657,6 +686,11 @@ export function analyzeTransactionAnomalies(
           rule_id: "AMOUNT_SPIKE",
           title: "Unusual Expense Amount Spike",
           description: `Transaction amount (${(mag / 100).toFixed(2)} ${t.currency}) exceeds the ${baselineType} baseline median (${(median / 100).toFixed(2)}) by ${madDeviation.toFixed(1)}x MAD.`,
+          params: {
+            amount: formatMoney(mag, t.currency),
+            median: formatMoney(Math.round(median), t.currency),
+            mad: madDeviation.toFixed(1),
+          },
           severity,
           transaction_ids: [t.id],
           supporting_metrics: {
@@ -701,6 +735,9 @@ export function analyzeTransactionAnomalies(
           rule_id: "UNUSUALLY_LARGE_TRANSACTION",
           title: "Unusually Large Outflow",
           description: `Transaction amount (${(mag / 100).toFixed(2)} ${t.currency}) ranks among the largest transactions in history.`,
+          params: {
+            amount: formatMoney(mag, t.currency),
+          },
           severity,
           transaction_ids: [t.id],
           supporting_metrics: {
@@ -743,6 +780,10 @@ export function analyzeTransactionAnomalies(
             rule_id: "NEW_MERCHANT",
             title: "First-Time Merchant",
             description: `Transaction with previously unseen merchant "${t.merchant}" after ${Math.round(daysSinceStart)} days of history.`,
+            params: {
+              merchant: t.merchant,
+              days: Math.round(daysSinceStart),
+            },
             severity: "low",
             transaction_ids: [t.id],
             supporting_metrics: {
@@ -780,6 +821,10 @@ export function analyzeTransactionAnomalies(
             rule_id: "NEW_CATEGORY",
             title: "New Spending Category",
             description: `First recorded transaction in category "${t.category}" after ${Math.round(daysSinceStart)} days of history.`,
+            params: {
+              category: t.category,
+              days: Math.round(daysSinceStart),
+            },
             severity: "low",
             transaction_ids: [t.id],
             supporting_metrics: {
@@ -829,6 +874,12 @@ export function analyzeTransactionAnomalies(
             rule_id: "FREQUENCY_SPIKE",
             title: "Transaction Frequency Spike",
             description: `Merchant "${group[0].merchant}" had ${count} transactions within 7 days (${ratio.toFixed(1)}x baseline of ${weeklyBaseline.toFixed(1)}/week).`,
+            params: {
+              merchant: group[0].merchant,
+              count,
+              factor: ratio.toFixed(1),
+              baseline: weeklyBaseline.toFixed(1),
+            },
             severity,
             transaction_ids: inWindow.map((w) => w.id),
             supporting_metrics: {
@@ -885,6 +936,12 @@ export function analyzeTransactionAnomalies(
             rule_id: "CATEGORY_SPENDING_SPIKE",
             title: "Category Spending Surge",
             description: `Spending in "${cat}" reached ${(currentSpend / 100).toFixed(2)} in ${month}, up +${(growth * 100).toFixed(0)}% above baseline median.`,
+            params: {
+              category: cat,
+              amount: formatMoney(currentSpend),
+              month,
+              growth: (growth * 100).toFixed(0),
+            },
             severity,
             transaction_ids: txInMonth,
             supporting_metrics: {
@@ -917,6 +974,11 @@ export function analyzeTransactionAnomalies(
         rule_id: "NEW_RECURRING_PAYMENT",
         title: "New Recurring Subscription/Payment",
         description: `Detected new regular recurring payment from "${pattern.merchant}" (~${(pattern.medianAmountMinor / 100).toFixed(2)} every ${Math.round(pattern.intervalDaysMedian)} days).`,
+        params: {
+          merchant: pattern.merchant,
+          amount: formatMoney(Math.round(pattern.medianAmountMinor)),
+          days: Math.round(pattern.intervalDaysMedian),
+        },
         severity: "medium",
         transaction_ids: pattern.transactionIds,
         supporting_metrics: {
@@ -952,6 +1014,12 @@ export function analyzeTransactionAnomalies(
           rule_id: "RECURRING_PAYMENT_CHANGE",
           title: "Recurring Payment Price Change",
           description: `Recurring payment for "${pattern.merchant}" changed from ${(baselineAmount / 100).toFixed(2)} to ${(latestAmount / 100).toFixed(2)} (${(pctChange * 100).toFixed(1)}% change).`,
+          params: {
+            merchant: pattern.merchant,
+            from: formatMoney(Math.round(baselineAmount)),
+            to: formatMoney(latestAmount),
+            change: (pctChange * 100).toFixed(1),
+          },
           severity,
           transaction_ids: [latestTxId],
           supporting_metrics: {
@@ -981,6 +1049,11 @@ export function analyzeTransactionAnomalies(
           rule_id: "RECURRING_PAYMENT_DISAPPEARANCE",
           title: "Expected Recurring Payment Missing",
           description: `Established recurring payment for "${pattern.merchant}" is overdue (expected every ~${Math.round(pattern.intervalDaysMedian)} days, last seen ${Math.round(daysSinceLast)} days ago).`,
+          params: {
+            merchant: pattern.merchant,
+            interval: Math.round(pattern.intervalDaysMedian),
+            days: Math.round(daysSinceLast),
+          },
           severity: "low",
           transaction_ids: pattern.transactionIds.slice(-2),
           supporting_metrics: {
@@ -1014,6 +1087,11 @@ export function analyzeTransactionAnomalies(
             rule_id: "UNUSUAL_DAY",
             title: "Unusual Day of Week for Merchant",
             description: `Transaction with "${group[0].merchant}" occurred on a ${dayNames[day]} (no other transaction occurred on this day across ${group.length} visits).`,
+            params: {
+              merchant: group[0].merchant,
+              weekday: day,
+              visits: group.length,
+            },
             severity: "low",
             transaction_ids: [t.id],
             supporting_metrics: {
@@ -1102,6 +1180,13 @@ export function analyzeTransactionAnomalies(
         rule_id: "REPEAT_CHARGE",
         title: "Charged the same amount more than once",
         description: `${group.merchant} charged ${formatMoney(mag, group.rows[0].currency)} ${count} times on ${formatDay(group.day)}, totalling ${formatMoney(mag * count, group.rows[0].currency)}.`,
+        params: {
+          merchant: group.merchant,
+          amount: formatMoney(mag, group.rows[0].currency),
+          count,
+          day: group.day,
+          total: formatMoney(mag * count, group.rows[0].currency),
+        },
         severity,
         transaction_ids: group.rows.map((r) => r.id),
         supporting_metrics: {
@@ -1135,6 +1220,9 @@ export function analyzeTransactionAnomalies(
             rule_id: "NEW_COUNTERPARTY",
             title: "New Transfer Counterparty",
             description: `Transfer to previously unseen recipient "${t.merchant}".`,
+            params: {
+              counterparty: t.merchant,
+            },
             severity: "low",
             transaction_ids: [t.id],
             supporting_metrics: {
@@ -1171,6 +1259,9 @@ export function analyzeTransactionAnomalies(
           rule_id: "LARGE_TRANSFER",
           title: "Unusually Large Account Transfer",
           description: `Transfer of ${(mag / 100).toFixed(2)} ${t.currency} is significantly above historical transfer baseline.`,
+          params: {
+            amount: formatMoney(mag, t.currency),
+          },
           severity,
           transaction_ids: [t.id],
           supporting_metrics: {
@@ -1208,6 +1299,11 @@ export function analyzeTransactionAnomalies(
           rule_id: "INCOME_DEVIATION",
           title: "Salary / Income Deviation",
           description: `Recurring income payment of ${(latest / 100).toFixed(2)} deviated by ${(pct * 100).toFixed(1)}% from baseline median (${(baseline / 100).toFixed(2)}).`,
+          params: {
+            amount: formatMoney(latest),
+            deviation: (pct * 100).toFixed(1),
+            baseline: formatMoney(Math.round(baseline)),
+          },
           severity,
           transaction_ids: [latestTxId],
           supporting_metrics: {
@@ -1234,6 +1330,10 @@ export function analyzeTransactionAnomalies(
           rule_id: "MISSING_EXPECTED_INCOME",
           title: "Expected Salary Inflow Delayed",
           description: `Expected monthly income from "${pattern.merchant}" is overdue by ${Math.round(daysSinceLast - pattern.intervalDaysMedian)} days.`,
+          params: {
+            merchant: pattern.merchant,
+            days: Math.round(daysSinceLast - pattern.intervalDaysMedian),
+          },
           severity: "high",
           transaction_ids: pattern.transactionIds.slice(-1),
           supporting_metrics: {
@@ -1319,6 +1419,9 @@ export function analyzeTransactionAnomalies(
             rule_id: "BALANCE_DROP",
             title: "Substantial Balance Drawdown",
             description: `Significant net outflow of ${(d.dropMinor / 100).toFixed(2)} within a 7-day window.`,
+            params: {
+              amount: formatMoney(d.dropMinor),
+            },
             severity,
             transaction_ids: [d.topTxId],
             supporting_metrics: {
@@ -1368,6 +1471,11 @@ export function analyzeTransactionAnomalies(
             rule_id: "SAVINGS_RATE_CHANGE",
             title: "Savings Rate Shift",
             description: `Monthly savings rate shifted from ${(baselineMedian * 100).toFixed(1)}% to ${(curRate * 100).toFixed(1)}% (${ppDiff.toFixed(1)} percentage point shift).`,
+            params: {
+              from: (baselineMedian * 100).toFixed(1),
+              to: (curRate * 100).toFixed(1),
+              shift: ppDiff.toFixed(1),
+            },
             severity,
             transaction_ids: representativeIds(curMonth, () => true),
             supporting_metrics: {
@@ -1415,6 +1523,12 @@ export function analyzeTransactionAnomalies(
             rule_id: "CATEGORY_SHIFT",
             title: "Category Share Composition Shift",
             description: `"${cat}" represented ${curShare.toFixed(1)}% of total monthly spend in ${curMonth} (baseline median was ${baselineShareMedian.toFixed(1)}%).`,
+            params: {
+              category: cat,
+              share: curShare.toFixed(1),
+              month: curMonth,
+              baseline: baselineShareMedian.toFixed(1),
+            },
             severity: "medium",
             transaction_ids: representativeIds(curMonth, (t) => t.category === cat),
             supporting_metrics: {
@@ -1465,6 +1579,11 @@ export function analyzeTransactionAnomalies(
             rule_id: "MERCHANT_CONCENTRATION",
             title: "Merchant Spending Concentration",
             description: `Merchant "${merchantName}" captured ${curShare.toFixed(1)}% of total monthly spend (+${ppDiff.toFixed(1)} pp above baseline).`,
+            params: {
+              merchant: merchantName,
+              share: curShare.toFixed(1),
+              shift: ppDiff.toFixed(1),
+            },
             severity: "low",
             transaction_ids: representativeIds(curMonth, (t) => normalizeMerchant(t.merchant) === norm),
             supporting_metrics: {
@@ -1499,6 +1618,10 @@ export function analyzeTransactionAnomalies(
           rule_id: "ROUND_NUMBER_TRANSACTION",
           title: "High-Value Round Amount Transaction",
           description: `Large rounded amount of ${(mag / 100).toFixed(2)} ${t.currency} at "${t.merchant}".`,
+          params: {
+            amount: formatMoney(mag, t.currency),
+            merchant: t.merchant,
+          },
           severity: "low",
           transaction_ids: [t.id],
           supporting_metrics: {
@@ -1531,6 +1654,11 @@ export function analyzeTransactionAnomalies(
           rule_id: "REFUND_ANOMALY",
           title: "Unusual Refund / Credit Amount",
           description: `Refund credit of ${(mag / 100).toFixed(2)} ${r.currency} from "${r.merchant}" exceeds median refund baseline by ${madDev.toFixed(1)}x MAD.`,
+          params: {
+            amount: formatMoney(mag, r.currency),
+            merchant: r.merchant,
+            mad: madDev.toFixed(1),
+          },
           severity: "low",
           transaction_ids: [r.id],
           supporting_metrics: {
@@ -1571,6 +1699,9 @@ export function analyzeTransactionAnomalies(
           rule_id: "CASH_WITHDRAWAL_SPIKE",
           title: "Elevated Cash Withdrawal Amount",
           description: `Cash withdrawal of ${(mag / 100).toFixed(2)} ${c.currency} is substantially above normal withdrawal baseline.`,
+          params: {
+            amount: formatMoney(mag, c.currency),
+          },
           severity: "medium",
           transaction_ids: [c.id],
           supporting_metrics: {
@@ -1614,6 +1745,13 @@ export function analyzeTransactionAnomalies(
             rule_id: "PAYMENT_METHOD_SHIFT",
             title: "Payment Method Utilization Shift",
             description: `Share of spending via "${acc}" shifted by ${ppDiff.toFixed(1)} pp in ${curMonth} (${curShare.toFixed(1)}% vs baseline ${baselineMedian.toFixed(1)}%).`,
+            params: {
+              account: acc,
+              shift: ppDiff.toFixed(1),
+              month: curMonth,
+              share: curShare.toFixed(1),
+              baseline: baselineMedian.toFixed(1),
+            },
             severity: "low",
             transaction_ids: representativeIds(curMonth, (t) => t.account === acc),
             supporting_metrics: {
@@ -1664,6 +1802,10 @@ export function analyzeTransactionAnomalies(
               rule_id: "EXPENSE_GROWTH_TREND",
               title: "Sustained Expense Growth Trend",
               description: `Category "${cat}" exhibited steady growth over 4 consecutive months (+${(avgGrowthRate * 100).toFixed(0)}% average monthly expansion).`,
+              params: {
+                category: cat,
+                growth: (avgGrowthRate * 100).toFixed(0),
+              },
               severity,
               transaction_ids: representativeIds(allMonths[i], (t) => t.category === cat),
               supporting_metrics: {
@@ -1703,6 +1845,9 @@ export function analyzeTransactionAnomalies(
         rule_id: "SUBSCRIPTION_ACCUMULATION",
         title: "Accumulation of Recurring Subscriptions",
         description: `Active recurring subscriptions grew with ${recentSubs.length} new recurring services detected.`,
+        params: {
+          count: recentSubs.length,
+        },
         severity: "medium",
         transaction_ids: recentSubs.flatMap((s) => s.transactionIds.slice(-1)),
         supporting_metrics: {
@@ -1732,6 +1877,10 @@ export function analyzeTransactionAnomalies(
           rule_id: "UNUSUAL_FINANCIAL_IMPACT",
           title: "High-Impact Financial Outflow",
           description: `Transaction of ${(mag / 100).toFixed(2)} ${t.currency} is statistically extreme and represents ${((mag / typicalMonthlyIncome) * 100).toFixed(1)}% of typical monthly income.`,
+          params: {
+            amount: formatMoney(mag, t.currency),
+            share: ((mag / typicalMonthlyIncome) * 100).toFixed(1),
+          },
           severity: "high",
           transaction_ids: [t.id],
           supporting_metrics: {

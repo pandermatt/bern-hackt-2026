@@ -327,7 +327,9 @@
     "never": "never",
     "failed": "Last scan failed: {error}",
     "unknownError": "unknown error",
-    "noScan": "No scan has run yet — the dashboard will not show any anomalies until you run one."
+    "noScan": "No scan has run yet — the dashboard will not show any anomalies until you run one.",
+    "error_sessionExpired": "Your session expired. Sign in again.",
+    "error_alreadyRunning": "A scan is already running."
   },
   "ScanPhases": {
     "Loading transactions": "Loading transactions",
@@ -388,6 +390,119 @@
     "UNUSUALLY_LARGE_TRANSACTION": "One of the largest outflows in your whole history. Worth a glance simply to confirm you made it.",
     "UNUSUAL_DAY": "This merchant is normally used on other days of the week.",
     "UNUSUAL_FINANCIAL_IMPACT": "A single payment large enough to matter against a month's income, not just against your usual spending."
+  },
+  "AnomalyFindings": {
+    "weekday0": "Sunday",
+    "weekday1": "Monday",
+    "weekday2": "Tuesday",
+    "weekday3": "Wednesday",
+    "weekday4": "Thursday",
+    "weekday5": "Friday",
+    "weekday6": "Saturday",
+    "AMOUNT_SPIKE": {
+      "title": "Unusually large amount",
+      "description": "{amount} is {mad}× the usual spread above this merchant's median of {median}."
+    },
+    "UNUSUALLY_LARGE_TRANSACTION": {
+      "title": "One of your largest charges",
+      "description": "{amount} ranks among the largest single charges in your history."
+    },
+    "NEW_MERCHANT": {
+      "title": "First time here",
+      "description": "First transaction with {merchant} in {days} days of history."
+    },
+    "NEW_CATEGORY": {
+      "title": "New category",
+      "description": "First transaction in {category} in {days} days of history."
+    },
+    "FREQUENCY_SPIKE": {
+      "title": "More often than usual",
+      "description": "{merchant} was charged {count, plural, one {# time} other {# times}} in seven days — {factor}× your usual {baseline} per week."
+    },
+    "CATEGORY_SPENDING_SPIKE": {
+      "title": "Category spending up",
+      "description": "{category} reached {amount} in {month}, {growth}% above your usual level."
+    },
+    "NEW_RECURRING_PAYMENT": {
+      "title": "New recurring payment",
+      "description": "A new regular payment to {merchant} of about {amount} every {days} days."
+    },
+    "RECURRING_PAYMENT_CHANGE": {
+      "title": "Recurring payment changed",
+      "description": "The recurring payment to {merchant} went from {from} to {to} ({change}%)."
+    },
+    "RECURRING_PAYMENT_DISAPPEARANCE": {
+      "title": "Recurring payment missing",
+      "description": "The recurring payment to {merchant} is overdue — expected every {interval} days, last seen {days} days ago."
+    },
+    "UNUSUAL_DAY": {
+      "title": "Unusual day",
+      "description": "This is the only one of your {visits} visits to {merchant} on a {weekday}."
+    },
+    "REPEAT_CHARGE": {
+      "title": "Charged more than once",
+      "description": "{merchant} charged {amount} {count, plural, one {# time} other {# times}} on {day}, totalling {total}."
+    },
+    "NEW_COUNTERPARTY": {
+      "title": "New recipient",
+      "description": "Transfer to {counterparty}, a recipient you have not paid before."
+    },
+    "LARGE_TRANSFER": {
+      "title": "Large transfer",
+      "description": "A transfer of {amount} is well above your usual transfers."
+    },
+    "INCOME_DEVIATION": {
+      "title": "Income differs",
+      "description": "Income of {amount} is {deviation}% away from your usual {baseline}."
+    },
+    "MISSING_EXPECTED_INCOME": {
+      "title": "Income delayed",
+      "description": "Expected income from {merchant} is {days} days overdue."
+    },
+    "BALANCE_DROP": {
+      "title": "Heavy week",
+      "description": "A net outflow of {amount} within seven days."
+    },
+    "SAVINGS_RATE_CHANGE": {
+      "title": "Savings rate shifted",
+      "description": "Your monthly savings rate moved from {from}% to {to}% — a shift of {shift} percentage points."
+    },
+    "CATEGORY_SHIFT": {
+      "title": "Category share shifted",
+      "description": "{category} took {share}% of that month's spending in {month}, against a usual {baseline}%."
+    },
+    "MERCHANT_CONCENTRATION": {
+      "title": "Concentrated on one merchant",
+      "description": "{merchant} took {share}% of that month's spending, {shift} percentage points above usual."
+    },
+    "ROUND_NUMBER_TRANSACTION": {
+      "title": "Large round amount",
+      "description": "A round {amount} at {merchant}."
+    },
+    "REFUND_ANOMALY": {
+      "title": "Unusual refund",
+      "description": "A refund of {amount} from {merchant} is {mad}× the usual spread above your median refund."
+    },
+    "CASH_WITHDRAWAL_SPIKE": {
+      "title": "Large cash withdrawal",
+      "description": "A cash withdrawal of {amount} is well above your usual withdrawals."
+    },
+    "PAYMENT_METHOD_SHIFT": {
+      "title": "Payment method shifted",
+      "description": "{account} carried {share}% of spending in {month}, {shift} percentage points from its usual {baseline}%."
+    },
+    "EXPENSE_GROWTH_TREND": {
+      "title": "Growing month after month",
+      "description": "{category} grew for four months in a row, {growth}% per month on average."
+    },
+    "SUBSCRIPTION_ACCUMULATION": {
+      "title": "More subscriptions",
+      "description": "{count, plural, one {# new recurring service} other {# new recurring services}} started recently."
+    },
+    "UNUSUAL_FINANCIAL_IMPACT": {
+      "title": "High-impact outflow",
+      "description": "{amount} is an extreme charge for this account — {share}% of a typical month's income."
+    }
   },
   "DemoData": {
     "heading": "Demo & Synthetic Data",

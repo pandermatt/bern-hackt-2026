@@ -101,7 +101,8 @@ export function AnomalySuggestion({
     startTransition(async () => {
       const result = await startAnomalyScan();
       if (!result.ok) {
-        toast.error(result.error);
+        // The action answers with a code, not a sentence — see its note.
+        toast.error(tScan(`error_${result.error}`));
         return;
       }
       setStatus(null);
