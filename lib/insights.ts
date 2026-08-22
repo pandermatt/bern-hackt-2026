@@ -1047,6 +1047,42 @@ export function defaultBudgetMonth(
 }
 
 /**
+ * Which month the savings page opens on: the most recent one that has
+ * **finished**.
+ *
+ * Deliberately not `defaultBudgetMonth`. The two pages want opposite things
+ * from "which month", because they ask opposite questions. A budget is a limit
+ * on the month you are currently spending, so the running month is the whole
+ * point of opening there. A savings allocation is the *leftover* of a month,
+ * and `allocateSurplus` refuses a month that has not ended — a surplus
+ * computed on the 8th only ever shrinks. Opening on the running month
+ * therefore landed the page on the one month it could do nothing with, telling
+ * the reader to come back later while last month's money sat one URL away.
+ *
+ * Falls back to the latest month there is data for when nothing has finished
+ * yet — a brand-new account whose statements start this month. That month is
+ * still unallocatable, and the page still says so; there is simply nothing
+ * better to show.
+ *
+ * `todayMonth` is passed in rather than derived. This module never constructs a
+ * `Date` — see the note on `formatDay` — and "now" is the caller's business
+ * anyway.
+ */
+export function defaultSavingsMonth(
+  months: string[],
+  todayMonth: string,
+): string | null {
+  if (months.length === 0) return null;
+  // Ascending, so the last one below today is the most recent finished month.
+  // A plain string compare, like `monthHasEnded` — that is what `YYYY-MM` text
+  // buys over a timestamp.
+  for (let i = months.length - 1; i >= 0; i--) {
+    if (months[i] < todayMonth) return months[i];
+  }
+  return months[months.length - 1];
+}
+
+/**
  * category → palette slot, so the breakdown list beneath the charts paints each
  * row the colour its wedge already has. Anything the stack folded away — and
  * anything absent from it entirely — resolves to slot 0, the neutral.

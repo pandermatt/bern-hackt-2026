@@ -14,6 +14,7 @@ import {
   monthlySeries,
   budgetRows,
   defaultBudgetMonth,
+  defaultSavingsMonth,
   ledgerChunk,
   monthNet,
   monthSurplus,
@@ -445,6 +446,39 @@ describe("defaultBudgetMonth", () => {
 
   it("has nothing to open on when nothing is imported", () => {
     expect(defaultBudgetMonth([], "2026-08")).toBeNull();
+  });
+});
+
+describe("defaultSavingsMonth", () => {
+  const months = ["2026-06", "2026-07", "2026-08"];
+
+  it("skips the running month for the last one that finished", () => {
+    // The whole point: standing in August, the allocatable money is July's.
+    expect(defaultSavingsMonth(months, "2026-08")).toBe("2026-07");
+  });
+
+  it("does not open on the running month the budget page opens on", () => {
+    // The two helpers disagree here, deliberately — see `defaultSavingsMonth`.
+    expect(defaultBudgetMonth(months, "2026-08")).toBe("2026-08");
+    expect(defaultSavingsMonth(months, "2026-08")).not.toBe("2026-08");
+  });
+
+  it("takes the latest finished month when the statements stop short", () => {
+    expect(defaultSavingsMonth(months, "2027-01")).toBe("2026-08");
+  });
+
+  it("skips a gap rather than landing on a month with no data", () => {
+    expect(defaultSavingsMonth(["2026-02", "2026-08"], "2026-08")).toBe("2026-02");
+  });
+
+  it("falls back to the running month when nothing has finished yet", () => {
+    // A brand-new account whose statements start this month. Still not
+    // allocatable, and the page still says so — there is nothing better.
+    expect(defaultSavingsMonth(["2026-08"], "2026-08")).toBe("2026-08");
+  });
+
+  it("has nothing to open on when nothing is imported", () => {
+    expect(defaultSavingsMonth([], "2026-08")).toBeNull();
   });
 });
 

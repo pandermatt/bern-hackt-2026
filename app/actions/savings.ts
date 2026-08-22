@@ -18,7 +18,7 @@ import { matchGoalIcon } from "@/lib/goal-icon";
 import { suggestGoalIcon } from "@/lib/llm/suggest-goal-icon";
 import {
   byTargetDate,
-  defaultBudgetMonth,
+  defaultSavingsMonth,
   isCalendarDate,
   monthNet,
   monthSurplus,
@@ -165,12 +165,14 @@ export async function getSavingsOverview(
   const rows = await ownedRows(user.id);
   const { months } = stackByCategory(rows);
 
-  // Resolved the same way the budget half resolves it, so both halves of the
-  // page are always looking at the same month.
+  // The most recent *finished* month, which is not how `/budget` resolves its
+  // own — see `defaultSavingsMonth`. The two pages wanted the same month back
+  // when the pots sat on the budget page; they no longer do, because only one
+  // of them is asking about money that is already final.
   const month =
     rawMonth && months.includes(rawMonth)
       ? rawMonth
-      : defaultBudgetMonth(months, currentMonth());
+      : defaultSavingsMonth(months, currentMonth());
 
   const [goals, allocations] = await Promise.all([
     db
