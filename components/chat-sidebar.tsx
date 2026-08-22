@@ -5,6 +5,7 @@ import { Bug, MessageCircle, Send, Sparkles, X } from "lucide-react";
 
 import { askAssistant } from "@/app/actions/chat";
 import { ChatDebug } from "@/components/chat-debug";
+import { ChatEChart } from "@/components/chat-echart";
 import { ChatPie } from "@/components/chat-pie";
 import type { ChartSpec, ChatRole } from "@/lib/assistant";
 
@@ -200,7 +201,11 @@ export function ChatSidebar() {
                     }`}
                   >
                     {message.content}
-                    {message.chart && (
+                    {message.chart && message.chart.kind === "echarts" ? (
+                      <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
+                        <ChatEChart chart={message.chart} />
+                      </div>
+                    ) : message.chart && (
                       <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
                         <ChatPie chart={message.chart} />
                       </div>

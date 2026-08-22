@@ -32,3 +32,14 @@ export const db = globalForDb.__beyondMoneyDb ?? createDb();
 if (process.env.NODE_ENV !== "production") {
   globalForDb.__beyondMoneyDb = db;
 }
+
+/**
+ * A throwaway in-memory database for the assistant's SQL sandbox. Exported
+ * from here because this module is the app's one better-sqlite3 boundary —
+ * `lib/sql-sandbox.ts` gets a handle without opening a second import path to
+ * the driver. Callers own the handle and must `close()` it; nothing here is
+ * cached and the app database is never touched.
+ */
+export function createScratchDb(): InstanceType<typeof Database> {
+  return new Database(":memory:");
+}

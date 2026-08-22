@@ -2,10 +2,13 @@
 
 import { z } from "zod";
 
-import { getDashboard } from "@/app/actions/transactions";
+import { getDashboard, listTransactions } from "@/app/actions/transactions";
 import {
+  composeEChart,
   defaultChartSource,
   extractFollowUps,
+  extractJsonAfter,
+  extractSql,
   formatSwissNumbers,
   looksLikeStall,
   parseChartRequest,
@@ -15,14 +18,17 @@ import {
   resolvePeriod,
   routeTool,
   runTool,
+  sanitizeEChartsOption,
   stripModelMarkup,
   suggestFollowUps,
+  wantsNonPieChart,
   SYSTEM_PROMPT,
   TOOL_DEFINITIONS,
   type AssistantTurn,
   type ChartSpec,
   type WireMessage,
 } from "@/lib/assistant";
+import { runSandboxSql } from "@/lib/sql-sandbox";
 import {
   clearAssistantLog,
   listAssistantLog,
@@ -37,8 +43,9 @@ const APERTUS_URL =
   process.env.APERTUS_URL ?? "https://llm.stoney-cloud.com/v1/chat/completions";
 
 /** API requests per turn. Tools are offered on all but the last, which forces
- * an answer so a fetch-happy model cannot loop forever. */
-const MAX_ROUNDS = 4;
+ * an answer so a fetch-happy model cannot loop forever. Five, not four: a
+ * SQL-then-chart answer legitimately takes three tool rounds. */
+const MAX_ROUNDS = 5;
 
 /**
  * Bounded on every axis: this whole array is interpolated into one prompt, and
@@ -137,6 +144,13 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   let chartExplicit = false;
   let reply: string | undefined;
   let proposedFollowUps: string[] = [];
+  // Once any tool has run this turn, a digit-bearing reply is a caption, not a
+  // stall — the stall/prose heuristics stand down.
+  let toolRan = false;
+  // The SQL sandbox's source rows, cached per turn and keyed by the window
+  // they were fetched for.
+  let sandboxRows: Awaited<ReturnType<typeof listTransactions>> | undefined;
+  let sandboxKey: string | undefined;
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const offerTools = round < MAX_ROUNDS;
@@ -144,9 +158,11 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       model,
       messages,
       // MAX_TOKENS caps the visible answer; the +80 is the budget for the
-      // FOLLOWUP: lines parsed out of it, and the floor of 200 keeps a tool
-      // call from truncating into something unparseable.
-      max_tokens: Math.max(maxTokens + 80, 200),
+      // FOLLOWUP: lines parsed out of it. Tool rounds get a higher floor —
+      // a truncated ECharts option or SQL statement is an unusable one.
+      max_tokens: offerTools
+        ? Math.max(maxTokens + 80, 700)
+        : maxTokens + 80,
       ...(offerTools ? { tools: TOOL_DEFINITIONS } : {}),
     };
     const startedAt = Date.now();
@@ -228,13 +244,25 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     // The model sometimes stalls — "Let me call the relevant tool…" with no
     // name to parse. Rather than showing that as the answer, route the
     // question to a tool ourselves and let the loop carry on.
+    // The stall and prose-SQL heuristics only apply while no tool has run
+    // this turn. Once one has, a digit-bearing reply is a caption ("The query
+    // returned 42…"), not a stall, and re-routing would discard the real
+    // answer.
     let routed = false;
-    if (offerTools && calls.length === 0 && looksLikeStall(content)) {
+    if (offerTools && !toolRan && calls.length === 0 && looksLikeStall(content)) {
       const fallback = routeTool(question.content);
       if (fallback) {
         calls = [fallback];
         routed = true;
       }
+    }
+    // The model sometimes writes the SELECT it wants as prose instead of
+    // calling run_sql. Trigger on the extractor itself — if extractSql can
+    // pull a statement out, that is the model asking for it — so the trigger
+    // can never disagree with what actually runs.
+    if (offerTools && !toolRan && !calls.includes("run_sql") && extractSql(content)) {
+      calls = [...calls, "run_sql"];
+      routed = true;
     }
 
     // Time scope: the model's period argument wins; when it passed none,
@@ -283,6 +311,84 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
 
     messages.push({ role: "assistant", content });
     for (const name of calls) {
+      // The SQL escape hatch: the model's SELECT runs in a throwaway
+      // in-memory database seeded with only this user's rows — see
+      // lib/sql-sandbox.ts for the layers under that sentence.
+      if (name === "run_sql") {
+        const sql = extractSql(content);
+        let result;
+        if (!sql) {
+          result = {
+            error: 'No SQL found — pass {"run_sql": {"sql": "SELECT …"}}.',
+          };
+        } else {
+          // Seed the sandbox with the SAME rows the rest of the app counts:
+          // transfers excluded, and scoped to the resolved window so a
+          // "last month" question is answered over last month even if the
+          // model omits its own WHERE. Cache is keyed by window.
+          const cacheKey = `${period?.from ?? ""}..${period?.to ?? ""}`;
+          if (sandboxKey !== cacheKey) {
+            sandboxRows = await listTransactions({
+              from: period?.from,
+              to: period?.to,
+            });
+            sandboxKey = cacheKey;
+          }
+          result = await runSandboxSql(sandboxRows ?? [], sql);
+        }
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({
+            tool: name,
+            period: period?.label ?? "all statements",
+            result,
+          }),
+        });
+        toolRan = true;
+        continue;
+      }
+
+      // The model composed a chart itself. Only presentation is trusted:
+      // the option is sanitized (JSON-only, size-capped, graphic/image/
+      // tooltip stripped) before it is stored or rendered.
+      if (name === "display_echart") {
+        const args = extractJsonAfter(content, "display_echart");
+        const argObject =
+          args && typeof args === "object" && !Array.isArray(args)
+            ? (args as Record<string, unknown>)
+            : undefined;
+        const option = sanitizeEChartsOption(
+          argObject && "option" in argObject ? argObject.option : argObject,
+        );
+        let result;
+        if (!option) {
+          result = {
+            error:
+              'No usable ECharts option found — pass {"display_echart": {"option": {…}}} as pure JSON with a "series" array.',
+          };
+        } else {
+          chart = {
+            kind: "echarts",
+            title:
+              typeof argObject?.title === "string"
+                ? argObject.title.slice(0, 60)
+                : undefined,
+            option,
+          };
+          chartExplicit = true;
+          result = {
+            displayed: true,
+            note: "The chart is now shown. Answer with its takeaway.",
+          };
+        }
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({ tool: name, result }),
+        });
+        toolRan = true;
+        continue;
+      }
+
       const tool = runTool(
         name,
         scoped,
@@ -301,11 +407,30 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         role: "tool",
         content: JSON.stringify({ tool: name, result: tool.result }),
       });
+      toolRan = true;
     }
   }
 
   if (!reply) {
     return failure("The model returned an empty answer — try asking again.");
+  }
+
+  // The user named a bar or line chart and the model composed nothing of its
+  // own — the server keeps that promise from the same real aggregates. Never
+  // override a chart the model explicitly produced (it may have deliberately
+  // chosen a pie), only an auto-attached one or none.
+  const wantedType = wantsNonPieChart(question.content);
+  if (wantedType && !chartExplicit) {
+    const window = resolvePeriod(
+      periodFromQuestion(question.content),
+      dashboard.facets.last,
+    );
+    const scopedForChart = window
+      ? ((await getDashboard({ from: window.from, to: window.to })) ?? dashboard)
+      : dashboard;
+    chart =
+      composeEChart(wantedType, question.content, scopedForChart, window) ??
+      chart;
   }
 
   // The model's own proposals lead; the deterministic ones cover the turns
