@@ -3,7 +3,6 @@ import { Suspense } from "react";
 
 import { getDashboard } from "@/app/actions/transactions";
 import { BreakdownList } from "@/components/breakdown-list";
-import { ChatSidebar } from "@/components/chat-sidebar";
 import { MonthlyTrend } from "@/components/monthly-trend";
 import { ScrollDebug } from "@/components/scroll-debug";
 import { SummaryCards } from "@/components/summary-cards";
@@ -146,8 +145,6 @@ export default async function Dashboard({
           )}
         </div>
       </main>
-
-      <ChatSidebar />
 
       {/* Temporary: the ledger's "jumps back to the top" report does not
           reproduce on a desk, so this reports from the device it happens on.
