@@ -48,7 +48,11 @@ export default async function HomePage({
   const [savings, budget, anomalies] = await Promise.all([
     getSavingsOverview(),
     getBudgetOverview(),
-    getAnomalyOverview(),
+    // `true` — hide the rules with nothing left open. A finding that has been
+    // ticked off is not something to greet the reader with, and the mascot
+    // reads its mood off these nudges, so a fully worked-through scan would
+    // otherwise keep the dragon worried about work that is already done.
+    getAnomalyOverview(true),
   ]);
   if (!savings || !budget || !anomalies)
     return redirect({ href: "/login", locale });
