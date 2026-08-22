@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { askAssistant } from "@/app/actions/chat";
-import { allocateSurplus } from "@/app/actions/savings";
+import { applyAllocationAdds } from "@/app/actions/savings";
 import { ChatEChart } from "@/components/chat-echart";
 import { ChatPie } from "@/components/chat-pie";
 import {
@@ -87,12 +87,6 @@ export function useAssistantChat(): AssistantChat {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Keep the newest bubble in view — including the typing indicator.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, pending]);
-
   const send = (text: string) => {
     const content = text.trim();
     if (!content || pending) return;
@@ -133,23 +127,28 @@ export function useAssistantChat(): AssistantChat {
   };
 
   /**
-   * Post one message's proposal through `allocateSurplus` — the same action
-   * the Savings section's allocator uses, ceiling re-checked server-side. The
-   * outcome lands on the message itself, so an applied card stays applied
-   * after the slide-over closes and reopens.
+   * Post one message's proposal as per-goal ADDS through
+   * `applyAllocationAdds`, which resolves each pot's current month total at
+   * apply time and re-checks the surplus ceiling server-side — a proposal
+   * frozen as absolute totals would silently revert allocations made between
+   * propose and Apply. The outcome lands on the message itself, so an applied
+   * card stays applied after the slide-over closes and reopens.
    */
   const applyProposal = (index: number) => {
     const message = messages[index];
     if (!message?.proposal || message.proposalApplied || applying !== null) {
       return;
     }
-    const { month, entries } = message.proposal;
+    const { month, items } = message.proposal;
     setApplying(index);
     void (async () => {
       let applied = false;
       let error: string | undefined;
       try {
-        const result = await allocateSurplus(month, entries);
+        const result = await applyAllocationAdds(
+          month,
+          items.map(({ goalId, addMinor }) => ({ goalId, addMinor })),
+        );
         applied = result.ok;
         if (!result.ok) error = result.error;
       } catch {
@@ -216,6 +215,16 @@ export function ChatPanel({
     applyProposal,
     scrollRef,
   } = chat;
+
+  // Keep the newest bubble in view — including the typing indicator. The
+  // effect lives HERE, not in the hook: the hook survives in the shell while
+  // this panel (and its scroll container) unmounts with the slide-over, so a
+  // hook-side effect keyed on [messages, pending] never re-fires on reopen
+  // and the transcript came back scrolled to the top.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, pending, scrollRef]);
 
   return (
     /* `min-h-0` is not optional. This root is a new flex item between the
@@ -304,34 +313,41 @@ export function ChatPanel({
                       + {formatMoney(message.proposal.addTotalMinor)}
                     </span>
                   </div>
-                  {message.proposalApplied ? (
-                    <p className="mt-2.5 flex items-center gap-1.5 text-[12.5px] font-medium text-positive">
+                  {/* One button through the whole lifecycle (idle → applying
+                      → applied), aria-disabled rather than disabled: a native
+                      disabled or a swapped-in <p> drops keyboard focus on the
+                      floor mid-apply, and the name change announces the
+                      outcome instead. The click handler is guarded in
+                      applyProposal, so aria-disabled is honest. */}
+                  <button
+                    type="button"
+                    onClick={() => applyProposal(index)}
+                    aria-disabled={applying !== null || message.proposalApplied}
+                    className={`mt-2.5 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md text-[12.5px] font-medium transition-colors ${
+                      message.proposalApplied
+                        ? "cursor-default bg-positive-soft text-positive"
+                        : applying !== null
+                          ? "cursor-default bg-accent text-white opacity-40"
+                          : "cursor-pointer bg-accent text-white hover:bg-accent-hover"
+                    }`}
+                  >
+                    {message.proposalApplied ? (
                       <Check className="size-3.5" aria-hidden />
-                      {t("proposalApplied")}
+                    ) : applying === index ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <PiggyBank className="size-3.5" aria-hidden />
+                    )}
+                    {message.proposalApplied
+                      ? t("proposalApplied")
+                      : applying === index
+                        ? t("proposalApplying")
+                        : t("proposalApply")}
+                  </button>
+                  {!message.proposalApplied && message.proposalError && (
+                    <p className="mt-1.5 text-[12px] text-danger" role="alert">
+                      {message.proposalError}
                     </p>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => applyProposal(index)}
-                        disabled={applying !== null}
-                        className="mt-2.5 inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-accent text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40"
-                      >
-                        {applying === index ? (
-                          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                        ) : (
-                          <PiggyBank className="size-3.5" aria-hidden />
-                        )}
-                        {applying === index
-                          ? t("proposalApplying")
-                          : t("proposalApply")}
-                      </button>
-                      {message.proposalError && (
-                        <p className="mt-1.5 text-[12px] text-danger" role="alert">
-                          {message.proposalError}
-                        </p>
-                      )}
-                    </>
                   )}
                 </div>
               )}
@@ -370,6 +386,10 @@ export function ChatPanel({
       >
         {followUps.length > 0 && !pending && (
           <div
+            /* role="group" is what makes the aria-label real: on a role-less
+               div the label sits on an implicit "generic" role, where ARIA
+               prohibits naming, and assistive tech ignores it. */
+            role="group"
             className="mb-2.5 flex gap-2 overflow-x-auto pb-0.5"
             aria-label={t("followUpsLabel")}
           >

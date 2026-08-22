@@ -74,21 +74,19 @@ export type EChartsChartSpec = {
 export type ChartSpec = PieChartSpec | EChartsChartSpec;
 
 /**
- * A validated split of a month's free surplus, ready to apply. Built by
- * `buildAllocationProposal` from a propose_allocation call — never from model
- * prose — so every figure the card shows already survived the server's
- * clamping, and `entries` is the exact `allocateSurplus` payload. Only goals
- * that receive money are posted: the (goal, month) row is a total, and posting
- * untouched pots would clobber an allocation made elsewhere in the meantime.
+ * A validated split of a month's free surplus, awaiting the user's Apply tap.
+ * Built by `buildAllocationProposal` from a propose_allocation call — never
+ * from model prose — so every figure the card shows already survived the
+ * server's clamping. The items are ADDS, not month totals: Apply posts them
+ * through `applyAllocationAdds`, which resolves each goal's current month
+ * total at apply time — a proposal frozen as absolute totals would silently
+ * revert any allocation made between propose and Apply.
  */
 export type AllocationProposal = {
   month: string;
   /** The card's rows: each receiving goal and what would be added to it. */
   items: { goalId: number; name: string; addMinor: number }[];
   addTotalMinor: number;
-  /** Per receiving goal, the month's NEW total as allocateSurplus wants it —
-   * a decimal franc string, existing allocation plus the add. */
-  entries: { goalId: number; amount: string }[];
 };
 
 export type AssistantTurn = {
@@ -317,10 +315,10 @@ export const TOOL_DEFINITIONS = [
     description: [
       "Escape hatch when the other tools cannot answer: run one read-only SQLite SELECT over the customer's transactions.",
       "Table: transactions(booked_on TEXT 'YYYY-MM-DD', kind TEXT in ('income','expense'), amount_chf REAL signed francs (income positive, spending negative), amount_minor INTEGER signed rappen, account TEXT, merchant TEXT, category TEXT, description TEXT, currency TEXT). Internal transfers between the customer's own accounts are already excluded, matching every other figure in the app.",
-      "The table holds only rows in the current period scope (year-to-date by default); if you pass a period argument the table is pre-filtered to it, and for a different window either pass a period or write a WHERE on booked_on.",
+      "The table holds ONLY rows inside the resolved period scope (year-to-date by default). A WHERE on booked_on can narrow further but can never reach outside that scope — to query a different or wider window, pass the period argument.",
       "One SELECT statement (no CTEs / WITH), no writes, reference the table at most twice. At most 40 result rows come back, so aggregate in SQL.",
       "Remember spending is negative: the largest expense is MIN(amount_chf) / ORDER BY amount_chf ASC, and filter kind='expense' for spending, kind='income' for income.",
-      'Example: {"run_sql": {"sql": "SELECT merchant, ROUND(SUM(-amount_chf), 2) AS spent FROM transactions WHERE kind=\'expense\' GROUP BY merchant ORDER BY spent DESC LIMIT 5"}}',
+      'Example: {"run_sql": {"sql": "SELECT merchant, ROUND(SUM(-amount_chf), 2) AS spent FROM transactions WHERE kind=\'expense\' GROUP BY merchant ORDER BY spent DESC LIMIT 5", "period": "2025"}}',
     ].join(" "),
     parameters: {
       type: "object" as const,
@@ -329,6 +327,7 @@ export const TOOL_DEFINITIONS = [
           type: "string" as const,
           description: "A single SQLite SELECT statement.",
         },
+        ...PERIOD_PARAMETERS.properties,
       },
       required: ["sql"],
     },
@@ -653,43 +652,59 @@ export function extractSql(content: string): string | undefined {
 export function extractJsonAfter(content: string, marker: string): unknown {
   const at = content.indexOf(marker);
   if (at < 0) return undefined;
-  const start = content.indexOf("{", at + marker.length);
-  if (start < 0) return undefined;
+  // A handful of candidate regions, not one: prose pseudo-JSON ("{series:
+  // [1]}") or a format echo with a literal ellipsis often sits between the
+  // marker and the real arguments, and giving up on the first unparseable
+  // balanced region would throw the real call away with it.
+  let from = at + marker.length;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const start = content.indexOf("{", from);
+    if (start < 0) return undefined;
 
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < content.length; i++) {
-    const ch = content[i];
-    if (escaped) {
-      escaped = false;
-    } else if (inString) {
-      if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-    } else if (ch === '"') {
-      inString = true;
-    } else if (ch === "{") {
-      depth += 1;
-    } else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        try {
-          const parsed = JSON.parse(content.slice(start, i + 1));
-          // When the model narrates before the call ("I'll use display_echart
-          // …") the anchor lands on the prose mention, so the first balanced
-          // object is the wrapper `{ "<marker>": {…real args…} }`. Unwrap it:
-          // tool args never legitimately contain a key named after the tool.
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            const inner = (parsed as Record<string, unknown>)[marker];
-            if (inner && typeof inner === "object" && !Array.isArray(inner)) {
-              return inner;
-            }
-          }
-          return parsed;
-        } catch {
-          return undefined;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let end = -1;
+    for (let i = start; i < content.length; i++) {
+      const ch = content[i];
+      if (escaped) {
+        escaped = false;
+      } else if (inString) {
+        if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+      } else if (ch === '"') {
+        inString = true;
+      } else if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
         }
       }
+    }
+    // Unclosed (a stray prose brace swallowed the rest): step inside it —
+    // the next `{` may open a region that does balance.
+    if (end < 0) {
+      from = start + 1;
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(content.slice(start, end + 1));
+      // When the model narrates before the call ("I'll use display_echart
+      // …") the anchor lands on the prose mention, so the first balanced
+      // object is the wrapper `{ "<marker>": {…real args…} }`. Unwrap it:
+      // tool args never legitimately contain a key named after the tool.
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const inner = (parsed as Record<string, unknown>)[marker];
+        if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+          return inner;
+        }
+      }
+      return parsed;
+    } catch {
+      from = start + 1;
     }
   }
   return undefined;
@@ -973,10 +988,10 @@ export function anomaliesToolResult(overview: AnomalyOverview): unknown {
       note: "No anomaly scan has been run yet, so nothing has been checked. The customer can start one on the Account page.",
     };
   }
-  if (overview.stale) {
+  if (overview.outdated) {
     return {
       status: "outdated",
-      note: "The statements were re-imported after the last scan, so its findings are outdated. A fresh scan can be started on the Account page.",
+      note: "The statements changed after the last scan, so its findings are outdated. A fresh scan can be started on the Account page.",
     };
   }
   const compact = (group: AnomalyGroup) => ({
@@ -1020,7 +1035,7 @@ export function savingsGoalsToolResult(overview: SavingsOverview | null): unknow
     notes.push("Nothing is left to allocate from this month.");
   } else if (overview.pots.length > 0) {
     notes.push(
-      "To split the free amount across the goals — further from target first — call propose_allocation; the customer gets an Apply button. You cannot move money yourself.",
+      "To split the free amount across the goals call propose_allocation — follow each goal's monthly_plan_chf where set, otherwise favor the goals further from target; the customer gets an Apply button. You cannot move money yourself.",
     );
   }
   return {
@@ -1035,6 +1050,10 @@ export function savingsGoalsToolResult(overview: SavingsOverview | null): unknow
       saved_chf: chf(pot.savedMinor),
       still_missing_chf: chf(Math.max(0, pot.targetMinor - pot.savedMinor)),
       allocated_this_month_chf: chf(pot.monthMinor),
+      // The holder's own standing intent — the strongest hint a proposed
+      // split can follow. Null when the goal has none.
+      monthly_plan_chf: pot.monthlyMinor === null ? null : chf(pot.monthlyMinor),
+      target_date: pot.targetOn,
     })),
     note: notes.join(" "),
   };
@@ -1049,7 +1068,14 @@ function francsToMinor(value: unknown): number | undefined {
     return Number.isFinite(value) ? Math.round(value * 100) : undefined;
   }
   if (typeof value !== "string") return undefined;
-  const cleaned = value.replace(/chf/i, "").replace(/[’'\s]/g, "").replace(",", ".").trim();
+  let cleaned = value.replace(/chf/i, "").replace(/[’'\s]/g, "").trim();
+  // A comma is the Swiss decimal only when it carries one or two trailing
+  // digits ("89,90"); anything else ("1,250") is a thousands group, and
+  // reading it as a decimal silently shrinks the amount a thousandfold.
+  const decimal = /,(\d{1,2})$/.exec(cleaned);
+  cleaned = decimal
+    ? `${cleaned.slice(0, decimal.index).replace(/,/g, "")}.${decimal[1]}`
+    : cleaned.replace(/,/g, "");
   if (cleaned === "" || !/^\d+(\.\d+)?$/.test(cleaned)) return undefined;
   return Math.round(Number(cleaned) * 100);
 }
@@ -1091,7 +1117,15 @@ export function parseAllocationArgs(content: string): RawAllocation[] {
   // dropped row the model can re-propose.
   const pair =
     /"(?:goal|name|goal_name)"\s*:\s*"([^"]+)"\s*,\s*"(?:amount_chf|amount|chf)"\s*:\s*"?([\d.,'’]+)"?\s*[,}\]]/g;
-  for (const match of content.matchAll(pair)) {
+  // The sweep is fenced to the argument region — from the tool name to the
+  // first `]` that could close its array. Goal/amount-shaped pairs elsewhere
+  // in the content (an echoed goals list, a quoted earlier proposal) must not
+  // turn into phantom allocations.
+  const at = content.indexOf("propose_allocation");
+  let region = at >= 0 ? content.slice(at) : content;
+  const close = region.indexOf("]");
+  if (close >= 0) region = region.slice(0, close + 1);
+  for (const match of region.matchAll(pair)) {
     const amountMinor = francsToMinor(match[2]);
     if (amountMinor !== undefined) {
       parsed.push({ goal: match[1].trim(), amountMinor });
@@ -1207,8 +1241,8 @@ export function buildAllocationProposal(
     addTotal = [...adds.values()].reduce((sum, add) => sum + add, 0);
   }
 
-  // Card rows in the pots' own order, and the allocateSurplus payload beside
-  // them: each receiving goal's NEW month total, as a decimal franc string.
+  // Card rows in the pots' own order. Adds only — what these mean against
+  // each goal's month total is resolved at apply time, not frozen here.
   const receiving = overview.pots.filter((pot) => adds.has(pot.id));
   const proposal: AllocationProposal = {
     month: overview.month,
@@ -1218,10 +1252,6 @@ export function buildAllocationProposal(
       addMinor: adds.get(pot.id) as number,
     })),
     addTotalMinor: addTotal,
-    entries: receiving.map((pot) => ({
-      goalId: pot.id,
-      amount: (((adds.get(pot.id) as number) + pot.monthMinor) / 100).toFixed(2),
-    })),
   };
   return {
     proposal,
@@ -1245,15 +1275,70 @@ export function buildAllocationProposal(
 }
 
 /**
+ * The deterministic split the proposal safety net offers when the customer
+ * asked to allocate and the model never made a valid propose_allocation call.
+ * Two sources, in order of how much they say about intent:
+ *
+ * 1. **The holder's own monthly plan.** A pot's `monthlyMinor` is the
+ *    Dauersparauftrag — literally "what the holder means to put in monthly, a
+ *    suggestion for splitting a surplus" — so when any pot declares one, the
+ *    proposal IS those amounts (the shared validator scales them down if the
+ *    month's free surplus cannot cover them; a surplus beyond the plan stays
+ *    free rather than being force-distributed).
+ * 2. Otherwise the free surplus is spread proportional to each goal's
+ *    remaining gap (equal parts when every goal is already full), floored to
+ *    whole francs.
+ *
+ * Expressed as RawAllocations so `buildAllocationProposal` stays the single
+ * validator for everything that becomes an Apply card.
+ */
+export function defaultAllocationSplit(
+  overview: SavingsOverview | null,
+): RawAllocation[] {
+  if (!overview || !overview.monthEnded || overview.freeMinor <= 0) return [];
+  const pots = overview.pots;
+  if (pots.length === 0) return [];
+
+  const planned = pots.filter((pot) => (pot.monthlyMinor ?? 0) > 0);
+  if (planned.length > 0) {
+    return planned.map((pot) => ({
+      goal: pot.name,
+      amountMinor: pot.monthlyMinor as number,
+    }));
+  }
+
+  const gaps = pots.map((pot) => Math.max(0, pot.targetMinor - pot.savedMinor));
+  const gapTotal = gaps.reduce((sum, gap) => sum + gap, 0);
+  const weights = gapTotal > 0 ? gaps : pots.map(() => 1);
+  const weightTotal = gapTotal > 0 ? gapTotal : pots.length;
+  return pots
+    .map((pot, i) => ({
+      goal: pot.name,
+      amountMinor:
+        Math.floor((overview.freeMinor * weights[i]) / weightTotal / 100) * 100,
+    }))
+    .filter((item) => item.amountMinor > 0);
+}
+
+/**
  * Which tools the model asked for. Scans for known names instead of parsing:
  * the emitted JSON is often malformed (`[{"get_overview": }]`, truncation at
  * a stop token), and the model sometimes writes prose *about* the call
  * ("Let me call get_spending_by_category.") without any call syntax at all.
  * In a round where tools are on offer, naming one is asking for it — the
  * round cap keeps a chatty final answer from looping the conversation.
+ *
+ * FOLLOWUP lines are exempt from the scan: they are definitionally part of a
+ * finished answer, and the locale prompt actively invites tool names there
+ * ("match a toolcall available to you") — scanning them would turn a
+ * finished caption back into a tool round and discard the real answer.
  */
 export function parseToolCalls(content: string): ToolName[] {
-  return TOOL_NAMES.filter((name) => content.includes(name));
+  const scanned = content
+    .split("\n")
+    .filter((line) => !FOLLOWUP_MARKER.test(line))
+    .join("\n");
+  return TOOL_NAMES.filter((name) => scanned.includes(name));
 }
 
 /** A resolved, inclusive date window over the statements. */
@@ -1374,14 +1459,29 @@ export function resolvePeriod(
   const anchorYear = lastStatement.slice(0, 4);
   const anchorMonth = lastStatement.slice(0, 7);
 
-  if (value === "ytd" || value === "year_to_date") {
+  // The off-enum spellings an 8B model actually emits, mapped rather than
+  // dropped — an unrecognized token would otherwise fall through to the
+  // caller's next fallback, or worse, silently widen the window.
+  if (
+    value === "ytd" ||
+    value === "year_to_date" ||
+    value === "this_year" ||
+    value === "current_year"
+  ) {
     return {
       from: `${anchorYear}-01-01`,
       to: lastStatement,
       label: `year to date (${anchorYear}-01-01 to ${lastStatement})`,
     };
   }
-  if (value === "last_month") {
+  if (value === "this_month" || value === "current_month") {
+    return { from: `${anchorMonth}-01`, to: lastStatement, label: anchorMonth };
+  }
+  if (value === "last_year" || value === "previous_year") {
+    const year = String(Number(anchorYear) - 1);
+    return { from: `${year}-01-01`, to: `${year}-12-31`, label: year };
+  }
+  if (value === "last_month" || value === "previous_month") {
     const month = monthsBack(anchorMonth, 1);
     return { from: `${month}-01`, to: `${month}-31`, label: month };
   }
@@ -1561,8 +1661,13 @@ export function formatSwissNumbers(text: string): string {
     });
 }
 
-/** Tolerates the JSON-flavoured spelling too: `[{"FOLLOWUP": "…"}]`. */
-const FOLLOWUP_MARKER = /[[{"']*\s*FOLLOW[\s-]?UPS?["']?\s*:/i;
+/**
+ * Tolerates the JSON-flavoured spelling too: `[{"FOLLOWUP": "…"}]`.
+ * Uppercase only, on purpose: the prompt asks for `FOLLOWUP:` verbatim, and a
+ * case-insensitive match amputated legitimate prose — "One follow-up: cancel
+ * Netflix…" lost everything after the colon to the chip row.
+ */
+const FOLLOWUP_MARKER = /[[{"']*\s*FOLLOW[\s-]?UPS?["']?\s*:/;
 
 /** Strip bullet/number/quote/JSON wrapping from a proposed question. */
 function cleanFollowUp(line: string): string {
@@ -1573,12 +1678,42 @@ function cleanFollowUp(line: string): string {
 }
 
 /**
+ * One marker payload → individual questions. The locale prompt invites an
+ * inline array (`FOLLOWUP: ["q1", "q2"]`), which a single cleanFollowUp pass
+ * would mangle into one half-stripped chip — so an array is parsed (or, when
+ * its JSON is broken, split on the quote-comma-quote seams) first.
+ */
+function splitFollowUpPayload(part: string): string[] {
+  const trimmed = part.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((q): q is string => typeof q === "string")
+      ) {
+        return parsed;
+      }
+    } catch {
+      // fall through to the seam split
+    }
+  }
+  if (/["']\s*,\s*["']/.test(trimmed)) {
+    return trimmed.split(/["']\s*,\s*["']/);
+  }
+  return [trimmed];
+}
+
+/**
  * Pull the model's proposed follow-up questions out of its answer. The
  * system prompt asks for one `FOLLOWUP: …` line each, but a small model also
- * packs several onto one line ("…? FOLLOWUP: …?") or writes a bare
- * `FOLLOWUPS:` header with a list under it — so lines are split on the
- * marker, and after one, question-shaped lines are consumed too. Everything
- * matched is removed from the visible reply.
+ * packs several onto one line ("…? FOLLOWUP: …?"), writes a bare
+ * `FOLLOWUPS:` header with a list under it, or ships them as one inline
+ * array — so lines are split on the marker, each payload is split again, and
+ * after a marker, question-shaped lines are consumed too. Everything matched
+ * is removed from the visible reply, and repeats are dropped: a small model
+ * happily proposes the same question twice, and duplicate chips would also
+ * be duplicate React keys.
  */
 export function extractFollowUps(text: string): {
   text: string;
@@ -1594,15 +1729,19 @@ export function extractFollowUps(text: string): {
       collecting = true;
       if (parts[0].trim()) kept.push(parts[0].trimEnd());
       for (const part of parts.slice(1)) {
-        const question = cleanFollowUp(part);
-        if (question) followUps.push(question);
+        for (const piece of splitFollowUpPayload(part)) {
+          const question = cleanFollowUp(piece);
+          if (question) followUps.push(question);
+        }
       }
       continue;
     }
     if (collecting) {
-      const question = cleanFollowUp(line);
-      if (question && question.endsWith("?")) {
-        followUps.push(question);
+      const questions = splitFollowUpPayload(line)
+        .map(cleanFollowUp)
+        .filter((q) => q && q.endsWith("?"));
+      if (questions.length > 0) {
+        followUps.push(...questions);
         continue;
       }
       collecting = false;
@@ -1610,6 +1749,13 @@ export function extractFollowUps(text: string): {
     kept.push(line);
   }
 
-  return { text: kept.join("\n").trim(), followUps: followUps.slice(0, 3) };
+  const seen = new Set<string>();
+  const unique = followUps.filter((q) => {
+    const key = q.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { text: kept.join("\n").trim(), followUps: unique.slice(0, 3) };
 }
 

@@ -493,7 +493,30 @@ export async function allocateSurplus(
     upserts.push({ goalId: entry.goalId, amountMinor: minor });
   }
 
-  if (total > surplus) return savingsError("overSurplus");
+  // The ceiling covers the WHOLE month, not just the posted rows. A caller
+  // that posts only the pots it touches — the chat's Apply card does — leaves
+  // the other pots' existing allocations standing, and those spend the same
+  // surplus, so they count against it here. The budget page's allocator posts
+  // every pot, so for it this term is zero and nothing changes.
+  const posted = new Set(parsed.data.map((entry) => entry.goalId));
+  const untouched = (
+    await db
+      .select({
+        goalId: savingsAllocations.goalId,
+        amountMinor: savingsAllocations.amountMinor,
+      })
+      .from(savingsAllocations)
+      .where(
+        and(
+          eq(savingsAllocations.userId, user.id),
+          eq(savingsAllocations.month, month),
+        ),
+      )
+  )
+    .filter((row) => !posted.has(row.goalId))
+    .reduce((sum, row) => sum + row.amountMinor, 0);
+
+  if (total + untouched > surplus) return savingsError("overSurplus");
 
   try {
     db.transaction((tx) => {
@@ -532,6 +555,65 @@ export async function allocateSurplus(
 
   revalidatePath("/[locale]/budget", "page");
   return { ok: true };
+}
+
+const addsSchema = z
+  .array(
+    z.object({
+      goalId: z.number().int().positive(),
+      addMinor: z.number().int().positive().max(100_000_000),
+    }),
+  )
+  .min(1)
+  .max(64);
+
+/**
+ * Applies the chat's Apply card: per-goal ADDS on top of whatever each pot
+ * already holds for the month. The additions are resolved here, at apply
+ * time, rather than frozen into the proposal as absolute totals — a proposal
+ * captured before someone revised the month in another tab must top up the
+ * revised state, not silently revert it. Delegates to `allocateSurplus`, so
+ * the surplus ceiling, the ownership intersection and the transaction stay
+ * in one place.
+ */
+export async function applyAllocationAdds(
+  month: string,
+  adds: { goalId: number; addMinor: number }[],
+): Promise<SavingsResult> {
+  const user = await getCurrentUser();
+  if (!user) return savingsError("notSignedInAllocate");
+
+  if (!/^\d{4}-\d{2}$/.test(month)) return savingsError("notAMonth");
+  const parsed = addsSchema.safeParse(adds);
+  if (!parsed.success) return savingsError("malformedAllocation");
+
+  const current = await db
+    .select({
+      goalId: savingsAllocations.goalId,
+      amountMinor: savingsAllocations.amountMinor,
+    })
+    .from(savingsAllocations)
+    .where(
+      and(
+        eq(savingsAllocations.userId, user.id),
+        eq(savingsAllocations.month, month),
+      ),
+    );
+  const held = new Map(current.map((row) => [row.goalId, row.amountMinor]));
+
+  // Duplicate goal ids merge, matching the proposal validator's behavior.
+  const merged = new Map<number, number>();
+  for (const add of parsed.data) {
+    merged.set(add.goalId, (merged.get(add.goalId) ?? 0) + add.addMinor);
+  }
+
+  return allocateSurplus(
+    month,
+    [...merged].map(([goalId, addMinor]) => ({
+      goalId,
+      amount: ((addMinor + (held.get(goalId) ?? 0)) / 100).toFixed(2),
+    })),
+  );
 }
 
 /**

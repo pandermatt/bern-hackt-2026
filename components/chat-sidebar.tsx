@@ -118,7 +118,16 @@ export function ChatSidebar() {
           className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-surface shadow-lg animate-in fade-in slide-in-from-right sm:w-(--assistant-width) ${
             dragging ? "" : "duration-300"
           }`}
-          style={{ "--assistant-width": `${width}px` } as React.CSSProperties}
+          style={
+            {
+              /* The ceiling is part of the value, not only of the drag clamp:
+                 width state survives while the panel is closed, so a viewport
+                 that shrank in the meantime would otherwise push the resize
+                 handle off-screen. The stored preference stays raw, so the
+                 full width comes back when the window grows again. */
+              "--assistant-width": `min(${width}px, calc(100vw - 80px))`,
+            } as React.CSSProperties
+          }
         >
           {/* Drag handle: a hairline that widens the hit target beyond it, and
               only exists at the sm breakpoint where the panel isn't full-width.

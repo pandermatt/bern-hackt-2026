@@ -1,7 +1,6 @@
 "use server";
 
 import { getLocale, getTranslations } from "next-intl/server";
-import { z } from "zod";
 
 import { getAnomalyOverview } from "@/app/actions/anomalies";
 import { getSavingsOverview } from "@/app/actions/savings";
@@ -10,6 +9,7 @@ import {
   anomaliesToolResult,
   buildAllocationProposal,
   chartToolForSource,
+  defaultAllocationSplit,
   composeEChart,
   defaultChartSource,
   defaultPeriod,
@@ -51,6 +51,7 @@ import {
   type AssistantLogView,
 } from "@/lib/assistant-log";
 import { getCurrentUser } from "@/lib/auth";
+import { monthHasEnded } from "@/lib/clock";
 
 const APERTUS_URL =
   process.env.APERTUS_URL ?? "https://llm.stoney-cloud.com/v1/chat/completions";
@@ -61,22 +62,46 @@ const APERTUS_URL =
 const MAX_ROUNDS = 5;
 
 /**
- * Bounded on every axis: this whole array is interpolated into one prompt, and
- * an unbounded history would let a single request ship megabytes upstream.
+ * The history, made usable rather than policed. The client ships its whole
+ * transcript and assistant bubbles are unbounded (MAX_TOKENS may be unset), so
+ * a hard schema reject here once BRICKED long conversations: the rejection's
+ * own error bubble pushed every following turn over the same limit, for good.
+ * Only garbage is refused now — sizes are clamped to what the prompt would
+ * use anyway (the last 24 messages, 2000 chars each).
  */
-const historySchema = z
-  .array(
-    z.object({
-      role: z.enum(["user", "assistant"]),
-      content: z.string().trim().min(1).max(2000),
-    }),
-  )
-  .min(1)
-  .max(24);
+function normalizeHistory(
+  raw: unknown,
+): { role: "user" | "assistant"; content: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned = raw.flatMap(
+    (entry): { role: "user" | "assistant"; content: string }[] => {
+      if (!entry || typeof entry !== "object") return [];
+      const { role, content } = entry as { role?: unknown; content?: unknown };
+      if (role !== "user" && role !== "assistant") return [];
+      if (typeof content !== "string") return [];
+      const trimmed = content.trim();
+      return trimmed ? [{ role, content: trimmed.slice(0, 2000) }] : [];
+    },
+  );
+  const tail = cleaned.slice(-24);
+  return tail.some((m) => m.role === "user") ? tail : undefined;
+}
 
 function failure(reply: string): AssistantTurn {
   return { reply, error: true };
 }
+
+/** The tools whose figures come out of the (period-scoped) dashboard
+ * aggregate; only a round calling one of these pays for the scoped fetch. */
+const DASHBOARD_TOOLS = new Set<string>([
+  "get_overview",
+  "get_spending_by_category",
+  "get_top_merchants",
+  "get_income_breakdown",
+  "get_monthly_series",
+  "get_savings_potential",
+  "display_chart",
+]);
 
 /**
  * One turn of the chat, as a tool-calling loop. The model starts with no
@@ -110,9 +135,9 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   const maxTokens =
     Number.parseInt(process.env.MAX_TOKENS ?? "", 10) || undefined;
 
-  const parsed = historySchema.safeParse(rawHistory);
-  const question = parsed.success
-    ? [...parsed.data].reverse().find((m) => m.role === "user")
+  const history = normalizeHistory(rawHistory);
+  const question = history
+    ? [...history].reverse().find((m) => m.role === "user")
     : undefined;
 
   const record = (
@@ -130,7 +155,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       ...patch,
     });
 
-  if (!parsed.success || !question) {
+  if (!history || !question) {
     record(turnStarted, { status: "error", error: "History failed validation." });
     return failure("That message could not be read — try rephrasing it.");
   }
@@ -155,7 +180,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   const messages: WireMessage[] = [
     { role: "system", content: systemPromptFor(await getLocale()) },
     // Older turns only pad the context window of an 8B model.
-    ...parsed.data.slice(-8),
+    ...history.slice(-8),
   ];
   let chart: ChartSpec | undefined;
   // An explicit display_chart call outranks the auto-attach fallback that
@@ -175,14 +200,38 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   // The subscription detector's rows — always the whole history, never the
   // turn's period window: a year-to-date view would demote every yearly bill.
   let historyRows: Awaited<ReturnType<typeof listTransactions>> | undefined;
+  // The month getSavingsOverview actually resolved for the last
+  // get_savings_goals call this turn. propose_allocation prefers it, so the
+  // proposal is validated against exactly the goals and free amount the model
+  // was shown — re-deriving from that round's period let a June fetch be
+  // followed by a proposal silently validated against July.
+  let goalsMonth: string | undefined;
+  // The window the last tool round resolved, for the post-loop chart safety
+  // net: the net must scope its chart the way the answer's figures were
+  // scoped, not re-derive a window of its own.
+  let lastPeriod: Period | undefined;
   // Which month the savings tools are about: a single-month period picks it;
-  // otherwise the last completed one — a running month has no final surplus
-  // to hand out. getSavingsOverview validates the month against the
-  // statements and falls back on its own default when it does not exist.
-  const goalMonthFor = (window?: Period) =>
-    window && window.from.slice(0, 7) === window.to.slice(0, 7)
-      ? window.from.slice(0, 7)
-      : resolvePeriod("last_month", dashboard.facets.last)?.from.slice(0, 7);
+  // otherwise the newest COMPLETED month — the newest statement month when it
+  // is already over (statements that simply end in July, read in August), and
+  // only otherwise the month before it. getSavingsOverview validates the
+  // month against the statements and falls back on its own default.
+  const goalMonthFor = (window?: Period) => {
+    if (window && window.from.slice(0, 7) === window.to.slice(0, 7)) {
+      return window.from.slice(0, 7);
+    }
+    const anchor = dashboard.facets.last.slice(0, 7);
+    if (anchor && monthHasEnded(anchor)) return anchor;
+    return resolvePeriod("last_month", dashboard.facets.last)?.from.slice(0, 7);
+  };
+  // A turn that already produced something to show must not die to a late
+  // upstream hiccup: the chart and the proposal are the app's own figures, so
+  // a short localized caption carries them out where failure() would have
+  // thrown them away with the error.
+  const salvage = async (): Promise<AssistantTurn | undefined> => {
+    if (!chart && !proposal) return undefined;
+    const t = await getTranslations("Chat");
+    return { reply: t("partialReply"), chart, proposal };
+  };
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const offerTools = round < MAX_ROUNDS;
@@ -230,8 +279,11 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         messageCount,
         request,
       });
-      return failure(
-        "Could not reach llm.stoney-cloud.com — check the connection and try again.",
+      return (
+        (await salvage()) ??
+        failure(
+          "Could not reach llm.stoney-cloud.com — check the connection and try again.",
+        )
       );
     }
 
@@ -246,10 +298,13 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         request,
         response: snapshot,
       });
-      return failure(
-        response.status === 401
-          ? "The model endpoint rejected the API key — check APERTUS_KEY."
-          : `The model endpoint answered ${response.status} — try again in a moment.`,
+      return (
+        (await salvage()) ??
+        failure(
+          response.status === 401
+            ? "The model endpoint rejected the API key — check APERTUS_KEY."
+            : `The model endpoint answered ${response.status} — try again in a moment.`,
+        )
       );
     }
 
@@ -269,7 +324,10 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         request,
         response: snapshot,
       });
-      return failure("The model returned an unreadable answer — try again.");
+      return (
+        (await salvage()) ??
+        failure("The model returned an unreadable answer — try again.")
+      );
     }
 
     const usage = data.usage && {
@@ -302,17 +360,20 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       routed = true;
     }
 
-    // Time scope: the model's period argument wins; then a period the
-    // question itself names ("in March", "last 3 months"); and when neither
-    // supplies one the turn defaults to year-to-date, unless the question
-    // explicitly asks for the whole history. Relative periods anchor to the
-    // newest statement date.
-    const periodRaw =
-      parsePeriod(content) ??
-      periodFromQuestion(question.content) ??
-      defaultPeriod(question.content);
+    // Time scope, first-RESOLVABLE-wins: the model's period argument, then a
+    // period the question itself names ("in March", "last 3 months"), then
+    // the year-to-date default. Each candidate is resolved before it wins —
+    // taking the first truthy string let an off-enum token ("recent",
+    // "everything") eat the whole chain and silently widen the window to the
+    // full history. Relative periods anchor to the newest statement date.
+    const last = dashboard.facets.last;
     const period =
-      calls.length > 0 ? resolvePeriod(periodRaw, dashboard.facets.last) : undefined;
+      calls.length > 0
+        ? (resolvePeriod(parsePeriod(content), last) ??
+          resolvePeriod(periodFromQuestion(question.content), last) ??
+          resolvePeriod(defaultPeriod(question.content), last))
+        : undefined;
+    if (period) lastPeriod = period;
 
     record(startedAt, {
       status: "ok",
@@ -335,14 +396,21 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     }
 
     // Aggregates scoped to the window come from a second, filtered fetch —
-    // the same query path the dashboard itself uses.
-    const scoped = period
-      ? ((await getDashboard({
-          from: period.from,
-          to: period.to,
-          view: "list",
-        })) ?? dashboard)
-      : dashboard;
+    // the same query path the dashboard itself uses. Only when a called tool
+    // actually reads the dashboard: the context tools (SQL, anomalies,
+    // subscriptions, savings) resolve their own data, and paying a full
+    // filtered fetch for them was waste.
+    const wantsDashboard = calls.some((name) =>
+      DASHBOARD_TOOLS.has(name),
+    );
+    const scoped =
+      period && wantsDashboard
+        ? ((await getDashboard({
+            from: period.from,
+            to: period.to,
+            view: "list",
+          })) ?? dashboard)
+        : dashboard;
 
     // Presentation choices for a display_chart call; the source falls back
     // to what the question is about when the argument didn't survive.
@@ -381,6 +449,10 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
             sandboxKey = cacheKey;
           }
           result = await runSandboxSql(sandboxRows ?? [], sql);
+          // Only a query that actually ran counts: a "No SQL found" round
+          // must leave the stall and prose-SQL heuristics armed, or the next
+          // round's stall text becomes the final answer.
+          toolRan = true;
         }
         messages.push({
           role: "tool",
@@ -390,7 +462,6 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
             result,
           }),
         });
-        toolRan = true;
         continue;
       }
 
@@ -465,13 +536,16 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       }
 
       if (name === "get_savings_goals") {
+        const overview = await getSavingsOverview(goalMonthFor(period));
+        // Latch the month the model is being SHOWN — the resolved one, after
+        // getSavingsOverview's own validation — so a later propose_allocation
+        // round lands on the same goals and free amount.
+        goalsMonth = overview?.month ?? goalsMonth;
         messages.push({
           role: "tool",
           content: JSON.stringify({
             tool: name,
-            result: savingsGoalsToolResult(
-              await getSavingsOverview(goalMonthFor(period)),
-            ),
+            result: savingsGoalsToolResult(overview),
           }),
         });
         toolRan = true;
@@ -482,9 +556,25 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         // The model's split becomes a typed proposal only after validation
         // against the month's real free surplus; the Apply card renders what
         // survived, and the tool result tells the model the same final split.
+        // Month precedence: a single-month period the model passed in THIS
+        // round; else the month the last get_savings_goals call resolved
+        // (what the model was shown); else the default. Re-deriving from
+        // scratch here let a June goals fetch be followed by a proposal
+        // silently validated against July.
+        const explicitWindow = resolvePeriod(
+          parsePeriod(content),
+          dashboard.facets.last,
+        );
+        const explicitMonth =
+          explicitWindow &&
+          explicitWindow.from.slice(0, 7) === explicitWindow.to.slice(0, 7)
+            ? explicitWindow.from.slice(0, 7)
+            : undefined;
         const { proposal: built, result } = buildAllocationProposal(
           parseAllocationArgs(content),
-          await getSavingsOverview(goalMonthFor(period)),
+          await getSavingsOverview(
+            explicitMonth ?? goalsMonth ?? goalMonthFor(period),
+          ),
         );
         if (built) proposal = built;
         messages.push({
@@ -518,7 +608,10 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   }
 
   if (!reply) {
-    return failure("The model returned an empty answer — try asking again.");
+    return (
+      (await salvage()) ??
+      failure("The model returned an empty answer — try asking again.")
+    );
   }
 
   // Chart safety net — the assistant leans visual. Two cases, both only when
@@ -527,14 +620,18 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   //   1. the user named a bar/line chart → compose it from real aggregates;
   //   2. no chart came out but the question is about the shape or size of the
   //      customer's money → attach a pie from real aggregates by default.
-  // Both draw only figures the tools produced, scoped to the resolved window.
+  // Both draw only figures the tools produced, scoped to the window the tool
+  // rounds actually used — re-deriving one from the question alone let the
+  // net chart a different window than the figures in the answer.
   const wantedType = wantsNonPieChart(question.content);
   const wantsDefaultChart = !chart && shouldDefaultChart(question.content);
   if (!chartExplicit && (wantedType || wantsDefaultChart)) {
-    const window = resolvePeriod(
-      periodFromQuestion(question.content) ?? defaultPeriod(question.content),
-      dashboard.facets.last,
-    );
+    const window =
+      lastPeriod ??
+      resolvePeriod(
+        periodFromQuestion(question.content) ?? defaultPeriod(question.content),
+        dashboard.facets.last,
+      );
     const scopedForChart = window
       ? ((await getDashboard({
           from: window.from,
@@ -554,11 +651,35 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     }
   }
 
+  // Proposal safety net — the allocation twin of the chart one. The customer
+  // explicitly asked to split a month's surplus, but no valid
+  // propose_allocation call materialized (the model stalled after fetching
+  // the goals, or mangled its arguments past saving). The app then proposes
+  // the deterministic gap-proportional split itself, through the same
+  // validator every Apply card goes through — an explicit ask for an action
+  // should end in an actionable card, not in prose about one.
+  if (
+    !proposal &&
+    routeTool(question.content) === "get_savings_goals" &&
+    (/\b(split|allocat\w*|assign\w*|distribut\w*|verteil\w*|zuweis\w*|aufteil\w*)\b/i.test(
+      question.content,
+    ) ||
+      /überschuss/i.test(question.content))
+  ) {
+    const overview = await getSavingsOverview(
+      goalsMonth ?? goalMonthFor(lastPeriod),
+    );
+    const split = defaultAllocationSplit(overview);
+    if (split.length > 0) {
+      proposal = buildAllocationProposal(split, overview).proposal;
+    }
+  }
+
   // The model's own FOLLOWUP proposals lead; a turn without them falls back
   // to the four starter questions — the same localized strings the empty
   // state shows, so the chips never invent a fifth phrasing. Either way,
   // nothing already asked in this conversation comes back around.
-  const asked = parsed.data
+  const asked = history
     .filter((m) => m.role === "user")
     .map((m) => m.content.toLowerCase());
   const notAsked = (q: string) => !asked.includes(q.toLowerCase());

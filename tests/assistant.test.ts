@@ -6,9 +6,13 @@ import type { Transaction } from "@/db/schema";
 import {
   anomaliesToolResult,
   buildAllocationProposal,
+  defaultAllocationSplit,
   defaultPeriod,
   detectSubscriptions,
+  extractFollowUps,
   parseAllocationArgs,
+  parseToolCalls,
+  resolvePeriod,
   extractJsonAfter,
   extractSql,
   looksLikeStall,
@@ -321,6 +325,8 @@ describe("savingsGoalsToolResult", () => {
     targetMinor,
     savedMinor,
     monthMinor: 0,
+    targetOn: null,
+    monthlyMinor: null,
     slot: 0,
   });
 
@@ -398,13 +404,13 @@ describe("buildAllocationProposal", () => {
     allocatedMinor: 20_000,
     freeMinor: 100_000,
     pots: [
-      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, slot: 0 },
-      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, slot: 1 },
+      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, targetOn: null, monthlyMinor: null, slot: 1 },
     ],
     ...patch,
   });
 
-  it("builds entries as new month totals, not as the adds", () => {
+  it("builds the card rows as adds, matched case-insensitively", () => {
     const { proposal, result } = buildAllocationProposal(
       [
         { goal: "ferien", amountMinor: 60_000 },
@@ -417,11 +423,6 @@ describe("buildAllocationProposal", () => {
       { goalId: 2, name: "Auto", addMinor: 30_000 },
     ]);
     expect(proposal?.addTotalMinor).toBe(90_000);
-    // Auto already holds CHF 200 this month, so its posted total is CHF 500.
-    expect(proposal?.entries).toEqual([
-      { goalId: 1, amount: "600.00" },
-      { goalId: 2, amount: "500.00" },
-    ]);
     expect((result as { shown_to_customer: boolean }).shown_to_customer).toBe(true);
   });
 
@@ -489,6 +490,7 @@ describe("anomaliesToolResult", () => {
     description: "A charge far above this merchant's usual range.",
     transactionCount: 2,
     latestOn: "2025-08-01",
+    resolvedCount: 0,
   };
 
   it("distinguishes 'nothing found' from 'never scanned'", () => {
@@ -497,7 +499,8 @@ describe("anomaliesToolResult", () => {
       context: [group],
       hasCompletedScan: true,
       running: false,
-      stale: false,
+      outdated: false,
+      resolvedGroupCount: 0,
     }) as { status: string; note: string };
     expect(clean.status).toBe("ok");
     expect(clean.note).toContain("reassure");
@@ -507,7 +510,8 @@ describe("anomaliesToolResult", () => {
       context: [],
       hasCompletedScan: false,
       running: false,
-      stale: false,
+      outdated: false,
+      resolvedGroupCount: 0,
     }) as { status: string };
     expect(unscanned.status).toBe("never_scanned");
   });
@@ -518,7 +522,8 @@ describe("anomaliesToolResult", () => {
       context: [],
       hasCompletedScan: true,
       running: false,
-      stale: false,
+      outdated: false,
+      resolvedGroupCount: 0,
     }) as { needs_a_look: { finding: string; severity: string }[] };
     expect(payload.needs_a_look).toEqual([
       {
@@ -628,5 +633,176 @@ describe("sanitizeEChartsOption", () => {
     expect(
       sanitizeEChartsOption({ series, blob: "x".repeat(30_000) }),
     ).toBeUndefined();
+  });
+});
+
+describe("francsToMinor comma semantics (via parseAllocationArgs)", () => {
+  const parse = (amount: string) =>
+    parseAllocationArgs(
+      `[{"propose_allocation": {"allocations": [{"goal": "Ferien", "amount_chf": "${amount}"}]}}]`,
+    )[0]?.amountMinor;
+
+  it("reads a trailing 1–2 digit comma as the Swiss decimal", () => {
+    expect(parse("89,90")).toBe(8_990);
+    expect(parse("1'234,5")).toBe(123_450);
+  });
+
+  it("reads a 3-digit comma group as thousands, not as a 1000x shrink", () => {
+    expect(parse("1,250")).toBe(125_000);
+    expect(parse("1,250.50")).toBe(125_050);
+  });
+});
+
+describe("parseAllocationArgs sweep fencing", () => {
+  it("ignores goal/amount pairs outside the propose_allocation argument region", () => {
+    // An echoed pair before the call, and one after the array closes — only
+    // the pair inside the (truncated) argument array may count.
+    const content =
+      'Earlier: {"goal": "Echo", "amount_chf": "100"}. Now propose_allocation: ' +
+      '[{"goal": "Ferien", "amount_chf": "600"}] and again {"goal": "Ghost", "amount_chf": "50"},';
+    expect(parseAllocationArgs(content)).toEqual([
+      { goal: "Ferien", amountMinor: 60_000 },
+    ]);
+  });
+});
+
+describe("extractJsonAfter retry", () => {
+  it("skips an unparseable balanced region and finds the real arguments", () => {
+    const content =
+      'display_echart takes an option like {series: [1]} — here: {"display_echart": {"option": {"series": [{"type": "bar", "data": [1]}]}}}';
+    const args = extractJsonAfter(content, "display_echart") as Record<string, unknown>;
+    expect(args).toBeTruthy();
+    expect(args.option).toBeTruthy();
+  });
+
+  it("steps inside an unclosed prose brace to reach a balanced object", () => {
+    const content = 'display_echart {broken and never closed {"option": {"series": []}}';
+    const args = extractJsonAfter(content, "display_echart") as Record<string, unknown>;
+    expect(args).toEqual({ option: { series: [] } });
+  });
+});
+
+describe("extractFollowUps", () => {
+  it("splits the inline array form the locale prompt invites", () => {
+    const { text, followUps } = extractFollowUps(
+      'You spent CHF 500.\nFOLLOWUP: ["How much did I save?", "Which month was priciest?"]',
+    );
+    expect(text).toBe("You spent CHF 500.");
+    expect(followUps).toEqual([
+      "How much did I save?",
+      "Which month was priciest?",
+    ]);
+  });
+
+  it("drops duplicate proposals", () => {
+    const { followUps } = extractFollowUps(
+      "Done.\nFOLLOWUP: How much did I save?\nFOLLOWUP: How much did I save?\nFOLLOWUP: What about June?",
+    );
+    expect(followUps).toEqual(["How much did I save?", "What about June?"]);
+  });
+
+  it("leaves lowercase prose 'follow-up:' in the visible reply", () => {
+    const { text, followUps } = extractFollowUps(
+      "One follow-up: you could cancel Netflix to save CHF 215.40 per year.",
+    );
+    expect(text).toContain("cancel Netflix");
+    expect(followUps).toEqual([]);
+  });
+});
+
+describe("parseToolCalls", () => {
+  it("does not scan FOLLOWUP lines for tool names", () => {
+    expect(
+      parseToolCalls(
+        "Your biggest cost is Travel.\nFOLLOWUP: Should I call get_savings_potential next?",
+      ),
+    ).toEqual([]);
+    expect(parseToolCalls('[{"get_overview": {}}]')).toEqual(["get_overview"]);
+  });
+});
+
+describe("resolvePeriod off-enum tokens", () => {
+  const last = "2025-08-15";
+  it("maps the spellings an 8B model actually emits", () => {
+    expect(resolvePeriod("this_year", last)?.from).toBe("2025-01-01");
+    expect(resolvePeriod("this_month", last)).toEqual({
+      from: "2025-08-01",
+      to: last,
+      label: "2025-08",
+    });
+    expect(resolvePeriod("last_year", last)).toEqual({
+      from: "2024-01-01",
+      to: "2024-12-31",
+      label: "2024",
+    });
+    expect(resolvePeriod("previous_month", last)?.label).toBe("2025-07");
+  });
+
+  it("still yields undefined for junk, so the caller's fallback chain runs", () => {
+    expect(resolvePeriod("recent", last)).toBeUndefined();
+  });
+});
+
+describe("defaultAllocationSplit", () => {
+  const overview = (patch: Partial<SavingsOverview> = {}): SavingsOverview => ({
+    month: "2025-07",
+    monthEnded: true,
+    surplusMinor: 100_000,
+    allocatedMinor: 0,
+    freeMinor: 100_000,
+    pots: [
+      { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 1 },
+    ],
+    ...patch,
+  });
+
+  it("splits the free amount proportional to each goal's remaining gap", () => {
+    // Gaps: Ferien 3000, Auto 1000 → 75% / 25% of the CHF 1000 free.
+    expect(defaultAllocationSplit(overview())).toEqual([
+      { goal: "Ferien", amountMinor: 75_000 },
+      { goal: "Auto", amountMinor: 25_000 },
+    ]);
+  });
+
+  it("prefers the holder's own monthly plan when any pot declares one", () => {
+    const planned = overview({
+      pots: [
+        { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: 30_000, slot: 0 },
+        { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 1 },
+      ],
+    });
+    // The Dauersparauftrag wins outright; the unplanned pot gets nothing and
+    // the surplus beyond the plan stays free.
+    expect(defaultAllocationSplit(planned)).toEqual([
+      { goal: "Ferien", amountMinor: 30_000 },
+    ]);
+  });
+
+  it("falls back to equal parts when every goal is already full", () => {
+    const full = overview({
+      pots: [
+        { id: 1, name: "A", targetMinor: 100, savedMinor: 100, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 0 },
+        { id: 2, name: "B", targetMinor: 100, savedMinor: 200, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 1 },
+      ],
+    });
+    expect(defaultAllocationSplit(full)).toEqual([
+      { goal: "A", amountMinor: 50_000 },
+      { goal: "B", amountMinor: 50_000 },
+    ]);
+  });
+
+  it("proposes nothing for a running month, an empty free amount, or no goals", () => {
+    expect(defaultAllocationSplit(overview({ monthEnded: false }))).toEqual([]);
+    expect(defaultAllocationSplit(overview({ freeMinor: 0 }))).toEqual([]);
+    expect(defaultAllocationSplit(overview({ pots: [] }))).toEqual([]);
+    expect(defaultAllocationSplit(null)).toEqual([]);
+  });
+
+  it("survives the shared validator into a card", () => {
+    const view = overview();
+    const { proposal } = buildAllocationProposal(defaultAllocationSplit(view), view);
+    expect(proposal?.addTotalMinor).toBe(100_000);
+    expect(proposal?.items.map((i) => i.name)).toEqual(["Ferien", "Auto"]);
   });
 });

@@ -717,6 +717,7 @@
     "proposalApply": "In die Töpfe legen",
     "proposalApplying": "Wird verschoben…",
     "proposalApplied": "In die Töpfe gelegt",
+    "partialReply": "Die Verbindung hat vor der Antwort gehakt — das habe ich gefunden.",
     "chartFallback": "Diagramm des Assistenten",
     "chartFailed": "Der Assistent hat ein Diagramm gesendet, das dieser Browser nicht zeichnen konnte.",
     "pieTotal": "Total",
