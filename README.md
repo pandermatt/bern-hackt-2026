@@ -37,8 +37,10 @@ in `scripts/seed-data/` into it. It is safe to re-run: the account is matched by
 email and rows are keyed by statement line, so a second import replaces rather
 than duplicates.
 
-`npm run start` runs it automatically, so a deployed instance comes up with a
-populated dashboard and no manual step.
+`npm run start` runs it automatically **on an empty database only** (it passes
+`--if-empty`), so a fresh deploy comes up with a populated dashboard and no
+manual step, while a restart onto a volume that already holds data leaves that
+data alone.
 
 | | |
 | --- | --- |
@@ -232,9 +234,17 @@ stores what the file says and keeps `currency` and `original_amount_minor`, so
 a real conversion can be added later without re-importing. About CHF 1,450 of
 the year is affected.
 
-`npm run start` runs the import on every boot. It is idempotent — the demo
-account is matched by email and the rows are replaced, not appended — so a
-redeploy leaves exactly 513 rows and one account.
+`npm run start` runs the import as `npm run seed -- --if-empty`, which imports
+only when the database holds no transactions at all. A first boot on a fresh
+volume seeds; every boot after that skips, so anything added since — including
+transactions generated from `/account` — survives a restart. Run `npm run seed`
+by hand to re-import: it is idempotent on its own, because the demo account is
+matched by email and its rows are replaced rather than appended, so a manual
+re-run also leaves one account and the same set of rows.
+
+`--if-empty` asks whether the database has transactions, not whether `data/`
+exists: `db:push` runs first and creates both the directory and the file, so by
+the time the seed opens it the folder is never missing.
 
 To import a different export, drop the `.csv` files in `scripts/seed-data/`
 (or point `SEED_DIR` elsewhere) and re-run. Any merchant the table does not
@@ -271,12 +281,12 @@ on a fresh database, and the settings card says so.
 | Script | Does |
 | --- | --- |
 | `npm run dev` | Dev server on port 3000 |
-| `npm run start` | Pushes the schema, seeds the demo account, then serves the production build |
+| `npm run start` | Pushes the schema, seeds the demo account **if the database is empty**, then serves the production build |
 | `npm run build` | Production build — also the check that no server-only import leaked into a client component |
 | `npm run db:push` | Apply `db/schema.ts` to the database (`drizzle-kit push`) |
 | `npm run db:studio` | Drizzle Studio against the same file |
 | `npm run db:backup` | Snapshot the database into `data/backups/` (`VACUUM INTO`) |
-| `npm run seed` | Import `scripts/seed-data/*.csv` into an existing account |
+| `npm run seed` | Import `scripts/seed-data/*.csv` into an existing account. `-- --if-empty` skips when the database already holds transactions |
 | `npm test` | Vitest: CSV parsing, aggregation, import rules, auth, and per-account scoping |
 
 ## Environment

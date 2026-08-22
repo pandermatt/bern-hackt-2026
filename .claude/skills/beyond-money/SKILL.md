@@ -448,9 +448,16 @@ Unchanged from the template this app grew out of, and still exactly true.
 
 - `npm run seed` reads every `.csv` in `SEED_DIR` (default
   `scripts/seed-data/`) and imports it into the **demo account**, creating that
-  account if it is missing. `npm run start` runs it on every boot, so a deploy
-  needs no manual step. Both halves are idempotent — the account is matched by
-  email, the rows are replaced — so a redeploy is a no-op.
+  account if it is missing. Both halves are idempotent — the account is matched
+  by email, the rows are replaced — so a manual re-run is a no-op.
+- **`npm run start` seeds only an empty database.** It passes `--if-empty`,
+  which exits early when the `transactions` table holds any row, so a fresh
+  volume comes up populated with no manual step and every later boot leaves the
+  data alone. Before that flag the seed ran on *every* boot and its scoped
+  delete-then-insert silently wiped anything the demo account had generated from
+  `/account`. The check is on table contents, not on `data/` existing —
+  `db:push` runs first in `start` and creates the directory and the file, so the
+  folder is never missing by the time the seed looks.
 - **The demo credentials are hardcoded in `scripts/seed.ts`** (`SEED_EMAIL` /
   `SEED_PASSWORD` override them). This is a deliberate exception to the rule the
   template started with, taken because the statements are synthetic and the app
@@ -533,7 +540,7 @@ Unchanged from the template this app grew out of, and still exactly true.
   `external_id`s — and `getAnomalyScanState` compares it against the current
   set. Timestamps cannot work here: the importers reset `transactions.createdAt`
   and the ids on every re-seed, so anything derived from them reported a
-  perfectly good scan as stale on every boot. A NULL fingerprint reads as
+  perfectly good scan as stale after an import that changed nothing. A NULL fingerprint reads as
   *unknown*, not outdated, so scans predating the column do not start nagging.
   The sort inside `fingerprintOf` is load-bearing — the read has no `ORDER BY`.
 - **`resolved_at` is the one thing a scan carries across its own delete.** The
@@ -542,9 +549,10 @@ Unchanged from the template this app grew out of, and still exactly true.
   the way back in — see `priorResolutions`.
 - **A resolution is keyed on `(rule_id, external_id)`, never on
   `transaction_id`.** `scripts/seed.ts` and `lib/demo-loader.ts` both
-  delete-then-insert, and `npm run start` runs the seed on every boot, so ids
-  are reissued on every deploy; matching on them would quietly wipe the user's
-  progress each time. That is what
+  delete-then-insert, so ids are reissued on every re-import; matching on them
+  would quietly wipe the user's progress each time. (`npm run start` used to
+  force that on every boot. It no longer does — see `--if-empty` under Seed data
+  — but a manual `npm run seed` and every demo-data load still do.) That is what
   `anomalies.transactionExternalId` is for, and why `setAnomalyResolved`
   backfills it for rows that predate the column. `tests/anomalies.test.ts`
   re-imports the statements mid-test and asserts the resolutions still land.
@@ -756,10 +764,10 @@ Unchanged from the template this app grew out of, and still exactly true.
 
 - Coolify on Hetzner behind Cloudflare.
 - `data/` is gitignored, so a fresh container has no tables. `npm run start`
-  runs `npm run db:push && next start` for exactly this reason — don't reduce
-  it back to `next start`, or the site 500s with `no such table`. `db:push`
-  creates the database's parent directory first, because `drizzle-kit` will
-  not.
+  runs `npm run db:push && npm run seed -- --if-empty && next start` for exactly
+  this reason — don't reduce it back to `next start`, or the site 500s with `no
+  such table`. `db:push` creates the database's parent directory first, because
+  `drizzle-kit` will not.
 - `drizzle-kit` **and `tsx`** are dependencies, not devDependencies, so they
   survive `npm prune --production`. `start` runs both (`db:push`, then `seed`).
   Keep them that way.

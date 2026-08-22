@@ -22,6 +22,20 @@ const DB_PATH = process.env.DATABASE_PATH ?? "./data/app.db";
 const SEED_DIR = process.env.SEED_DIR ?? resolve("scripts/seed-data");
 
 /**
+ * Passed by `npm run start`, so a boot onto a volume that already holds
+ * statements leaves them alone — only a fresh, empty database gets seeded. A
+ * bare `npm run seed` still re-imports unconditionally, which is how you pick
+ * up edited statements or a new SEED_DIR.
+ *
+ * The question it answers is "does the database already hold transactions",
+ * not "does `data/` exist": `db:push` runs first in `start` and creates both
+ * the directory and the database file, so by the time this script opens it the
+ * folder is never missing. An empty database is the observable form of a fresh
+ * volume.
+ */
+const ONLY_IF_EMPTY = process.argv.includes("--if-empty");
+
+/**
  * The demo account. `npm run start` runs this script before serving, so a
  * fresh deploy comes up with a populated dashboard and no manual step.
  *
@@ -49,7 +63,36 @@ async function main() {
   mkdirSync(dirname(DB_PATH), { recursive: true });
   const sqlite = new Database(DB_PATH);
   sqlite.pragma("journal_mode = WAL");
+
+  // Nested rather than hoisted to module scope so it can close over `sqlite`
+  // without naming better-sqlite3's instance type.
+  //
+  // The table's existence is part of the question: `db:push` has always run by
+  // this point under `npm run start`, but `npm run seed -- --if-empty` against a
+  // database nobody pushed would otherwise throw "no such table" instead of
+  // reporting the obvious answer.
+  const hasTransactions = () => {
+    const table = sqlite
+      .prepare(
+        "select 1 from sqlite_master where type = 'table' and name = 'transactions'",
+      )
+      .get();
+
+    if (!table) return false;
+
+    return sqlite.prepare("select 1 from transactions limit 1").get() !== undefined;
+  };
+
   const db = drizzle(sqlite);
+
+  if (ONLY_IF_EMPTY && hasTransactions()) {
+    console.log(
+      `${DB_PATH} already holds transactions — skipping the seed. ` +
+        `Run \`npm run seed\` to re-import anyway.`,
+    );
+    sqlite.close();
+    return;
+  }
 
   const existing = db
     .select()
@@ -176,10 +219,11 @@ async function main() {
     /*
      * The delete-then-insert above reissues every id, so the account's stored
      * anomaly findings now point at rows that no longer exist. Re-point them by
-     * the natural key they carry. This runs on every boot -- `npm run start` is
-     * `db:push && seed && next start` -- and without it a re-seed of the very
-     * same statements voided the last scan, which is what made people re-run
-     * the detection after every deploy.
+     * the natural key they carry -- without it a re-seed of the very same
+     * statements voids the last scan and the detection has to be re-run.
+     *
+     * `npm run start` no longer reaches this on a boot with data (it passes
+     * --if-empty), so the case this now covers is a manual `npm run seed`.
      */
     rebindAnomalies(db, target.id);
   });
