@@ -29,6 +29,10 @@ import { loadLedgerChunk } from "@/app/actions/ledger";
  * key React would keep the chunks accumulated under the *old* filter and append
  * the new ones to them.
  */
+
+/** A chunk and the offset it was fetched at — the offset is its identity. */
+type Chunk = { offset: number; content: ReactNode };
+
 export function TransactionFeed({
   initial,
   initialNextOffset,
@@ -41,7 +45,7 @@ export function TransactionFeed({
   filters: Record<string, string | string[] | undefined>;
 }) {
   const t = useTranslations("Ledger");
-  const [chunks, setChunks] = useState<ReactNode[]>([]);
+  const [chunks, setChunks] = useState<Chunk[]>([]);
   const [nextOffset, setNextOffset] = useState(initialNextOffset);
   const [failed, setFailed] = useState(false);
   const sentinel = useRef<HTMLDivElement>(null);
@@ -49,23 +53,45 @@ export function TransactionFeed({
   // it saw when it was registered, and re-registering on every load would tear
   // down the observer mid-scroll.
   const inFlight = useRef(false);
+  /*
+   * Where the feed is up to, as a ref rather than only as state — and this is
+   * load-bearing rather than a micro-optimisation.
+   *
+   * The lock above is released synchronously in `finally`, but the matching
+   * `setNextOffset` is only *scheduled*: React commits it in a later task.
+   * IntersectionObserver entries are delivered per frame, so under a fast
+   * fling — many entries a second, and a slower round trip than on a desk —
+   * a callback can land in that window, find the lock already open, and read
+   * the offset the previous load consumed straight out of its closure.
+   *
+   * `ledgerChunk` is a pure slice of a fixed ordering, so refetching an offset
+   * returns the *same fifty rows* again, and `continuesFrom` hides the seam.
+   * The reader gets a month they have already scrolled past appended below the
+   * one they are reading, which reads as the ledger throwing them back up the
+   * list. Advancing this ref before the lock opens is what makes a stale
+   * callback pick up the new offset instead of replaying the old one.
+   */
+  const offset = useRef(initialNextOffset);
 
   const loadMore = useCallback(async () => {
-    if (inFlight.current || nextOffset === null) return;
+    const from = offset.current;
+    if (inFlight.current || from === null) return;
     inFlight.current = true;
     setFailed(false);
 
     try {
-      const next = await loadLedgerChunk(nextOffset, filters);
-      setChunks((previous) => [...previous, next.content]);
+      const next = await loadLedgerChunk(from, filters);
+      // Before the lock opens, so the next caller cannot re-request `from`.
+      offset.current = next.nextOffset;
+      setChunks((previous) => [...previous, { offset: from, content: next.content }]);
       setNextOffset(next.nextOffset);
     } catch {
-      // Leave `nextOffset` where it is so the retry button can try again.
+      // Leave the offset where it is so the retry button can try again.
       setFailed(true);
     } finally {
       inFlight.current = false;
     }
-  }, [nextOffset, filters]);
+  }, [filters]);
 
   useEffect(() => {
     const element = sentinel.current;
@@ -73,6 +99,11 @@ export function TransactionFeed({
 
     // Fires before the sentinel is actually on screen, so a chunk is usually
     // already in place by the time the reader gets to where it goes.
+    //
+    // Re-created on every `nextOffset` change, and that is the mechanism that
+    // keeps the feed going: a fresh observer reports on its first pass, so a
+    // sentinel still inside the margin after a short chunk triggers the next
+    // load rather than waiting for an intersection change that never comes.
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) void loadMore();
@@ -89,7 +120,7 @@ export function TransactionFeed({
   return (
     <>
       {initial}
-      {chunks.map((chunk, index) => (
+      {chunks.map((chunk) => (
         // A `Fragment`, not a wrapping `div`. Every month heading is
         // `position: sticky`, and its containing block is its nearest
         // positioned ancestor — a per-chunk wrapper would make that the chunk,
@@ -97,9 +128,10 @@ export function TransactionFeed({
         // staying put until the next month pushes it off. Fragments emit no
         // element, so all the headings and panels stay siblings in one box.
         //
-        // Chunks only ever append, and each is a fixed slice of a fixed
-        // ordering, so the index is a stable identity.
-        <Fragment key={index}>{chunk}</Fragment>
+        // Keyed on the offset the chunk was fetched at, not on its position in
+        // the array: the offset is what the chunk actually *is*, so a key can
+        // never come to mean a different slice of the ledger than it did.
+        <Fragment key={chunk.offset}>{chunk.content}</Fragment>
       ))}
 
       {/* Reserves a little space so the observer has something to see even when
