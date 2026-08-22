@@ -13,6 +13,7 @@ import {
   extractFollowUps,
   extractSql,
   formatSwissNumbers,
+  languageName,
   looksLikeStall,
   parseAllocationArgs,
   parsePeriod,
@@ -33,6 +34,22 @@ import {
   type Period,
   type WireMessage,
 } from "@/lib/assistant";
+import {
+  anomaliesSummary,
+  categorySummary,
+  matchHappyPath,
+  paraphrasePromptFor,
+  recentCount,
+  recentSpendingSummary,
+  renderSummary,
+  savingsPotentialSummary,
+  subscriptionsSummary,
+  keepsFigures,
+  type HappyContext,
+  type HappyPathId,
+  type HappySummary,
+} from "@/lib/happy-path";
+import { monthLabel } from "@/lib/month-label";
 import { runSandboxSql } from "@/lib/sql-sandbox";
 import {
   clearAssistantLog,
@@ -152,6 +169,23 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   }
 
   const key = process.env.APERTUS_KEY;
+
+  // The happy paths come first, and deliberately before the key check: they
+  // answer from the app's own aggregates, so a missing key costs them their
+  // prose and nothing else. See `lib/happy-path.ts`.
+  const happyPath = matchHappyPath(question.content);
+  if (happyPath) {
+    return answerHappyPath({
+      id: happyPath,
+      question: question.content,
+      history,
+      model,
+      maxTokens,
+      key,
+      record,
+    });
+  }
+
   if (!key) {
     record(turnStarted, { status: "error", error: "APERTUS_KEY is not set." });
     return failure(
@@ -576,21 +610,339 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     }
   }
 
-  // The model's own FOLLOWUP proposals lead; a turn without them falls back
-  // to the four starter questions — the same localized strings the empty
-  // state shows, so the chips never invent a fifth phrasing. Either way,
-  // nothing already asked in this conversation comes back around.
+  return {
+    reply,
+    proposal,
+    followUps: await followUpsFor(history, proposedFollowUps),
+  };
+}
+
+/**
+ * The chips under the input.
+ *
+ * The model's own FOLLOWUP proposals lead; a turn without them falls back to
+ * the starter questions — the same localized strings the empty state shows, so
+ * the chips never invent a phrasing of their own. Either way, nothing already
+ * asked in this conversation comes back around.
+ *
+ * Shared with the happy paths, which propose none: a paraphrase is one job,
+ * and asking an 8B model for follow-up questions in the same breath is what
+ * turns a clean two-sentence answer into a list. They take the fallback.
+ */
+async function followUpsFor(
+  history: { role: "user" | "assistant"; content: string }[],
+  proposed: string[],
+): Promise<string[]> {
   const asked = history
     .filter((m) => m.role === "user")
     .map((m) => m.content.toLowerCase());
   const notAsked = (q: string) => !asked.includes(q.toLowerCase());
-  let followUps = proposedFollowUps.filter(notAsked).slice(0, 3);
-  if (followUps.length === 0) {
-    const t = await getTranslations("Chat");
-    followUps = SUGGESTION_KEYS.map((key) => t(key)).filter(notAsked);
+  const followUps = proposed.filter(notAsked).slice(0, 3);
+  if (followUps.length > 0) return followUps;
+  const t = await getTranslations("Chat");
+  return SUGGESTION_KEYS.map((key) => t(key)).filter(notAsked);
+}
+
+/**
+ * One turn of a happy path: fetch, render, and let the model do the wording.
+ *
+ * No loop, no tools, no period to spell — see the note at the top of
+ * `lib/happy-path.ts` for why these questions are worth taking off the general
+ * path. The shape is two steps:
+ *
+ *  1. the app fetches this recipe's data and renders it into a summary out of
+ *     its own formatters, so every figure on the screen is a figure the
+ *     dashboard would print;
+ *  2. the model gets exactly one request — say that, in two or three
+ *     sentences, in the reader's language.
+ *
+ * Step 2 is the only part that can fail, and when it does the rendered summary
+ * IS the answer. That covers a timeout, a 500, a truncated reply, an invented
+ * total (`keepsFigures`), and an unset APERTUS_KEY — which is why the caller
+ * reaches this before the key check rather than after it.
+ */
+async function answerHappyPath({
+  id,
+  question,
+  history,
+  model,
+  maxTokens,
+  key,
+  record,
+}: {
+  id: HappyPathId;
+  question: string;
+  history: { role: "user" | "assistant"; content: string }[];
+  model: string;
+  maxTokens: number | undefined;
+  key: string | undefined;
+  record: (
+    startedAt: number,
+    patch: Partial<AssistantLogEntry> & { status: AssistantLogEntry["status"] },
+  ) => void;
+}): Promise<AssistantTurn> {
+  const [phrase, categories, months] = await Promise.all([
+    getTranslations("Chat.happy"),
+    getTranslations("Categories"),
+    getTranslations("Months"),
+  ]);
+  // `year` is the newest statement's, never the wall clock's — against a 2026
+  // export read in 2027 a wall-clock year is an empty window. Recipes that are
+  // not scoped to a year (the anomaly scan is about the whole account) leave
+  // the default in place and never read it.
+  const context = (year = ""): HappyContext => ({
+    phrase: (message, values) => phrase(message, values),
+    // A category the catalog does not know falls through as itself, exactly
+    // as `useCategoryLabel` does on the client.
+    label: (category) => (categories.has(category) ? categories(category) : category),
+    monthName: (month) => monthLabel(months, month),
+    year,
+  });
+
+  const expired = () =>
+    failure("Your session has expired — sign in again to keep chatting.");
+
+  /** The account's aggregate, plus the same aggregate re-scoped to the newest
+   * statement year — the assistant's stated default window. Two reads of ~930
+   * rows through a synchronous driver, which is what the tool loop pays for
+   * the same scoping. */
+  const scopedDashboard = async () => {
+    const whole = await getDashboard({ view: "list" });
+    if (!whole) return undefined;
+    const year = whole.facets.last.slice(0, 4);
+    const scoped =
+      (await getDashboard({
+        from: `${year}-01-01`,
+        to: whole.facets.last,
+        view: "list",
+      })) ?? whole;
+    return { whole, scoped, year };
+  };
+
+  let summary: HappySummary;
+  switch (id) {
+    case "recent_spending": {
+      // Unscoped and unfiltered: "my last ten" means the last ten there are,
+      // whichever month they fall in.
+      const rows = await listTransactions({});
+      summary = recentSpendingSummary(
+        rows,
+        recentCount(question),
+        context(rows[0]?.bookedOn.slice(0, 4)),
+      );
+      break;
+    }
+    case "anomalies": {
+      summary = anomaliesSummary(await getAnomalyOverview(), context());
+      break;
+    }
+    case "subscriptions": {
+      // The whole history, never a year: a year-to-date window demotes every
+      // yearly bill, which is the same reason the tool loop fetches these rows
+      // unscoped.
+      const rows = await listTransactions({});
+      summary = subscriptionsSummary(rows, context(rows[0]?.bookedOn.slice(0, 4)));
+      break;
+    }
+    case "savings_potential": {
+      const dashboards = await scopedDashboard();
+      if (!dashboards) return expired();
+      const { whole, scoped, year } = dashboards;
+      // The month the surplus is about: the newest statement month when it is
+      // already over (statements that simply end in July, read in August), and
+      // only otherwise the month before it — `goalMonthFor`'s rule, without a
+      // period to override it.
+      const anchor = whole.facets.last.slice(0, 7);
+      const month = monthHasEnded(anchor)
+        ? anchor
+        : resolvePeriod("last_month", whole.facets.last)?.from.slice(0, 7);
+      summary = savingsPotentialSummary(
+        scoped,
+        await getSavingsOverview(month),
+        context(year),
+      );
+      break;
+    }
+    case "spending_by_category": {
+      const dashboards = await scopedDashboard();
+      if (!dashboards) return expired();
+      summary = categorySummary(dashboards.scoped, context(dashboards.year));
+      break;
+    }
   }
 
-  return { reply, proposal, followUps };
+  const text = renderSummary(summary);
+  const followUps = await followUpsFor(history, []);
+  if (!key) {
+    record(Date.now(), {
+      status: "ok",
+      note: `happy path · ${id} · no key, summary served`,
+    });
+    return { reply: text, followUps };
+  }
+  const reply = await paraphrase({
+    id,
+    question,
+    text,
+    model,
+    maxTokens,
+    key,
+    record,
+  });
+  return { reply: reply ?? text, followUps };
+}
+
+/**
+ * The model's only job on a happy path. One request, no tools, no history:
+ * the question and the rendered summary go in, prose comes out.
+ *
+ * Returns nothing rather than throwing on every failure mode — the caller
+ * already holds a correct answer, so there is no error to report and nothing
+ * to retry. A reply is dropped when it is too short to be an answer, or when
+ * `keepsFigures` finds an amount in it that the summary never stated: on a
+ * screen of real francs one invented one is worse than a plainer sentence.
+ */
+async function paraphrase({
+  id,
+  question,
+  text,
+  model,
+  maxTokens,
+  key,
+  record,
+}: {
+  id: HappyPathId;
+  question: string;
+  text: string;
+  model: string;
+  maxTokens: number | undefined;
+  key: string;
+  record: (
+    startedAt: number,
+    patch: Partial<AssistantLogEntry> & { status: AssistantLogEntry["status"] },
+  ) => void;
+}): Promise<string | undefined> {
+  const body = {
+    model,
+    messages: [
+      {
+        role: "system",
+        content: paraphrasePromptFor(languageName(await getLocale())),
+      },
+      { role: "user", content: `${question}\n\n${text}` },
+    ],
+    // No tool round to budget for, and no FOLLOWUP lines to parse out — the
+    // chips fall back to the starters. A paraphrase of a fixed summary is a
+    // short completion; +40 is the slack for a longer language's wording.
+    ...(maxTokens !== undefined ? { max_tokens: maxTokens + 40 } : {}),
+  };
+  const startedAt = Date.now();
+  const request = truncateSnapshot(JSON.stringify(body, null, 2));
+
+  let response: Response;
+  let raw: string;
+  try {
+    response = await fetch(APERTUS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      // Shorter than the loop's 30s on purpose: the fallback here is instant
+      // and already correct, so a slow endpoint should cost the wording
+      // rather than the answer.
+      signal: AbortSignal.timeout(20_000),
+    });
+    raw = await response.text();
+  } catch (cause) {
+    record(startedAt, {
+      status: "error",
+      error:
+        cause instanceof Error && cause.name === "TimeoutError"
+          ? "Paraphrase timed out after 20s."
+          : "Paraphrase fetch failed — endpoint unreachable.",
+      note: `happy path · ${id} · summary served`,
+      messageCount: 2,
+      request,
+    });
+    return undefined;
+  }
+
+  const snapshot = truncateSnapshot(raw);
+  if (!response.ok) {
+    record(startedAt, {
+      status: "error",
+      httpStatus: response.status,
+      error: `Upstream answered ${response.status}.`,
+      note: `happy path · ${id} · summary served`,
+      messageCount: 2,
+      request,
+      response: snapshot,
+    });
+    return undefined;
+  }
+
+  let data: {
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    record(startedAt, {
+      status: "error",
+      httpStatus: response.status,
+      error: "Upstream body was not JSON.",
+      note: `happy path · ${id} · summary served`,
+      messageCount: 2,
+      request,
+      response: snapshot,
+    });
+    return undefined;
+  }
+
+  const usage = data.usage && {
+    promptTokens: data.usage.prompt_tokens,
+    completionTokens: data.usage.completion_tokens,
+  };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  // FOLLOWUP lines are not asked for here, but a model that has seen the other
+  // prompt sometimes writes them anyway; stripping is cheaper than explaining.
+  const cleaned = formatSwissNumbers(
+    extractFollowUps(stripModelMarkup(content)).text,
+  ).trim();
+
+  // Twenty characters is below any real answer in either language and above
+  // the "Sure!" a truncated completion leaves behind.
+  const tooShort = cleaned.length < 20;
+  const invented = !keepsFigures(cleaned, text);
+  if (tooShort || invented) {
+    record(startedAt, {
+      status: "error",
+      httpStatus: response.status,
+      error: tooShort
+        ? "Paraphrase was too short to be an answer."
+        : "Paraphrase stated an amount the summary did not.",
+      note: `happy path · ${id} · summary served`,
+      messageCount: 2,
+      request,
+      response: snapshot,
+      usage,
+    });
+    return undefined;
+  }
+
+  record(startedAt, {
+    status: "ok",
+    httpStatus: response.status,
+    note: `happy path · ${id} · paraphrased`,
+    messageCount: 2,
+    request,
+    response: snapshot,
+    usage,
+  });
+  return cleaned;
 }
 
 /** The current user's recent assistant calls, newest first. */

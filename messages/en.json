@@ -713,6 +713,7 @@
     "suggestion2": "Is something shady going on in my account?",
     "suggestion3": "What subscriptions am I paying for?",
     "suggestion4": "How should I split last month's surplus across my saving goals?",
+    "suggestion5": "Summarize my last 10 spendings",
     "thinking": "The assistant is thinking",
     "followUpsLabel": "Suggested follow-up questions",
     "inputPlaceholder": "Ask about your finances…",
@@ -728,7 +729,45 @@
     "partialReply": "The connection hiccuped before the answer arrived — here is what I found.",
     "pieAmount": "Amount",
     "pieShare": "Share",
-    "pieChartLabel": "Pie chart: {title}. The figures are listed in the table after the chart."
+    "pieChartLabel": "Pie chart: {title}. The figures are listed in the table after the chart.",
+    "happy": {
+      "recentEmpty": "There is no spending in your statements yet.",
+      "recentHeadline": "Your last {count} payments, from {from} to {to}, {total} in total.",
+      "recentLine": "{date} · {merchant} · {category} — {amount}",
+      "recentNote": "The largest of them: {merchant} at {amount}.",
+      "anomaliesRunning": "A check of your transactions is running right now — the findings will be ready in a moment.",
+      "anomaliesNever": "Your transactions have never been checked. You can start the check on the Account page.",
+      "anomaliesOutdated": "New transactions have arrived since the last check, so its findings are out of date. You can start a fresh check on the Account page.",
+      "anomaliesClean": "The last check found nothing unusual.",
+      "anomaliesHeadline": "The last check reports {groups} kinds of finding across {count} transactions, {action} of them worth a look.",
+      "anomaliesLine": "{title} ({severity}) — {count} transactions: {description}",
+      "anomaliesNote": "Most of this is your own perfectly ordinary spending. The details are on the Anomalies page.",
+      "severity": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "subsEmpty": "I cannot find any recurring charges — no merchant bills you a steady amount on a steady rhythm.",
+      "subsHeadline": "You pay for {count} recurring subscriptions, {yearly} a year in total.",
+      "subsLine": "{merchant} — {typical} {cadence}, {yearly} a year",
+      "subsNote": "Contractual fixed costs like rent, insurance and taxes are not counted here.",
+      "cadence": {
+        "weekly": "weekly",
+        "monthly": "monthly",
+        "quarterly": "quarterly",
+        "yearly": "yearly"
+      },
+      "potentialFree": "In {month} you had {amount} left over that is not in a saving goal yet.",
+      "potentialOverspent": "In {month} you spent {amount} more than you earned.",
+      "potentialNoMonth": "There are no figures for a completed month yet.",
+      "potentialSplit": "Of your {year} spending, {fixed} is fixed costs and {flexible} is flexible.",
+      "potentialLine": "{category} — {amount} ({share}% of your spending)",
+      "potentialNote": "Rent, insurance and taxes can hardly be cut; the categories above can.",
+      "categoriesEmpty": "Nothing has been spent in {year} yet.",
+      "categoriesHeadline": "In {year} you spent {total}, across {payments} payments in {count} categories.",
+      "categoriesLine": "{category} — {amount} ({share}%, {payments} payments)",
+      "categoriesNote": "The dashboard's donut chart shows the same split."
+    }
   },
   "ChatDebug": {
     "intro": "Requests to the model endpoint, newest first.",
