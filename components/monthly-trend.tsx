@@ -9,16 +9,17 @@ import {
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
+import { Section } from "@/components/section";
 import { formatMoney, type MonthPoint } from "@/lib/insights";
 import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
  * Money in against money out, month by month, as two overlaid areas.
  *
- * Deliberately **not** broken down by category. The category story is told
- * twice already, below: the donut splits the year and "Where it goes" ranks it.
- * This chart answers the one question those cannot — whether a month earned
- * more than it spent — and a nine-band stack was drowning that in detail.
+ * Deliberately **not** broken down by category. The donut below tells the
+ * category story. This chart answers the one question it cannot — whether a
+ * month earned more than it spent — and a nine-band stack was drowning that in
+ * detail.
  *
  * The areas overlap rather than stack. Stacking income on top of spending sums
  * to a number that means nothing; overlaying them makes the gap between the
@@ -144,23 +145,19 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   if (series.length === 0) return null;
 
   return (
-    <section className="card p-4 sm:p-5" aria-labelledby="trend-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="trend-heading" className="text-[15px] font-semibold text-text">
-          Month by month
-        </h2>
-        <p className="text-[12.5px] text-text-muted">Money in against money out</p>
-      </div>
-
-      <div className="mt-4">
-        <EChart
-          option={option}
-          height={HEIGHT}
-          label={`Money in and money out in Swiss francs for each month from ${series[0].month} to ${
-            series[series.length - 1].month
-          }. The table below the chart carries the same figures.`}
-        />
-      </div>
+    <Section
+      id="trend"
+      heading="Month by month"
+      meta="Money in against money out"
+      panelClassName="p-4 sm:p-5"
+    >
+      <EChart
+        option={option}
+        height={HEIGHT}
+        label={`Money in and money out in Swiss francs for each month from ${series[0].month} to ${
+          series[series.length - 1].month
+        }. The table below the chart carries the same figures.`}
+      />
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. Also the relief a sub-3:1 fill requires. */}
@@ -193,6 +190,6 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
       <p className="mt-3 font-mono text-[11.5px] text-text-subtle">
         Amounts in CHF. Transfers between your own accounts are excluded.
       </p>
-    </section>
+    </Section>
   );
 }

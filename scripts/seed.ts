@@ -30,6 +30,9 @@ const SEED_DIR = process.env.SEED_DIR ?? resolve("scripts/seed-data");
  */
 const DEMO_EMAIL = (process.env.SEED_EMAIL ?? "jeanine@example.com").toLowerCase();
 const DEMO_PASSWORD = process.env.SEED_PASSWORD ?? "beyond-money-demo";
+/** Only applied when this script creates the account — an existing one keeps
+ * whatever name its owner set. */
+const DEMO_NAME = process.env.SEED_NAME ?? "Jeanine";
 
 /*
  * Wrapped in a main() rather than run at the top level: hashing the demo
@@ -65,7 +68,11 @@ async function main() {
     // note in lib/password.ts.
     const [created] = db
       .insert(users)
-      .values({ email: DEMO_EMAIL, passwordHash: await hashPassword(DEMO_PASSWORD) })
+      .values({
+        email: DEMO_EMAIL,
+        name: DEMO_NAME,
+        passwordHash: await hashPassword(DEMO_PASSWORD),
+      })
       .returning()
       .all();
 

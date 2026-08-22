@@ -36,7 +36,13 @@ export function SummaryCards({ totals }: { totals: Totals }) {
   return (
     <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {tiles.map((tile) => (
-        <li key={tile.label} className="card p-3.5 sm:p-4">
+        <li
+          key={tile.label}
+          /* The ledger's panel, in tile form: grey ground, no border and no
+             shadow. The page heading above is the "big text outside" half of
+             the idiom — these four do not each need one. */
+          className="rounded-lg bg-surface-muted p-3.5 sm:p-4"
+        >
           <p className="text-[13px] font-medium text-text-muted">{tile.label}</p>
           <p
             /* 16px, not the desktop 20px: a half-width tile at 390px has

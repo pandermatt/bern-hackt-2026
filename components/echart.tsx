@@ -46,6 +46,9 @@ export type ChartTokens = {
   textMuted: string;
   textSubtle: string;
   surface: string;
+  /** The dashboard panels' ground. A chart drawn on one separates its shapes
+   * with this, not with `surface` — see the donut's wedge borders. */
+  surfaceMuted: string;
   line: string;
   series: string[];
   /** The neutral fold-in bucket, slot 0. */
@@ -67,6 +70,7 @@ function readTokens(): ChartTokens {
     textMuted: read("--text-muted"),
     textSubtle: read("--text-subtle"),
     surface: read("--surface"),
+    surfaceMuted: read("--surface-muted"),
     line: read("--line"),
     series: SERIES_TOKENS.map(read),
     other: read("--chart-other"),
