@@ -67,6 +67,19 @@ Unchanged from the template this app grew out of, and still exactly true.
   a wrong password take similar time and return the same generic message.
 - Registration is **open** — anyone who can reach the site can create an
   account.
+- **`users.name` is nullable, and optional at sign-up**, for the same reason
+  `transactions.userId` is: `drizzle-kit push` runs without `--force` in
+  production and a NOT NULL column on a populated table fails the deploy.
+  Nothing reads it raw — `displayName` in `lib/user.ts` falls back to the
+  email's local part, so the greeting and the header pill work for every
+  account that predates the column. `updateProfile` in `app/actions/auth.ts`
+  resolves the account from the session, never from an argument, and
+  `revalidatePath("/")` is not optional there: the header renders from the root
+  layout and `getCurrentUser` is React-`cache`d per request.
+- The result type in `app/actions/auth.ts` is `AuthState`
+  (`{ error?, saved? } | undefined`), which `useActionState` consumes directly.
+  The `{ ok }` envelope lives in `app/actions/anomalies.ts` and a third shape,
+  `ActionState`, in `app/actions/demo-data.ts`. Match the file you are in.
 
 ## Data access
 
@@ -77,8 +90,8 @@ Unchanged from the template this app grew out of, and still exactly true.
   (`eq(transactions.userId, user.id)`). Never write one without that filter.
 - **Reads return data directly, not `{ ok }`.** That envelope exists so a
   client can raise a `sonner` toast on a failed *mutation*, and there are no
-  transaction mutations. `app/actions/auth.ts` still uses `ActionResult`; keep
-  that contract there.
+  transaction mutations. `app/actions/auth.ts` has its own contract
+  (`AuthState`); keep it there.
 - **One fetch, then aggregate in JavaScript.** `getDashboard` pulls the
   account's rows once and hands them to `lib/insights.ts`. A year of statements
   is ~500 rows through a synchronous in-process driver — a full scan is under a
@@ -137,13 +150,33 @@ Unchanged from the template this app grew out of, and still exactly true.
   what breaks "restyle by editing tokens".
 - **The two charts answer different questions, and neither should grow into
   the other.** "Month by month" is money **in against out** over time — two
-  overlaid areas, no category breakdown. The donut and "Where it goes" carry
-  the category story. A category breakdown was tried in the trend chart and
-  drowned the in-versus-out reading in nine bands; if you want detail there,
-  add a second chart rather than another dimension to this one.
+  overlaid areas, no category breakdown. The donut carries the category story —
+  and since the ranked "Where it goes" list was dropped as a second telling of
+  it, the donut is the **only** thing carrying it, which is why its legend now
+  shows at every width rather than only from `sm` up. A category breakdown was
+  tried in the trend chart and drowned the in-versus-out reading in nine bands;
+  if you want detail there, add a second chart rather than another dimension to
+  this one.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.
+- **The dashboard has one section idiom, and `.card` is not it.**
+  `components/section.tsx` is a big heading on the page's own ground (26px,
+  30px from `sm`) over a `rounded-lg bg-surface-muted` panel — the same shape
+  the ledger's month groups use, so the page reads as one design rather than
+  cards stacked on panels. Every block above the ledger goes through it; the
+  summary tiles are the same grey panel without a heading of their own, because
+  the page `h1` heads them. `.card` still belongs on `/account`, the auth forms
+  and the error pages. Two consequences worth knowing: the section headings are
+  deliberately **not** sticky (the month headings are, at `top-16`, and a second
+  sticky layer at the same offset collides with them), and the `pt-6` on each
+  heading is what spaces sections apart, so the page stacks them with no
+  `space-y` of its own.
+- **On a grey panel, a chart's separators are `--surface-muted`, and a bar
+  track is `--surface`.** `useChartTokens()` exposes both. Anything filled with
+  its own ground disappears — that is why the donut's wedge borders moved off
+  `--surface` and the merchant bars' tracks moved onto it. `chat-pie.tsx` stays
+  on `--surface`: it sits in the sidebar, not on a panel.
 - **Never animate the page shell in.** Motion applies `initial` styles during
   SSR, so an entrance animation on a container ships it at `opacity: 0` and the
   page stays blank until hydration — or forever, if JS fails. `animate-pulse` in
@@ -296,12 +329,13 @@ Unchanged from the template this app grew out of, and still exactly true.
   means "which category", and reusing one for "which direction" makes both
   meanings weaker.
 - **A colour identifies a category, never its rank.** Slots come from
-  `slotsOf(stack)`, computed on the whole-range ranking, and the pie, the
-  stacked bars and the "Where it goes" list all read from that one map. A list
-  coloured by array index repaints its survivors every time a filter reorders
-  it, which makes the colour a lie. The merchant list is the one place index
-  colouring survives — it has no chart counterpart, so there is nothing for it
-  to disagree with.
+  `slotsOf(stack)`, computed on the whole-range ranking, and the pie and the
+  stacked bars read from that one map. A list coloured by array index repaints
+  its survivors every time a filter reorders it, which makes the colour a lie.
+  The merchant list is the one place index colouring survives — it has no chart
+  counterpart, so there is nothing for it to disagree with, and it is now
+  `BreakdownList`'s only caller, which is why that component no longer takes a
+  `slots` prop. `slotsOf` is still the rule for anything category-coloured.
 - **A constant ground needs constant ink — use `.on-brand`.** Supernova is the
   brand colour, not a surface, so the landing's yellow CTA band keeps `#ffcc00`
   in both themes. Theme-following ink on it is near-white on yellow (1.3:1).

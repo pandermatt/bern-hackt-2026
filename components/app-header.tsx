@@ -4,6 +4,7 @@ import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Logo } from "@/components/logo";
 import type { User } from "@/db/schema";
+import { displayName } from "@/lib/user";
 
 /**
  * The pill control, in tokens rather than `neutral-*` literals. The redesign
@@ -34,7 +35,7 @@ export function AppHeader({ user }: { user: User | null }) {
             >
               <UserIcon className="size-3.5 text-text-subtle" />
               <span className="hidden max-w-[20ch] truncate sm:inline" title={user.email}>
-                {user.email}
+                {displayName(user)}
               </span>
             </Link>
             <form action={logout}>

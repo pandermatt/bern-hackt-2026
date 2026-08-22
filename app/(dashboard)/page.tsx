@@ -11,7 +11,7 @@ import { AnomalySuggestion } from "@/components/anomaly-suggestion";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
 import { getCurrentUser } from "@/lib/auth";
-import { slotsOf } from "@/lib/insights";
+import { displayName } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
@@ -26,18 +26,16 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const dashboard = await getDashboard(params);
   if (!dashboard) return <Landing />;
 
-  const { facets, view, filters, monthly, stack, totals, categories, merchants } =
-    dashboard;
-  // One category, one colour, everywhere on the page — and the slots come from
-  // the whole-range ranking, so a filter never repaints the survivors.
-  const slots = slotsOf(stack);
+  const { facets, view, filters, monthly, stack, totals, merchants } = dashboard;
 
   return (
     <>
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
         <div className="mb-5">
-          <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
-            Your year in money
+          {/* Bigger than the 26/30px section headings below it, or the page
+              would be headed by something smaller than its own sections. */}
+          <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
+            Welcome, {displayName(user)}
           </h1>
           {/* Describes the rows in view, so it tracks the filters. An empty view
               with statements behind it is a filter that matched nothing — a
@@ -51,49 +49,47 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           </p>
         </div>
 
-        <div className="space-y-4">
+        {/* No `space-y` — every section below carries the ledger's own `pt-6`
+            on its heading, so the whole page runs on one rhythm instead of two
+            stacked ones. The bare blocks get theirs explicitly. */}
+        <div>
           <SummaryCards totals={totals} />
 
           <MonthlyTrend series={monthly} />
 
           <CategoryPie stack={stack} />
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <BreakdownList
-              heading="Where it goes"
-              slices={categories}
-              linkParam="categories"
-              emptyLabel="No spending in this range."
-              slots={slots}
-            />
-            <BreakdownList
-              heading="Top merchants"
-              slices={merchants}
-              linkParam="merchant"
-              emptyLabel="No merchants in this range."
-            />
-          </div>
+          <BreakdownList
+            heading="Top merchants"
+            slices={merchants}
+            linkParam="merchant"
+            emptyLabel="No merchants in this range."
+          />
 
           {/* Sits directly above the ledger, because that is where the findings
               it is offering would show up. Only until the first scan completes —
               after that, no badges is a genuine answer rather than a gap. */}
           {!dashboard.anomalyScan.hasCompletedScan &&
             dashboard.totalCount > 0 && (
-              <AnomalySuggestion
-                running={dashboard.anomalyScan.running}
-                transactionCount={dashboard.totalCount}
-              />
+              <div className="pt-6">
+                <AnomalySuggestion
+                  running={dashboard.anomalyScan.running}
+                  transactionCount={dashboard.totalCount}
+                />
+              </div>
             )}
 
           {/* TransactionFilters reads useSearchParams, which needs a boundary it
               can suspend against. */}
-          <Suspense fallback={null}>
-            <TransactionFilters
-              facets={facets}
-              filters={filters}
-              accountTotals={dashboard.accountTotals}
-            />
-          </Suspense>
+          <div className="pt-6">
+            <Suspense fallback={null}>
+              <TransactionFilters
+                facets={facets}
+                filters={filters}
+                accountTotals={dashboard.accountTotals}
+              />
+            </Suspense>
+          </div>
 
           <TransactionList
             rows={dashboard.transactions}

@@ -103,6 +103,9 @@ export type Dashboard = {
   monthTotals: Record<string, MonthTotal>;
   /** Whole-range spending per category per month — the chart pair upstairs. */
   stack: CategoryStack;
+  /** Whole-range spending per category. No longer rendered on the dashboard —
+   * the donut is the only category breakdown now — but the chat assistant reads
+   * it to answer category questions; see `lib/assistant.ts`. */
   categories: Slice[];
   merchants: Slice[];
   transactions: Transaction[];

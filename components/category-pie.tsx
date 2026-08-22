@@ -10,6 +10,7 @@ import {
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
+import { Section } from "@/components/section";
 import { formatMoney, type CategoryStack } from "@/lib/insights";
 import { useIsNarrow } from "@/lib/use-hydrated";
 
@@ -20,8 +21,11 @@ import { useIsNarrow } from "@/lib/use-hydrated";
  * Deliberately **not** filtered. It answers "what does my year look like",
  * which is a question the ledger's filters would destroy the moment someone
  * narrows to a month — the same reasoning that keeps the trend chart on the
- * unfiltered set. The list below it is the filtered view of the same figures,
- * and the two are colour-matched by category so moving between them is free.
+ * unfiltered set.
+ *
+ * It is now the page's **only** category breakdown. The ranked "Where it goes"
+ * list used to sit directly below saying the same thing a second way; that is
+ * why the legend below is no longer optional on a phone.
  */
 
 const HEIGHT = 320;
@@ -41,18 +45,16 @@ function buildOption(
     animationDuration: 600,
     legend: {
       /*
-       * Hidden on a phone. A scrolling legend fits four of the eleven bands per
-       * page, so reading the categories means paging through six screens — an
-       * interaction dead end, and worse than not offering it.
+       * Shown on every width, and load-bearing on a phone.
        *
-       * Nothing is lost. "Where it goes" sits directly below this card and is
-       * the same eleven categories, named, with their amounts and shares, each
-       * wearing the colour its wedge has here — they read from the one slot map
-       * precisely so they cannot disagree. That list, plus the `sr-only` table,
-       * is the relief this palette's sub-3:1 fills are conditional on, and both
-       * are still here.
+       * It used to be hidden below `sm`, because a scrolling legend pages four
+       * bands at a time and "Where it goes" sat right underneath naming all
+       * eleven. That list is gone, and the on-wedge labels are still dropped on
+       * a narrow canvas for want of margin — so without this the donut would
+       * carry no visible category name at all, and six of these ten fills are
+       * under 3:1 on white. Paging a legend beats an unreadable chart.
        */
-      show: !narrow,
+      show: true,
       type: "scroll",
       bottom: 0,
       icon: "roundRect",
@@ -73,11 +75,12 @@ function buildOption(
         // total sits on top of the ring.
         // Outside labels and their leader lines need ~90px of margin per side,
         // which a ~310px canvas does not have — so on a phone they come off
-        // (see the `label.show` note below), and with the legend gone too the
-        // donut is centred in the whole box rather than sitting above a strip
-        // it no longer needs. The HTML centre overlay tracks this.
-        radius: (narrow ? ["57%", "78%"] : ["55%", "74%"]) as [string, string],
-        center: (narrow ? ["50%", "50%"] : ["50%", "45%"]) as [string, string],
+        // (see the `label.show` note below). The geometry is the same on every
+        // width regardless: the legend occupies the strip at the bottom in both
+        // cases, so the donut sits above it in both. The HTML centre overlay is
+        // pinned to the same 45%.
+        radius: ["55%", "74%"] as [string, string],
+        center: ["50%", "45%"] as [string, string],
         // Wedges are drawn in data order, which is rank order, so the pie and
         // the list below it run in the same sequence.
         // The requested separation. It does the same job the 2px surface
@@ -86,7 +89,10 @@ function buildOption(
         padAngle: 2,
         itemStyle: {
           borderRadius: 5,
-          borderColor: tokens.surface,
+          // The panel's ground, not `--surface`: these separators read as the
+          // page showing between the wedges, and the page behind this chart is
+          // now the section panel's grey.
+          borderColor: tokens.surfaceMuted,
           borderWidth: 1,
         },
         label: {
@@ -143,17 +149,13 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
       : "";
 
   return (
-    <section className="card p-4 sm:p-5" aria-labelledby="pie-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="pie-heading" className="text-[15px] font-semibold text-text">
-          The whole year
-        </h2>
-        <p className="text-[12.5px] text-text-muted">
-          Every category, unfiltered · {span}
-        </p>
-      </div>
-
-      <div className="relative mt-4">
+    <Section
+      id="pie"
+      heading="The whole year"
+      meta={`Every category, unfiltered · ${span}`}
+      panelClassName="p-4 sm:p-5"
+    >
+      <div className="relative">
         <EChart
           option={option}
           height={HEIGHT}
@@ -164,7 +166,7 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
             is in the server-rendered markup, wears the type tokens, and stays
             selectable. `45%` matches the series' own centre. */}
         <div
-          className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center sm:top-[45%]"
+          className="pointer-events-none absolute inset-x-0 top-[45%] -translate-y-1/2 text-center"
           aria-hidden
         >
           <p className="text-[11.5px] font-medium tracking-wide text-text-subtle uppercase">
@@ -204,6 +206,6 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
           ))}
         </tbody>
       </table>
-    </section>
+    </Section>
   );
 }

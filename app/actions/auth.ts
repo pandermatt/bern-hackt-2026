@@ -1,6 +1,7 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -15,7 +16,7 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 
-export type AuthState = { error?: string } | undefined;
+export type AuthState = { error?: string; saved?: boolean } | undefined;
 
 const credentials = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
@@ -25,17 +26,38 @@ const credentials = z.object({
     .max(200, "That password is too long."),
 });
 
+/**
+ * Optional everywhere. An empty field means "no name", stored as NULL rather
+ * than `""` so `displayName` has one falsy case to handle instead of two, and
+ * so clearing the field on the settings page is a real reset.
+ */
+const displayNameField = z
+  .string()
+  .trim()
+  .max(80, "That name is too long.")
+  .optional()
+  .transform((value) => value || null);
+
+/**
+ * Registration takes a name; `credentials` deliberately does not. `login`
+ * parses with `credentials`, and its whole point is that every failure comes
+ * back as the same generic message — a name-shaped validation error there would
+ * be a way to probe the form.
+ */
+const registration = credentials.extend({ name: displayNameField });
+
 export async function register(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  const parsed = credentials.safeParse({
+  const parsed = registration.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
+    name: formData.get("name") ?? undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const { email, password } = parsed.data;
+  const { email, password, name } = parsed.data;
 
   const existing = await db
     .select({ id: users.id })
@@ -49,7 +71,7 @@ export async function register(
 
   const [created] = await db
     .insert(users)
-    .values({ email, passwordHash: await hashPassword(password) })
+    .values({ email, name, passwordHash: await hashPassword(password) })
     .returning({ id: users.id });
 
   await createSession(created.id);
@@ -86,6 +108,38 @@ export async function login(
 
   await createSession(user.id);
   redirect("/");
+}
+
+/**
+ * Sets or clears the signed-in account's display name.
+ *
+ * The account is resolved from the session, never from an argument: every
+ * export of a `"use server"` module is an endpoint the browser can call with
+ * arguments it chooses, and a `userId` parameter here would let anyone rename
+ * anyone.
+ */
+export async function updateProfile(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "You must be signed in to do that." };
+
+  const parsed = displayNameField.safeParse(formData.get("name") ?? undefined);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  await db
+    .update(users)
+    .set({ name: parsed.data })
+    .where(eq(users.id, user.id));
+
+  // The header renders the name from the root layout and the dashboard greets
+  // with it, so both have to be rebuilt — `getCurrentUser` is cached per
+  // request, which is exactly why a plain `router.refresh()` is not enough.
+  revalidatePath("/");
+  revalidatePath("/account");
+
+  return { saved: true };
 }
 
 export async function logout(): Promise<never> {

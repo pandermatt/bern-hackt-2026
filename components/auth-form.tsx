@@ -30,6 +30,13 @@ const COPY = {
   },
 } as const;
 
+/**
+ * Shared by every input on this form. `text-[16px]` below `sm` is deliberate:
+ * anything smaller makes iOS Safari zoom the viewport on focus.
+ */
+export const FIELD =
+  "h-10 rounded-md border border-line-strong bg-surface px-3 text-[16px] text-text outline-none transition-shadow placeholder:text-text-subtle focus:border-accent focus:ring-2 focus:ring-accent/20 sm:text-[14px]";
+
 export function AuthForm({
   mode,
   action,
@@ -52,6 +59,29 @@ export function AuthForm({
         <p className="mt-1.5 text-[14px] text-text-muted">{copy.subtitle}</p>
 
         <form action={formAction} className="mt-6 flex flex-col gap-4">
+          {/* Registration only. Optional — the greeting falls back to the
+              email's local part, so nobody is blocked on filling this in. */}
+          {mode === "register" && (
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="name"
+                className="text-[13px] font-medium text-text"
+              >
+                Name{" "}
+                <span className="font-normal text-text-subtle">(optional)</span>
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                maxLength={80}
+                autoComplete="name"
+                placeholder="What should we call you?"
+                className={FIELD}
+              />
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="email"
@@ -66,7 +96,7 @@ export function AuthForm({
               required
               autoComplete="email"
               placeholder="you@example.com"
-              className="h-10 rounded-md border border-line-strong bg-surface px-3 text-[16px] text-text outline-none transition-shadow placeholder:text-text-subtle focus:border-accent focus:ring-2 focus:ring-accent/20 sm:text-[14px]"
+              className={FIELD}
             />
           </div>
 
@@ -85,7 +115,7 @@ export function AuthForm({
               minLength={8}
               autoComplete={copy.autoComplete}
               placeholder="At least 8 characters"
-              className="h-10 rounded-md border border-line-strong bg-surface px-3 text-[16px] text-text outline-none transition-shadow placeholder:text-text-subtle focus:border-accent focus:ring-2 focus:ring-accent/20 sm:text-[14px]"
+              className={FIELD}
             />
           </div>
 

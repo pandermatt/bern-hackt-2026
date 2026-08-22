@@ -10,6 +10,15 @@ import {
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   email: text("email").notNull().unique(),
+  /**
+   * What we greet someone by. **Nullable on purpose**, for the same reason
+   * `transactions.userId` is: production boots with `drizzle-kit push` and no
+   * `--force`, and adding a NOT NULL column to a populated table is a data-loss
+   * statement that fails the deploy. It is also genuinely optional — the field
+   * is not required at sign-up. Accounts without one fall back to the email's
+   * local part; see `displayName` in `lib/user.ts`.
+   */
+  name: text("name"),
   passwordHash: text("password_hash").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

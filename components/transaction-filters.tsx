@@ -14,11 +14,13 @@ import { formatMoney, type Facets, type Filters } from "@/lib/insights";
  * survived are the two a statement is actually read by: which account, and
  * which way the money went.
  *
- * The others still work as URL parameters, because "Where it goes" and "Top
- * merchants" link to them — `?categories=Housing` and `?merchant=Coop` narrow
- * the ledger exactly as they always did. What went away is the UI for setting
- * them by hand, not the filter. That is why **Clear** stays: without it a
- * breakdown link would be a one-way trip.
+ * The others still work as URL parameters — `?categories=Housing` and
+ * `?merchant=Coop` narrow the ledger exactly as they always did, and "Top
+ * merchants" links to the second. What went away is the UI for setting them by
+ * hand, not the filter. That is why **Clear** stays: without it a breakdown
+ * link would be a one-way trip. (`?categories=` has no link pointing at it any
+ * more, now that the category list is gone, but it is still a live filter and a
+ * shareable URL.)
  *
  * Filter state lives in the URL rather than in React state, so a view is
  * shareable, bookmarkable and survives a reload. Reading `useSearchParams`
