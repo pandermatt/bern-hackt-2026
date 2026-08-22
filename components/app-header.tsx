@@ -29,7 +29,7 @@ export function AppHeader({ user }: { user: User | null }) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
-        <div className="flex min-w-0 items-center gap-5">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           <Logo />
           {/* Only signed-in visitors have anything to navigate between. */}
           {user && <HeaderNav />}
@@ -53,10 +53,13 @@ export function AppHeader({ user }: { user: User | null }) {
             <form action={logout}>
               <button
                 type="submit"
+                aria-label={t('signOut')}
                 className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
               >
                 <LogOut className="size-3.5 text-text-subtle" />
-                <span>{t('signOut')}</span>
+                {/* Hidden below `sm` like the account name beside it — an
+                    icon with an accessible name, not an unlabelled glyph. */}
+                <span className="hidden sm:inline">{t('signOut')}</span>
               </button>
             </form>
           </div>

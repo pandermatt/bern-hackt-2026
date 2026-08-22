@@ -7,7 +7,8 @@
     "anomalies": "Anomalies",
     "dashboard": "Dashboard",
     "budget": "Budget",
-    "mainNav": "Main"
+    "mainNav": "Main",
+    "home": "Home"
   },
   "AppFooter": {
     "tagline": "Private spending insights from your own statements.",
@@ -119,6 +120,22 @@
     "noMatches": "No transactions match these filters.",
     "nothingImported": "No statements imported yet.",
     "loading": "Loading dashboard…"
+  },
+  "Home": {
+    "title": "Home",
+    "greeting": "Hello {name}",
+    "nudgesLabel": "Things worth knowing",
+    "allClear": "Nothing needs your attention today.",
+    "overBudgetTitle": "Over budget in {category}",
+    "overBudgetBody": "{amount} past the limit you set.",
+    "freeMoneyTitle": "{amount} still unassigned",
+    "freeMoneyBody": "{month} came out ahead. Put it in a savings pot.",
+    "dragonAlt": {
+      "happy": "A cheerful dragon",
+      "thinking": "A dragon thinking something over",
+      "coin": "A dragon holding a gold coin",
+      "celebrate": "A dragon celebrating"
+    }
   },
   "Summary": {
     "salary": "Salary",
@@ -689,7 +706,8 @@
     "account": "Account settings",
     "offline": "Offline",
     "anomalies": "Anomalies",
-    "budget": "Budget"
+    "budget": "Budget",
+    "home": "Home"
   },
   "Weekdays": {
     "short1": "Mon",

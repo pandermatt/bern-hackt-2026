@@ -7,7 +7,8 @@
     "anomalies": "Auffälligkeiten",
     "dashboard": "Dashboard",
     "budget": "Budget",
-    "mainNav": "Hauptnavigation"
+    "mainNav": "Hauptnavigation",
+    "home": "Start"
   },
   "AppFooter": {
     "tagline": "Private Einblicke in Ihre Ausgaben — aus Ihren eigenen Kontoauszügen.",
@@ -119,6 +120,22 @@
     "noMatches": "Keine Transaktionen entsprechen diesen Filtern.",
     "nothingImported": "Noch keine Kontoauszüge importiert.",
     "loading": "Dashboard wird geladen…"
+  },
+  "Home": {
+    "title": "Start",
+    "greeting": "Hallo {name}",
+    "nudgesLabel": "Wissenswertes",
+    "allClear": "Heute braucht nichts Ihre Aufmerksamkeit.",
+    "overBudgetTitle": "Budget überschritten bei {category}",
+    "overBudgetBody": "{amount} über dem von Ihnen gesetzten Limit.",
+    "freeMoneyTitle": "{amount} noch nicht zugewiesen",
+    "freeMoneyBody": "{month} schloss mit Überschuss ab. Legen Sie es in einen Sparziel-Topf.",
+    "dragonAlt": {
+      "happy": "Ein fröhlicher Drache",
+      "thinking": "Ein nachdenklicher Drache",
+      "coin": "Ein Drache mit einer Goldmünze",
+      "celebrate": "Ein feiernder Drache"
+    }
   },
   "Summary": {
     "salary": "Lohn",
@@ -689,7 +706,8 @@
     "account": "Kontoeinstellungen",
     "offline": "Offline",
     "anomalies": "Auffälligkeiten",
-    "budget": "Budget"
+    "budget": "Budget",
+    "home": "Start"
   },
   "Weekdays": {
     "short1": "Mo",

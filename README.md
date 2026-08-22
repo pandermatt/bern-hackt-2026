@@ -347,11 +347,21 @@ No auth-related environment variables are required.
 
 ## Routes
 
+Every page route is locale-prefixed (`/de/…`, `/en/…`); the table drops the
+prefix for readability.
+
 | Route | Signed out | Signed in |
 | --- | --- | --- |
+| `/home` | Redirect to `/login` | The entry page — assistant, nudges, mascot |
 | `/` | Landing page | Your dashboard |
-| `/login`, `/register` | Auth forms | Redirect to `/` |
+| `/budget`, `/anomalies` | Redirect to `/login` | Budget and savings; anomaly findings |
+| `/login`, `/register` | Auth forms | Redirect to `/home` |
 | `/api/health`, `/opengraph-image`, `/manifest.webmanifest` | Public | Public |
+
+`/home` is where signing in lands. It is deliberately short — the assistant
+open and ready, at most three things worth acting on, and the dragon. `/`
+stays the polymorphic public route: the landing page signed out, the full
+dashboard signed in.
 
 The three public non-page routes are requested by things that never carry a
 session — healthchecks, link crawlers, the install prompt — so they are in the

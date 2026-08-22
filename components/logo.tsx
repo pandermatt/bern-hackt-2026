@@ -30,7 +30,11 @@ export function Logo() {
     <Link href="/" className="group flex min-h-10 items-center gap-2.5 sm:min-h-0">
       <Mark />
       <span className="text-[15px] font-semibold tracking-tight text-text">
-        <span aria-hidden="true" className="inline-flex items-center">
+        {/* The wordmark is the first thing to go on a phone: at 402px this
+            header also has to carry four nav tabs and the account controls,
+            and the signet on its own is a sufficient logo. The `sr-only` name
+            below is deliberately outside this, so it survives at every width. */}
+        <span aria-hidden="true" className="hidden items-center sm:inline-flex">
           {site.name}
         </span>
         <span className="sr-only">{site.name}</span>

@@ -107,7 +107,10 @@ export async function register(
     .returning({ id: users.id });
 
   await createSession(created.id);
-  return redirect({ href: "/", locale: await getLocale() });
+  // `/home`, not `/`: the entry page is the front door for a signed-in
+  // account. `/` stays the polymorphic public route — the landing page when
+  // signed out, the full dashboard when signed in.
+  return redirect({ href: "/home", locale: await getLocale() });
 }
 
 export async function login(
@@ -139,7 +142,8 @@ export async function login(
   if (!user || !ok) return errorFor("invalidCredentials");
 
   await createSession(user.id);
-  return redirect({ href: "/", locale: await getLocale() });
+  // See the note in `register` — signing in lands on the entry page.
+  return redirect({ href: "/home", locale: await getLocale() });
 }
 
 /**

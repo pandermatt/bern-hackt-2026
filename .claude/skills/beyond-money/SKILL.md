@@ -312,6 +312,37 @@ Unchanged from the template this app grew out of, and still exactly true.
   `sr-only` box — Safari paints it as a stray line of text under the chart.
   `aria-label` gives a screen reader the identical name and renders nothing
   anywhere. Don't reintroduce `<caption>` on a visually hidden table.
+- **One chat body, two shells — and the state lives in the shell that never
+  unmounts.** `components/chat-panel.tsx` exports `useAssistantChat()` beside
+  `<ChatPanel>`; `ChatSidebar` is the slide-over and `HomeChat` is the inline
+  panel on `/home`. The split is a hook plus a component rather than one
+  component for a specific reason: `ChatSidebar` renders a launcher when
+  closed, so it never unmounts, and holding the transcript at *its* level is
+  the only thing that makes a conversation survive closing the panel. Move the
+  hook call inside the `open &&` branch and every close silently discards the
+  chat. `<ChatSidebar />` stays props-free, so the dashboard's mount is the
+  canary: if that file needs editing, the contract moved.
+- **`ChatPanel` carries `min-h-0` in its own base classes.** It is a new flex
+  item between a full-height shell and a scrolling transcript, and it has no
+  `overflow` of its own, so without it a long conversation resolves to
+  `min-content` and pushes the input form off the bottom of the screen. The
+  shell owns the height through two className seams (`className`,
+  `scrollClassName`) — not a `variant` prop, which would bake each page's
+  layout into the shared component.
+- **The inline panel does not autofocus.** Focusing an input near the top of a
+  phone page raises the keyboard on arrival and shoves away what the reader
+  came for. Only the slide-over passes an `inputRef`.
+- **Nothing sets type on the pistachio.** `/home` fades to `--pistachio` at the
+  bottom *because* that is where the dragon is and there is no text there;
+  Pistachio is 2:1 on white and is a fill, never a ground for words. Every
+  string on that page sits on `bg-surface` — the cards, and the all-clear line,
+  which wears a surface pill for exactly this reason.
+- **Nudges are ranked in `lib/nudges.ts`, which is pure.** No DB import, no
+  i18n call — anomaly nudges arrive already translated from
+  `app/actions/anomalies.ts` and this module only orders them. `isOverBudget`
+  lives there too: the comparison used to be inline in both `budget-editor` and
+  `budget-radar` and exported from neither. Capped at three, warnings before
+  the tip, because an entry page is not an inbox.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.
