@@ -303,7 +303,14 @@
     "deleteBodyFunded": "Die {amount} in diesem Topf gehen zurück an die Monate, aus denen sie stammen, und können erneut verteilt werden. Das kann nicht rückgängig gemacht werden.",
     "deleteBodyEmpty": "Dieser Topf ist leer, es geht also nichts verloren. Das kann nicht rückgängig gemacht werden.",
     "deleteConfirm": "Ziel löschen",
-    "removed": "„{name}“ entfernt."
+    "removed": "„{name}“ entfernt.",
+    "transferTitle": "Geld in {to} verschieben",
+    "transferDescription": "{amount} sind in {from} verfügbar.",
+    "transferFieldLabel": "Zu verschiebender Betrag (CHF)",
+    "transferHint": "Bis zu {amount}.",
+    "transferPreview": "{to} würde {percent}% anzeigen.",
+    "moveMoney": "Geld verschieben",
+    "transferred": "{amount} von {from} nach {to} verschoben."
   },
   "SavingsErrors": {
     "notSignedInCreate": "Melden Sie sich an, um ein Sparziel hinzuzufügen.",
@@ -321,7 +328,10 @@
     "overSurplus": "Das ist mehr, als in diesem Monat übrig blieb.",
     "notAnAmount": "„{amount}“ ist kein Betrag.",
     "tooLarge": "Dieser Betrag ist grösser, als diese App speichern kann.",
-    "moveFailed": "Geld konnte nicht verschoben werden. Versuchen Sie es erneut."
+    "moveFailed": "Geld konnte nicht verschoben werden. Versuchen Sie es erneut.",
+    "notSignedInTransfer": "Melden Sie sich an, um Geld zwischen Töpfen zu verschieben.",
+    "sameGoal": "Wählen Sie zwei verschiedene Töpfe.",
+    "overSaved": "So viel liegt in diesem Topf nicht."
   },
   "AnomalySuggestion": {
     "runningTitle": "Ihre Transaktionen werden mit KI analysiert",

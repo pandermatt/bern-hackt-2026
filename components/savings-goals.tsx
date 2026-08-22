@@ -3,7 +3,7 @@ import { useTranslations } from "next-intl";
 import type { SavingsOverview } from "@/app/actions/savings";
 import { SavingsAllocator } from "@/components/savings-allocator";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
-import { SavingsPot } from "@/components/savings-pot";
+import { SavingsPotsGrid } from "@/components/savings-pots-grid";
 import { Section } from "@/components/section";
 import { formatMoney } from "@/lib/insights";
 
@@ -11,8 +11,9 @@ import { formatMoney } from "@/lib/insights";
  * Sparziele: what the account is saving for, and where a finished month's
  * leftover money goes.
  *
- * Server-rendered apart from the three controls, like the rest of the app —
- * the pots are SVG the server can draw, and only the forms need a client.
+ * Server-rendered apart from the controls that need one — the pots are SVG
+ * the server can draw, but the grid around them is a client component too,
+ * since dragging one pot onto another to move money is genuine interactivity.
  *
  * The allocator appears **only for a month that has ended and came out
  * ahead**. Offering to put away money from a month still in progress is
@@ -55,11 +56,7 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
           {t("empty")}
         </p>
       ) : (
-        <ul className="grid grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-3 sm:px-5 md:grid-cols-4 lg:grid-cols-5">
-          {pots.map((pot) => (
-            <SavingsPot key={pot.id} pot={pot} />
-          ))}
-        </ul>
+        <SavingsPotsGrid pots={pots} />
       )}
 
       {canAllocate && pots.length > 0 ? (

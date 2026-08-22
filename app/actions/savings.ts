@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -67,6 +67,12 @@ const goalSchema = z.object({
 
 const allocationSchema = z.object({
   goalId: z.number().int().positive(),
+  amount: amountSchema,
+});
+
+const transferSchema = z.object({
+  fromGoalId: z.number().int().positive(),
+  toGoalId: z.number().int().positive(),
   amount: amountSchema,
 });
 
@@ -363,6 +369,106 @@ export async function allocateSurplus(
           .onConflictDoUpdate({
             target: [savingsAllocations.goalId, savingsAllocations.month],
             set: { amountMinor: row.amountMinor, updatedAt: new Date() },
+          })
+          .run();
+      }
+    });
+  } catch {
+    return savingsError("moveFailed");
+  }
+
+  revalidatePath("/[locale]/budget", "page");
+  return { ok: true };
+}
+
+/**
+ * Moves already-saved money from one pot straight into another.
+ *
+ * Unlike `allocateSurplus`, this invents no new money — every rappen it moves
+ * already sat in `fromGoalId`'s allocations, so the check is against what that
+ * pot actually holds, not a month's surplus.
+ *
+ * The `month` on each row means "which month's surplus this came out of", and
+ * that stays true after a transfer: a row is reassigned to the new goal but
+ * keeps its month, taken oldest-first. Two rows can end up sharing a
+ * `(goalId, month)` once the money is reassigned — the destination may
+ * already hold a contribution from that same month — so the insert is an
+ * upsert that adds rather than overwrites.
+ */
+export async function transferSavings(
+  fromGoalId: number,
+  toGoalId: number,
+  amount: string,
+): Promise<SavingsResult> {
+  const user = await getCurrentUser();
+  if (!user) return savingsError("notSignedInTransfer");
+
+  const parsed = transferSchema.safeParse({ fromGoalId, toGoalId, amount });
+  if (!parsed.success) return savingsError("malformedAllocation");
+  if (parsed.data.fromGoalId === parsed.data.toGoalId) {
+    return savingsError("sameGoal");
+  }
+
+  const minor = toMinor(parsed.data.amount);
+  if (typeof minor !== "number") return amountError(minor);
+  if (minor <= 0) return savingsError("targetAboveZero");
+
+  // Only this account's goals, so a posted id cannot move money into or out of
+  // someone else's pot.
+  const goals = await db
+    .select({ id: savingsGoals.id })
+    .from(savingsGoals)
+    .where(eq(savingsGoals.userId, user.id));
+  const owned = new Set(goals.map((goal) => goal.id));
+  if (!owned.has(parsed.data.fromGoalId) || !owned.has(parsed.data.toGoalId)) {
+    return savingsError("goalGone");
+  }
+
+  const rows = await db
+    .select()
+    .from(savingsAllocations)
+    .where(
+      and(
+        eq(savingsAllocations.userId, user.id),
+        eq(savingsAllocations.goalId, parsed.data.fromGoalId),
+      ),
+    )
+    .orderBy(asc(savingsAllocations.month));
+
+  const available = rows.reduce((sum, row) => sum + row.amountMinor, 0);
+  if (minor > available) return savingsError("overSaved");
+
+  try {
+    db.transaction((tx) => {
+      let remaining = minor;
+      for (const row of rows) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, row.amountMinor);
+        remaining -= take;
+
+        if (take === row.amountMinor) {
+          tx.delete(savingsAllocations).where(eq(savingsAllocations.id, row.id)).run();
+        } else {
+          tx.update(savingsAllocations)
+            .set({ amountMinor: row.amountMinor - take, updatedAt: new Date() })
+            .where(eq(savingsAllocations.id, row.id))
+            .run();
+        }
+
+        tx.insert(savingsAllocations)
+          .values({
+            userId: user.id,
+            goalId: parsed.data.toGoalId,
+            month: row.month,
+            amountMinor: take,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [savingsAllocations.goalId, savingsAllocations.month],
+            set: {
+              amountMinor: sql`${savingsAllocations.amountMinor} + ${take}`,
+              updatedAt: new Date(),
+            },
           })
           .run();
       }

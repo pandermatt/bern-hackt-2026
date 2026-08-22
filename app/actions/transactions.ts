@@ -102,17 +102,20 @@ const viewSchema = z.object({
 export type TransactionView = "list" | "calendar";
 
 function parseView(raw: unknown): TransactionView {
-  return viewSchema.safeParse(raw).data?.view ?? "list";
+  return viewSchema.safeParse(raw).data?.view ?? "calendar";
 }
 
 export type Dashboard = {
   filters: Filters;
-  /** Ledger or calendar. `list` is the default, so it carries no URL param.
+  /** Calendar or ledger. `calendar` is the default, so it carries no URL
+   * param; the ledger travels as `?view=list`.
    * Not `view` — that name is already taken here by the filtered facets. */
   transactionView: TransactionView;
   /**
    * Per-day aggregates for the calendar, newest month first — `null` in list
-   * view, which must not pay for the account-wide anomaly read it needs.
+   * view, which must not pay for the account-wide anomaly read it needs. The
+   * calendar is the default view, so callers with no reader on screen (the
+   * chat's `getDashboard({ view: "list" })`) opt out explicitly.
    */
   calendar: CalendarMonth[] | null;
   facets: Facets;
