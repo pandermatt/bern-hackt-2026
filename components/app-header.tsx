@@ -30,7 +30,7 @@ export function AppHeader({ user }: { user: User | null }) {
     <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
-          <Logo />
+          <Logo href={user ? "/home" : "/"} />
           {/* Only signed-in visitors have anything to navigate between. */}
           {user && <HeaderNav />}
         </div>

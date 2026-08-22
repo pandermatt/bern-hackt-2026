@@ -21,7 +21,7 @@ export default async function RegisterPage({ params }: PageProps<"/[locale]">) {
   // cookie exists, and a cookie whose session row is gone — every browser's
   // cookie after a redeploy — would otherwise be bounced away from the one
   // page that can fix it.
-  if (await getCurrentUser()) return redirect({ href: "/", locale });
+  if (await getCurrentUser()) return redirect({ href: "/home", locale });
 
   return (
     <main className="flex flex-1 items-center justify-center px-5 py-16">

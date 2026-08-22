@@ -638,7 +638,7 @@
     "body": "Die Seite ist auf einen Fehler gestossen, von dem sie sich nicht erholen konnte. Ein zweiter Versuch hilft meistens.",
     "digestTitle": "Serverseitige Fehlerkennung",
     "tryAgain": "Erneut versuchen",
-    "backToDashboard": "Zurück zum Dashboard",
+    "backHome": "Zurück zur Startseite",
     "globalTitle": "Die App konnte nicht starten",
     "globalBody": "Etwas ist kaputtgegangen, bevor die Seite gerendert werden konnte. Neu laden hilft meistens.",
     "reload": "Neu laden",

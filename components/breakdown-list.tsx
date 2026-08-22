@@ -59,7 +59,10 @@ export function BreakdownList({
                   whose mark is monochrome. */}
               <BrandTint fallback={`var(--chart-${(index % 10) + 1})`}>
                 <Link
-                  href={`/?${linkParam}=${encodeURIComponent(slice.key)}`}
+                  /* The filter it sets is the dashboard's, so the link has to
+                     name the dashboard — this pointed at "/" back when that was
+                     where the ledger lived. */
+                  href={`/dashboard?${linkParam}=${encodeURIComponent(slice.key)}`}
                   /* `bg-surface`, not `bg-surface-muted`: the panel behind this
                      is that same grey, and a track filled with its own ground
                      is no track at all. */

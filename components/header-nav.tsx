@@ -32,7 +32,7 @@ import { Link, usePathname } from "@/i18n/navigation";
    do not fit at any phone width. Icons below `sm`, words from `sm` up. */
 const TABS = [
   { href: "/home", key: "home", icon: House },
-  { href: "/", key: "dashboard", icon: ChartColumn },
+  { href: "/dashboard", key: "dashboard", icon: ChartColumn },
   { href: "/budget", key: "budget", icon: Wallet },
   { href: "/anomalies", key: "anomalies", icon: TriangleAlert },
 ] as const;
@@ -45,13 +45,12 @@ export function HeaderNav() {
     <nav aria-label={t("mainNav")} className="flex items-center gap-1">
       {TABS.map((tab) => {
         const Icon = tab.icon;
-        /* `/` has to match exactly or it prefixes every route; the others own
-           their subtrees — `/anomalies/AMOUNT_SPIKE` is still the anomalies
-           tab. */
+        /* Every tab owns its subtree — `/anomalies/AMOUNT_SPIKE` is still the
+           anomalies tab. This used to need a special case for the dashboard,
+           which lived at `/` and so prefixed every route; at `/dashboard` it is
+           an ordinary tab like the rest. */
         const active =
-          tab.href === "/"
-            ? pathname === "/"
-            : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+          pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         return (
           <Link
             key={tab.href}

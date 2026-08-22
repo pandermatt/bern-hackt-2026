@@ -118,7 +118,7 @@ export function TransactionFilters({
       // Through the locale-aware router, so changing a filter cannot drop the
       // language the way a bare `/?…` did.
       router.replace(
-        { pathname: "/", query: Object.fromEntries(params) },
+        { pathname: "/dashboard", query: Object.fromEntries(params) },
         { scroll: false },
       );
     });
@@ -236,7 +236,7 @@ export function TransactionFilters({
           onClick={() =>
             startTransition(() =>
               router.replace(
-                { pathname: "/", query: view === "list" ? {} : { view } },
+                { pathname: "/dashboard", query: view === "list" ? {} : { view } },
                 { scroll: false },
               ),
             )
