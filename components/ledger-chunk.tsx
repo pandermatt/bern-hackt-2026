@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 
 import type { Transaction } from "@/db/schema";
-import type { AnomalyInsight } from "@/lib/anomaly-engine";
+import type { AnomalyInsight, AnomalySeverity } from "@/lib/anomaly-engine";
 import {
   formatDay,
   formatMoney,
@@ -90,6 +90,22 @@ function getLucideIcon(iconName: string): LucideIcon {
   return LUCIDE_ICON_MAP[iconName] ?? AlertTriangle;
 }
 
+const SEVERITY_RANK: Record<AnomalySeverity, number> = { high: 3, medium: 2, low: 1 };
+
+/**
+ * Badge border and text per severity. The engine has always computed severity;
+ * nothing rendered it, so a routine "new merchant" note and a four-times-over
+ * duplicate charge arrived looking identical.
+ */
+const SEVERITY_CLASSES: Record<AnomalySeverity, string> = {
+  high: "border-danger/50 text-danger",
+  medium: "border-brand text-brand-ink",
+  low: "border-line-strong text-text-muted",
+};
+
+/** Beyond this a row stops being a ledger entry and becomes a badge cloud. */
+const MAX_VISIBLE_BADGES = 3;
+
 function Amount({ row }: { row: Transaction }) {
   const inflow = row.amountMinor > 0;
   const foreign = row.currency !== "CHF";
@@ -135,6 +151,21 @@ function TransactionRow({
     hasAnomaly && anomalies.every((a) => a.rule_id === "NEW_MERCHANT");
 
   /*
+   * Severest first, then capped. Month-level findings — a savings-rate shift, a
+   * category shift — attach to the month's largest charges, so the one big
+   * transaction that triggered several of them collects every badge at once:
+   * eight, on the worst row of a year of real statements. Ordering by severity
+   * means the cap drops the least urgent, and the rest stay reachable on the
+   * "+N more" tooltip.
+   */
+  const rankedAnomalies = [...anomalies].sort(
+    (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
+  );
+  const shownAnomalies = rankedAnomalies.slice(0, MAX_VISIBLE_BADGES);
+  const hiddenAnomalies = rankedAnomalies.slice(MAX_VISIBLE_BADGES);
+  const hiddenCount = hiddenAnomalies.length;
+
+  /*
    * A wash fading out to the right, in tokens rather than the literal rgba
    * stops this carried before: those were a light blue and a light yellow
    * painted straight onto a #1c1c1c surface in dark mode. `--accent-soft` and
@@ -172,13 +203,17 @@ function TransactionRow({
             badge onto the same cramped line. */}
         {hasAnomaly && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {anomalies.map((anomaly) => {
+            {shownAnomalies.map((anomaly, index) => {
               const Icon = getLucideIcon(anomaly.icon);
               const isNewMerchant = anomaly.rule_id === "NEW_MERCHANT";
 
               return (
                 <span
-                  key={anomaly.rule_id}
+                  /* Not keyed on `rule_id` alone: one transaction can carry two
+                     findings from the same rule — an airline billing two
+                     different amounts twice over on one day — and React then
+                     sees duplicate keys. */
+                  key={`${anomaly.rule_id}-${index}`}
                   title={`${anomaly.title}: ${anomaly.description}`}
                   /* `bg-surface`, not the soft tint the row already wears — a
                      chip filled with its own background colour would dissolve
@@ -187,20 +222,25 @@ function TransactionRow({
                   className={`inline-flex items-center gap-1.5 rounded-md border bg-surface px-2 py-0.5 text-[11px] font-medium shadow-2xs transition-transform hover:scale-105 ${
                     isNewMerchant
                       ? "border-accent/40 text-accent"
-                      : "border-brand text-brand-ink"
+                      : SEVERITY_CLASSES[anomaly.severity]
                   }`}
                 >
-                  <Icon
-                    className={`h-3.5 w-3.5 shrink-0 ${
-                      isNewMerchant ? "text-accent" : "text-brand-ink"
-                    }`}
-                  />
-                  <span className="font-mono text-[10px] font-semibold">
-                    {anomaly.rule_id}
-                  </span>
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {/* The finding's own words. This used to print `rule_id`, so
+                      the row read UNUSUAL_FINANCIAL_IMPACT in monospace at a
+                      person who wanted to know what happened to their money. */}
+                  <span className="font-medium">{anomaly.title}</span>
                 </span>
               );
             })}
+            {hiddenCount > 0 && (
+              <span
+                title={hiddenAnomalies.map((a) => `${a.title}: ${a.description}`).join("\n")}
+                className="inline-flex items-center rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-text-muted shadow-2xs"
+              >
+                +{hiddenCount} more
+              </span>
+            )}
           </div>
         )}
 
