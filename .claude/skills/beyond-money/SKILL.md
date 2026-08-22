@@ -48,11 +48,11 @@ never through the UI.
   One row per goal per month makes revising an upsert and keeps the month's
   remaining balance a subtraction rather than a reconciliation.
 - **`updateSavingsGoal` changes the target and nothing else.** The name picks
-  the pot's glyph, and there is no icon column to override that with, so
-  renaming would silently repaint the card. Delete and re-add is the honest way
-  to change what a goal *is*. A target below what is already saved is allowed —
-  the pot reads over 100%, which is true; money is never discarded to make a
-  number fit.
+  the pot's glyph, so renaming would silently repaint the card — and where the
+  model named that glyph, it named it for a goal that no longer exists under
+  that name. Delete and re-add is the honest way to change what a goal *is*. A
+  target below what is already saved is allowed — the pot reads over 100%,
+  which is true; money is never discarded to make a number fit.
 - **Deleting a goal releases its money rather than destroying it.** A month's
   surplus is a property of the statements, so cascading the allocations away
   makes those francs allocatable again. The confirm dialog says so, because it
@@ -179,24 +179,39 @@ Unchanged from the template this app grew out of, and still exactly true.
   baseline far better than areas in a jar — so the pot carries the identity and
   the bar carries the precision. Don't drop it for tidiness; it is the same
   "relief" argument as the charts' `sr-only` tables.
-- **Goal glyphs are Font Awesome Free, deep-imported.**
-  `@fortawesome/free-solid-svg-icons/faCar`, never the barrel — the barrel is
-  ~2000 definitions, the same reasoning as `echarts/charts`. `lib/goal-icon.ts`
-  guesses from the goal's name in German and English; there is no icon column,
-  because a picker is a second field to fill in for something the name already
-  says. **Free has no palm tree** (`fa-tree-palm` is Pro), so holidays get
-  `fa-umbrella-beach`.
-- **A glyph's box is not always square** — `fa-laptop` is 640×512 — so fit on
-  `max(width, height)` rather than assuming 512. A `clipPath` resolves in the
-  user space of the element that references it, so the clip must sit on an
-  **untransformed** group or the waterline scales with the glyph.
+- **Goal glyphs are lucide, like every other icon in the app.** This was Font
+  Awesome for one component, which is a whole dependency and a second drawing
+  convention so that one picture could look unlike every other picture in the
+  product. `lib/goal-icon.ts` guesses from the goal's name in German and
+  English; there is still no picker, because it is a second field to fill in for
+  something the name already says.
+- **`GOAL_ICONS` is the render table *and* the model's allowlist**, and that is
+  the point of it. `lib/llm/suggest-goal-icon.ts` asks Apertus only for a name
+  the keyword rules cannot place, offers it the map's own keys, and drops
+  anything else rather than repairing it — the same two-key discipline as
+  `canEscalateToAlert`. The answer is stored in `savings_goals.icon` (nullable,
+  validated on read), so it costs one request per goal, never one per render. No
+  key, a timeout or an invented word all mean the same thing: a piggy bank.
+- **The 8B model needs the list one name per line.** Run together as prose it
+  answered "Kite" for a kitesurf board and "Coat" for a winter jacket. As a
+  scannable list with worked examples of picking the nearest *listed* thing, 15
+  of 16 Swiss-German goal names came back usable. Keep the shape if you touch
+  that prompt.
+- **A lucide glyph is a nested `<svg>`, not a pasted path.** It carries its own
+  `viewBox="0 0 24 24"`, so `x`/`y`/`size` place it in the pot's coordinates and
+  every icon is square — the `max(width, height)` fitting this used to need went
+  with Font Awesome, whose boxes are not (`fa-laptop` is 640×512). A `clipPath`
+  resolves in the user space of the element that references it, so the clip must
+  sit on the **group around** the glyph or the waterline scales with it.
 - **The glyph is drawn twice, clipped at the waterline: `--accent` above,
   `--chart-ink` below.** It sits on the wall, so the level rises past it as the
   goal fills, and it has to stay legible on whichever of the ten hues it ends
   up under. Don't use the accent for the submerged half — the brand colour is a
   teal and three of the fills are teals, so the glyph vanished into its own
   liquid. Ink only ever darkens (or, in `.dark`, only ever lightens) whatever
-  it lands on.
+  it lands on. The submerged copy sits heavier than the dry one (0.6 against
+  0.9): a stroked glyph has far less ink to lose to opacity than the filled
+  silhouette this used to be.
 - **`potFill` clamps and `potPercent` does not, on purpose.** The jar has a
   rim, so the drawing stops at 1; the label must not, or a pot holding CHF 300
   against a CHF 200 goal reads a flat, useless 100%. Both come off the same two
