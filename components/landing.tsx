@@ -3,69 +3,44 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronRight,
-  Download,
-  FileSpreadsheet,
+  Database,
   Lock,
+  MessageSquare,
+  ScanSearch,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
-  UploadCloud,
-  Wallet,
-  Zap,
+  UserPlus,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { LandingPreview } from "@/components/landing-preview";
+import { TABS } from "@/components/nav-tabs";
 import { Link } from "@/i18n/navigation";
 
 /** The numbers and icons are fixed; the words come from the `Landing`
- *  namespace, keyed by step. */
+ *  namespace, keyed by step. The three steps are the route a new account
+ *  actually takes — register, put statements in it from `/account`, then read
+ *  them. There is no file upload anywhere in the app, so nothing here offers
+ *  one. */
 const STEPS = [
-  { number: "01", key: "step1", icon: Download },
-  { number: "02", key: "step2", icon: UploadCloud },
+  { number: "01", key: "step1", icon: UserPlus },
+  { number: "02", key: "step2", icon: Database },
   { number: "03", key: "step3", icon: BarChart3 },
 ] as const;
 
-const MOCK_CATEGORIES = [
-  { key: "mockCategory1", pct: 38, color: "bg-[var(--chart-1)]" },
-  { key: "mockCategory2", pct: 24, color: "bg-[var(--chart-2)]" },
-  { key: "mockCategory3", pct: 14, color: "bg-[var(--chart-3)]" },
-  { key: "mockCategory4", pct: 12, color: "bg-[var(--chart-4)]" },
-  { key: "mockCategory5", pct: 8, color: "bg-[var(--chart-5)]" },
-  { key: "mockCategory6", pct: 4, color: "bg-[var(--chart-other)]" },
-] as const;
+/**
+ * One card per tab, in the order the nav puts them, wearing the nav's own
+ * icons — `components/nav-tabs.ts` is the single list, so a fifth page added
+ * there shows up here too rather than being quietly left off the pitch.
+ */
+const FEATURES = TABS.map((tab) => ({ key: tab.key, icon: tab.icon }));
 
-const MOCK_TRANSACTIONS = [
-  {
-    titleKey: "mockTransaction1",
-    accountKey: "mockAccount1",
-    dateKey: "mockToday",
-    amount: "− CHF 86.40",
-    inflow: false,
-  },
-  {
-    titleKey: "mockTransaction2",
-    accountKey: "mockAccount2",
-    dateKey: "mockYesterday",
-    amount: "+ CHF 6’850.00",
-    inflow: true,
-  },
-  {
-    titleKey: "mockTransaction3",
-    accountKey: "mockAccount3",
-    date: "18.08.",
-    amount: "− CHF 42.00",
-    inflow: false,
-  },
-  {
-    titleKey: "mockTransaction4",
-    accountKey: "mockAccount1",
-    date: "15.08.",
-    amount: "− CHF 79.90",
-    inflow: false,
-  },
-] as const;
+const FAQ_KEYS = ["faq1", "faq2", "faq3", "faq4", "faq5", "faq6"] as const;
 
-const FAQ_KEYS = ["faq1", "faq2", "faq3", "faq4"] as const;
+/** "home" → "Home", so one array drives both the icon and its message keys. */
+function capitalize(value: string): string {
+  return `${value[0].toUpperCase()}${value.slice(1)}`;
+}
 
 export function Landing() {
   const t = useTranslations("Landing");
@@ -73,7 +48,7 @@ export function Landing() {
   return (
     <div className="w-full flex-1 flex flex-col bg-bg text-text selection:bg-brand/30 selection:text-text">
       {/* ─────────────────────────────────────────────────────────────
-          1. HERO SECTION (Clean White, pandermatt.ch Typographic Style)
+          1. HERO
          ───────────────────────────────────────────────────────────── */}
       <section className="relative w-full pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden border-b border-line/60">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
@@ -112,170 +87,69 @@ export function Landing() {
               <span>{t('trust1')}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Zap className="size-4 text-brand fill-brand" />
+              <MessageSquare className="size-4 text-accent" />
               <span>{t('trust2')}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <FileSpreadsheet className="size-4 text-positive" />
+              <Sparkles className="size-4 text-accent" />
               <span>{t('trust3')}</span>
             </div>
           </div>
         </div>
 
         {/* ─────────────────────────────────────────────────────────────
-            2. INTERACTIVE DASHBOARD PREVIEW (Refined pandermatt card aesthetic)
+            2. INTERACTIVE DASHBOARD PREVIEW
+
+            The app's own charts, on invented figures — see
+            `components/landing-preview.tsx`. It is the one client component on
+            this page.
            ───────────────────────────────────────────────────────────── */}
         <div className="mx-auto mt-12 w-full max-w-5xl px-5 sm:px-8">
-          <div className="rounded-2xl border border-line/90 bg-surface-hover/70 p-4 sm:p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xs">
-            {/* Mock Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/80 pb-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex size-3 rounded-full bg-danger/80" />
-                <span className="flex size-3 rounded-full bg-brand/80" />
-                <span className="flex size-3 rounded-full bg-positive/80" />
-                <span className="ml-2 text-xs font-mono font-medium text-text-subtle">
-                  {t("previewFile")}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-text-muted shadow-2xs border border-line/60">
-                <Wallet className="size-3.5 text-accent" />
-                <span>{t("previewCurrency")}</span>
-              </div>
-            </div>
+          <LandingPreview />
+        </div>
+      </section>
 
-            {/* Stat Cards Row */}
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
-                  {t("previewInflow")}
-                </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-positive-hover">
-                  + CHF 68,450.00
-                </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-text-subtle">
-                  {t.rich("previewInflowNote", {
-                    deposits: (chunks) => (
-                      <span className="text-positive font-semibold">{chunks}</span>
-                    ),
-                  })}
-                </div>
-              </div>
+      {/* ─────────────────────────────────────────────────────────────
+          3. WHAT'S INSIDE — one card per tab, from the nav's own list
+         ───────────────────────────────────────────────────────────── */}
+      <section className="w-full py-16 sm:py-24 bg-surface border-b border-line/60">
+        <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle mb-2">
+            {t("featuresEyebrow")}
+          </p>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-text">
+            {t("featuresTitle")}
+          </h2>
 
-              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
-                  {t("previewSpending")}
-                </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-text">
-                  - CHF 42,120.80
-                </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-text-subtle">
-                  <span>{t("previewSpendingNote")}</span>
+          <div className="mt-12 grid gap-6 sm:grid-cols-2">
+            {FEATURES.map((feature) => {
+              const Icon = feature.icon;
+              const name = capitalize(feature.key);
+              return (
+                <div
+                  key={feature.key}
+                  className="rounded-2xl border border-line/80 bg-surface p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:border-line-strong hover:shadow-md"
+                >
+                  <div className="mb-5 flex size-11 items-center justify-center rounded-xl bg-surface-muted text-text">
+                    <Icon className="size-5" />
+                  </div>
+                  <h3 className="text-base font-semibold text-text">
+                    {t(`feature${name}Title`)}
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-text-muted">
+                    {t(`feature${name}Body`)}
+                  </p>
                 </div>
-              </div>
-
-              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
-                  {t("previewSavings")}
-                </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-accent">
-                  + CHF 26,329.20
-                </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-accent">
-                  <TrendingUp className="size-3.5" />
-                  <span>{t("previewSavingsNote")}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Split Visual: Breakdown & Recent Rows */}
-            <div className="mt-4 grid gap-4 lg:grid-cols-12">
-              {/* Category distribution */}
-              <div className="rounded-xl border border-line/80 bg-surface p-5 shadow-2xs lg:col-span-7">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-text-subtle">
-                    {t("previewDistribution")}
-                  </h2>
-                  <span className="text-xs font-medium text-text-subtle">
-                    {t("previewTopCategories")}
-                  </span>
-                </div>
-
-                {/* Stacked bar preview */}
-                <div className="mt-3.5 flex h-3.5 w-full overflow-hidden rounded-full bg-surface-muted p-0.5">
-                  {MOCK_CATEGORIES.map((cat) => (
-                    <div
-                      key={cat.key}
-                      style={{ width: `${cat.pct}%` }}
-                      className={`h-full first:rounded-l-full last:rounded-r-full ${cat.color}`}
-                      title={`${t(cat.key)}: ${cat.pct}%`}
-                    />
-                  ))}
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                  {MOCK_CATEGORIES.slice(0, 4).map((cat) => (
-                    <div
-                      key={cat.key}
-                      className="flex items-center justify-between rounded-lg bg-surface-hover px-2.5 py-1.5"
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className={`size-2.5 rounded-full shrink-0 ${cat.color}`} />
-                        <span className="truncate font-medium text-text-muted">
-                          {t(cat.key)}
-                        </span>
-                      </div>
-                      <span className="font-mono text-text-subtle ml-2">{cat.pct}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sample transactions list */}
-              <div className="rounded-xl border border-line/80 bg-surface p-5 shadow-2xs lg:col-span-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-text-subtle">
-                    {t("previewActivity")}
-                  </h2>
-                  <span className="text-xs font-semibold text-accent">
-                    {t("previewVerified")}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {MOCK_TRANSACTIONS.map((tx) => (
-                    <div
-                      key={tx.titleKey}
-                      className="flex items-center justify-between rounded-lg border border-line/60 bg-surface-hover/60 px-3 py-2 text-xs"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <p className="font-medium text-text truncate">{t(tx.titleKey)}</p>
-                        <p className="text-[11px] text-text-subtle truncate">
-                          {"dateKey" in tx ? t(tx.dateKey) : tx.date} · {t(tx.accountKey)}
-                        </p>
-                      </div>
-                      {/* The same pair the real ledger uses. These were a
-                          hardcoded olive and `text-neutral-900` — the latter is
-                          near-black on the dark theme's `--surface-hover`, so
-                          the preview's outflows were invisible there. */}
-                      <span
-                        className={`font-mono font-semibold shrink-0 ${
-                          tx.inflow ? "text-positive" : "text-text"
-                        }`}
-                      >
-                        {tx.amount}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. HOW IT WORKS (3-Step Flow in pandermatt.ch Clean Style)
+          4. HOW IT WORKS
          ───────────────────────────────────────────────────────────── */}
-      <section className="w-full py-16 sm:py-24 bg-surface border-b border-line/60">
+      <section className="w-full py-16 sm:py-24 border-b border-line/60">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle mb-2">
             {t("stepsEyebrow")}
@@ -309,6 +183,16 @@ export function Landing() {
                 </div>
               );
             })}
+          </div>
+
+          {/* The one claim the steps cannot make on their own: your own
+              statements are not importable yet, and saying so here is cheaper
+              than a disappointed sign-up. */}
+          <div className="mt-8 flex items-start gap-2.5 rounded-xl border border-line/80 bg-surface-hover/50 p-5">
+            <ScanSearch className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
+            <p className="text-[13px] leading-relaxed text-text-muted">
+              {t("stepsNote")}
+            </p>
           </div>
         </div>
       </section>
@@ -387,7 +271,7 @@ export function Landing() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          6. ACCORDION / FAQ & COMPATIBILITY DETAILS (pandermatt.ch Style)
+          6. FAQ
          ───────────────────────────────────────────────────────────── */}
       <section className="w-full py-16 sm:py-24 bg-surface">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
