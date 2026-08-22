@@ -7,6 +7,7 @@ import {
   TooltipComponent,
 } from "echarts/components";
 import * as echarts from "echarts/core";
+import { UniversalTransition } from "echarts/features";
 import { CanvasRenderer } from "echarts/renderers";
 import type { EChartsOption } from "echarts";
 import { useTheme } from "next-themes";
@@ -39,6 +40,9 @@ echarts.use([
   GridComponent,
   LegendComponent,
   TooltipComponent,
+  // The bar ↔ donut morph: series sharing a `seriesKey` hand their shapes to
+  // each other across a `replaceMerge` update instead of fading out and in.
+  UniversalTransition,
   CanvasRenderer,
 ]);
 
@@ -136,6 +140,7 @@ export function EChart({
   /** Announced in place of the canvas, which is opaque to assistive tech. */
   label,
   notMerge = true,
+  replaceMerge,
   onEvents,
 }: {
   option: EChartsOption | null;
@@ -151,6 +156,17 @@ export function EChart({
    * animation.
    */
   notMerge?: boolean;
+  /**
+   * With `notMerge` false, the component types listed here are *replaced* on
+   * each update instead of merged: whatever the new option does not declare
+   * is removed. `["series"]` is what lets a chart swap its series set (bars →
+   * pie) and still animate — removal is what triggers a universal transition,
+   * where a plain merge would leave the departed series painted. Series kept
+   * across updates need stable `id`s so they merge by identity, not index.
+   * Pass a module-scope constant — a fresh array each render re-runs the
+   * update effect.
+   */
+  replaceMerge?: string | string[];
   /**
    * ECharts events ("mouseover", "globalout", …) → handler. The set of event
    * names is read once, at init; the handlers themselves are read through a
@@ -192,8 +208,11 @@ export function EChart({
 
   useEffect(() => {
     if (!chart.current || !option) return;
-    chart.current.setOption(option, { notMerge });
-  }, [option, notMerge]);
+    chart.current.setOption(
+      option,
+      notMerge ? { notMerge: true } : replaceMerge ? { replaceMerge } : {},
+    );
+  }, [option, notMerge, replaceMerge]);
 
   return (
     <div
