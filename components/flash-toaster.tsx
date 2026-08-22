@@ -1,9 +1,11 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
+import { usePathname, useRouter } from "@/i18n/navigation";
 import { FLASH_MESSAGES, FLASH_PARAM, type FlashKey } from "@/lib/flash";
 
 /**
@@ -11,6 +13,7 @@ import { FLASH_MESSAGES, FLASH_PARAM, type FlashKey } from "@/lib/flash";
  * refresh or a back-navigation doesn't replay it. Renders nothing.
  */
 export function FlashToaster() {
+  const t = useTranslations("AuthErrors");
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -22,13 +25,15 @@ export function FlashToaster() {
   useEffect(() => {
     if (!key || shown.current === key) return;
 
-    const message = FLASH_MESSAGES[key as FlashKey];
-    if (!message) return;
+    const messageKey = FLASH_MESSAGES[key as FlashKey];
+    if (!messageKey) return;
 
     shown.current = key;
-    toast.success(message);
+    toast.success(t(messageKey));
+    // `pathname` here is locale-free and `router` re-prefixes it, so stripping
+    // the parameter does not also strip the language.
     router.replace(pathname);
-  }, [key, pathname, router]);
+  }, [key, pathname, router, t]);
 
   return null;
 }

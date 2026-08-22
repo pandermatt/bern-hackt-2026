@@ -30,15 +30,11 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import type { Transaction } from "@/db/schema";
 import type { AnomalyInsight, AnomalySeverity } from "@/lib/anomaly-engine";
-import {
-  formatDay,
-  formatMoney,
-  monthParts,
-  type MonthTotal,
-} from "@/lib/insights";
+import { formatMoney, type MonthTotal } from "@/lib/insights";
 
 /**
  * One chunk of the ledger: whole months of rows, each month a rounded panel
@@ -146,6 +142,25 @@ function TransactionRow({
   row: Transaction;
   anomalies?: AnomalyInsight[];
 }) {
+  const t = useTranslations("Ledger");
+  const tCategories = useTranslations("Categories");
+  const tMonths = useTranslations("Months");
+
+  // Booked dates are `YYYY-MM-DD` text, never a `Date` — see the note on
+  // `formatDay` in lib/insights.ts. The month name comes from the catalog and
+  // the surrounding shape (`3 Jan 2025` against `3. Jan 2025`) from the `day`
+  // message, so the whole date follows the language rather than half of it.
+  const [year, month, day] = row.bookedOn.split("-");
+  const bookedOn = tMonths("day", {
+    day: Number(day),
+    month: tMonths(`short${Number(month)}`),
+    year,
+  });
+
+  // A category the catalog does not know falls through as itself. The stored
+  // value stays the English key — it is what `?categories=` matches on.
+  const category = tCategories.has(row.category) ? tCategories(row.category) : row.category;
+
   const hasAnomaly = anomalies.length > 0;
   const isOnlyNewMerchant =
     hasAnomaly && anomalies.every((a) => a.rule_id === "NEW_MERCHANT");
@@ -238,7 +253,7 @@ function TransactionRow({
                 title={hiddenAnomalies.map((a) => `${a.title}: ${a.description}`).join("\n")}
                 className="inline-flex items-center rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-text-muted shadow-2xs"
               >
-                +{hiddenCount} more
+                +{hiddenCount} {t("more")}
               </span>
             )}
           </div>
@@ -261,9 +276,9 @@ function TransactionRow({
         {/* Date and category, folded onto one line. Both are standalone columns
             from `sm` up, where there is room for them. */}
         <p className="mt-1 flex items-center gap-1.5 text-[11.5px] text-text-subtle sm:hidden">
-          <span className="font-mono tabular-nums">{formatDay(row.bookedOn)}</span>
+          <span className="font-mono tabular-nums">{bookedOn}</span>
           <span aria-hidden>·</span>
-          <span className="truncate">{row.category}</span>
+          <span className="truncate">{category}</span>
         </p>
       </div>
 
@@ -272,12 +287,12 @@ function TransactionRow({
             grey, and a chip filled with its own ground is no chip at all —
             before this it was visible only on the hovered row. */}
         <span className="rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-medium text-text-muted">
-          {row.category}
+          {category}
         </span>
       </div>
 
       <div className="hidden w-[12ch] shrink-0 text-right font-mono text-[11.5px] tabular-nums text-text-subtle sm:block">
-        {formatDay(row.bookedOn)}
+        {bookedOn}
       </div>
 
       <div className="hidden w-[13ch] shrink-0 text-right sm:block">
@@ -320,6 +335,8 @@ function MonthGroup({
   /** False when the next chunk carries the rest of this month. */
   roundBottom: boolean;
 }) {
+  const t = useTranslations("Ledger");
+  const tMonths = useTranslations("Months");
   const headingId = `ledger-month-${month}`;
 
   return (
@@ -339,9 +356,9 @@ function MonthGroup({
           id={headingId}
           className="text-[26px] leading-none font-semibold tracking-tight text-text sm:text-[30px]"
         >
-          {monthParts(month).name}{" "}
+          {tMonths(`long${Number(month.slice(5, 7))}`)}{" "}
           <span className="text-[15px] font-medium text-text-muted">
-            {monthParts(month).year}
+            {month.slice(0, 4)}
           </span>
         </h3>
 
@@ -349,10 +366,10 @@ function MonthGroup({
           <p className="flex items-baseline gap-3 font-mono text-[12px] tabular-nums">
             <span className="text-positive">
               {/* Named for anyone who cannot see the colour or the sign. */}
-              <span className="sr-only">Money in </span>+{formatMoney(totals.income)}
+              <span className="sr-only">{t("moneyIn")} </span>+{formatMoney(totals.income)}
             </span>
             <span className="text-text-muted">
-              <span className="sr-only">Money out </span>−{formatMoney(totals.expense)}
+              <span className="sr-only">{t("moneyOut")} </span>−{formatMoney(totals.expense)}
             </span>
           </p>
         )}

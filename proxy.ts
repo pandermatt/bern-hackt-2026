@@ -1,11 +1,28 @@
+import createMiddleware from "next-intl/middleware";
 import { NextResponse, type NextRequest } from "next/server";
-import createMiddleware from 'next-intl/middleware';
+
+import { LOCALE_COOKIE_NAME, routing } from "@/i18n/routing";
 import { SESSION_COOKIE } from "@/lib/site";
 
-const intlProxy = createMiddleware({
-  locales: ['de', 'en'],
-  defaultLocale: 'de'
-});
+// Reads its locales, its default and its cookie settings from `i18n/routing.ts`
+// rather than repeating them — the two lists drifting apart is how a locale
+// ends up routable but unlinkable.
+const intlProxy = createMiddleware(routing);
+
+const LOCALE_PREFIX = new RegExp(`^/(${routing.locales.join("|")})(?=/|$)`);
+
+/** The locale the request is already in, or the one its cookie asks for. */
+function localeOf(request: NextRequest): string {
+  const fromPath = request.nextUrl.pathname.match(LOCALE_PREFIX)?.[1];
+  if (fromPath) return fromPath;
+
+  const fromCookie = request.cookies.get(LOCALE_COOKIE_NAME)?.value;
+  if (fromCookie && (routing.locales as readonly string[]).includes(fromCookie)) {
+    return fromCookie;
+  }
+
+  return routing.defaultLocale;
+}
 
 /**
  * An optimistic redirect only — this runs on the edge runtime and cannot reach
@@ -21,10 +38,10 @@ export function proxy(request: NextRequest) {
 
   const hasCookie = request.cookies.has(SESSION_COOKIE);
   const { pathname } = request.nextUrl;
-  
+
   // Strip locale for auth checking
-  const pathWithoutLocale = pathname.replace(/^\/(de|en)/, '') || '/';
-  
+  const pathWithoutLocale = pathname.replace(LOCALE_PREFIX, "") || "/";
+
   const isAuthRoute = pathWithoutLocale === "/login" || pathWithoutLocale === "/register";
 
   // "/" is public: it serves the landing page when signed out and the
@@ -45,11 +62,11 @@ export function proxy(request: NextRequest) {
     pathWithoutLocale === "/offline";
 
   // A *missing* cookie is conclusive — nobody holding no cookie is signed in —
-  // so this direction is safe to decide here.
+  // so this direction is safe to decide here. The bounce keeps the language:
+  // sending everyone to the default locale's /login is what made an English
+  // session revert to German the moment a session expired.
   if (!hasCookie && !isPublic) {
-    const match = pathname.match(/^\/(de|en)/);
-    const locale = match ? match[1] : 'de';
-    return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
+    return NextResponse.redirect(new URL(`/${localeOf(request)}/login`, request.url));
   }
 
   // The opposite direction is NOT safe here, and used to be: bouncing /login to
@@ -72,6 +89,6 @@ export const config = {
     // - … the ones containing a dot (e.g. `favicon.ico`)
     "/((?!api|_next|_vercel|.*\\..*).*)",
     "/",
-    "/(de|en)/:path*"
+    "/(de|en)/:path*",
   ],
 };

@@ -1,34 +1,21 @@
 "use client";
 
-import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useActionState } from "react";
 
 import type { AuthState } from "@/app/actions/auth";
+import { Link } from "@/i18n/navigation";
 
 type Mode = "login" | "register";
 
-const COPY = {
-  login: {
-    title: "Sign in",
-    subtitle: "Welcome back. Enter your details to continue.",
-    submit: "Sign in",
-    pending: "Signing in…",
-    altText: "Don't have an account?",
-    altLabel: "Create one",
-    altHref: "/register",
-    autoComplete: "current-password",
-  },
-  register: {
-    title: "Create an account",
-    subtitle: "Your statements stay private to your account.",
-    submit: "Create account",
-    pending: "Creating account…",
-    altText: "Already have an account?",
-    altLabel: "Sign in",
-    altHref: "/login",
-    autoComplete: "new-password",
-  },
-} as const;
+/**
+ * Everything that differs between the two modes. The words themselves live in
+ * the `Auth` namespace, keyed by mode — only the browser's autocomplete hint
+ * and the "or do the other thing" link are decided here.
+ */
+const AUTOCOMPLETE = { login: "current-password", register: "new-password" } as const;
+
+const ALT_HREF = { login: "/register", register: "/login" } as const;
 
 /**
  * Shared by every input on this form. `text-[16px]` below `sm` is deliberate:
@@ -44,19 +31,19 @@ export function AuthForm({
   mode: Mode;
   action: (state: AuthState, formData: FormData) => Promise<AuthState>;
 }) {
+  const t = useTranslations("Auth");
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     action,
     undefined,
   );
-  const copy = COPY[mode];
 
   return (
     <div className="w-full max-w-[26rem]">
       <div className="card p-7">
         <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
-          {copy.title}
+          {t(`${mode}Title`)}
         </h1>
-        <p className="mt-1.5 text-[14px] text-text-muted">{copy.subtitle}</p>
+        <p className="mt-1.5 text-[14px] text-text-muted">{t(`${mode}Subtitle`)}</p>
 
         <form action={formAction} className="mt-6 flex flex-col gap-4">
           {/* Registration only. Optional — the greeting falls back to the
@@ -67,8 +54,8 @@ export function AuthForm({
                 htmlFor="name"
                 className="text-[13px] font-medium text-text"
               >
-                Name{" "}
-                <span className="font-normal text-text-subtle">(optional)</span>
+                {t("name")}{" "}
+                <span className="font-normal text-text-subtle">{t("nameOptional")}</span>
               </label>
               <input
                 id="name"
@@ -76,7 +63,7 @@ export function AuthForm({
                 type="text"
                 maxLength={80}
                 autoComplete="name"
-                placeholder="What should we call you?"
+                placeholder={t("namePlaceholder")}
                 className={FIELD}
               />
             </div>
@@ -87,7 +74,7 @@ export function AuthForm({
               htmlFor="email"
               className="text-[13px] font-medium text-text"
             >
-              Email
+              {t("email")}
             </label>
             <input
               id="email"
@@ -95,7 +82,7 @@ export function AuthForm({
               type="email"
               required
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder={t("emailPlaceholder")}
               className={FIELD}
             />
           </div>
@@ -105,7 +92,7 @@ export function AuthForm({
               htmlFor="password"
               className="text-[13px] font-medium text-text"
             >
-              Password
+              {t("password")}
             </label>
             <input
               id="password"
@@ -113,8 +100,8 @@ export function AuthForm({
               type="password"
               required
               minLength={8}
-              autoComplete={copy.autoComplete}
-              placeholder="At least 8 characters"
+              autoComplete={AUTOCOMPLETE[mode]}
+              placeholder={t("passwordPlaceholder")}
               className={FIELD}
             />
           </div>
@@ -133,18 +120,18 @@ export function AuthForm({
             disabled={pending}
             className="mt-1 h-10 cursor-pointer rounded-md bg-accent text-[14px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-60"
           >
-            {pending ? copy.pending : copy.submit}
+            {pending ? t(`${mode}Pending`) : t(`${mode}Submit`)}
           </button>
         </form>
       </div>
 
       <p className="mt-5 text-center text-[13px] text-text-muted">
-        {copy.altText}{" "}
+        {t(`${mode}AltText`)}{" "}
         <Link
-          href={copy.altHref}
+          href={ALT_HREF[mode]}
           className="font-medium text-accent hover:text-accent-hover hover:underline"
         >
-          {copy.altLabel}
+          {t(`${mode}AltLabel`)}
         </Link>
       </p>
     </div>

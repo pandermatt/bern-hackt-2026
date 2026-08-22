@@ -5,15 +5,16 @@ const APERTUS_URL =
   process.env.APERTUS_URL ??
   "https://llm.stoney-cloud.com/v1/chat/completions";
 
+/** One finding as the model writes it. `buildFinalInsight` maps it back onto
+ *  the algorithmic candidates it claims to summarise. */
 const llmInsightSchema = z.object({
-  insights: z.array(
-    z.object({
-      source_rule_ids: z.array(z.string()).min(1),
-      title: z.string().min(1),
-      description: z.string().min(1),
-    }),
-  ),
+  source_rule_ids: z.array(z.string()).min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
 });
+
+/** The whole response — the model answers with an array of them. */
+const llmResponseSchema = z.object({ insights: z.array(llmInsightSchema) });
 
 type LlmInsight = z.infer<typeof llmInsightSchema>;
 
@@ -371,7 +372,7 @@ Every source_rule_id MUST correspond exactly to a rule_id present in the input.`
       return candidates;
     }
 
-    const validated = llmInsightSchema.safeParse(parsedContent);
+    const validated = llmResponseSchema.safeParse(parsedContent);
 
     if (!validated.success) {
       console.error(

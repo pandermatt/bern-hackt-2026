@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { formatMoney, type Totals } from "@/lib/insights";
 
 /**
@@ -6,30 +8,39 @@ import { formatMoney, type Totals } from "@/lib/insights";
  * together would overstate earnings and make the salary number meaningless.
  */
 export function SummaryCards({ totals }: { totals: Totals }) {
+  const t = useTranslations("Summary");
+
   const tiles = [
     {
-      label: "Salary",
+      key: "salary",
+      label: t("salary"),
       value: totals.salary,
       tone: "positive" as const,
-      note: "Employer payments",
+      note: t("salaryNote"),
     },
     {
-      label: "Refunds",
+      key: "refunds",
+      label: t("refunds"),
       value: totals.refunds,
       tone: "neutral" as const,
-      note: "Money returned by merchants",
+      note: t("refundsNote"),
     },
     {
-      label: "Spending",
+      key: "spending",
+      label: t("spending"),
       value: totals.expense,
       tone: "negative" as const,
-      note: `across ${totals.expenseCount.toLocaleString("de-CH")} purchases`,
+      // Grouped by the formatter rather than interpolated raw: a five-figure
+      // purchase count reads as 12'480, the same way every other number on
+      // this page does.
+      note: t("spendingNote", { count: totals.expenseCount.toLocaleString("de-CH") }),
     },
     {
-      label: "Net",
+      key: "net",
+      label: t("net"),
       value: totals.net,
       tone: totals.net >= 0 ? ("positive" as const) : ("negative" as const),
-      note: totals.net >= 0 ? "Put aside" : "Overspent",
+      note: totals.net >= 0 ? t("netPositive") : t("netNegative"),
     },
   ];
 
@@ -37,7 +48,7 @@ export function SummaryCards({ totals }: { totals: Totals }) {
     <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {tiles.map((tile) => (
         <li
-          key={tile.label}
+          key={tile.key}
           /* The ledger's panel, in tile form: grey ground, no border and no
              shadow. The page heading above is the "big text outside" half of
              the idiom — these four do not each need one. */

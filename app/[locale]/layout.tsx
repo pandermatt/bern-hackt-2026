@@ -1,14 +1,19 @@
+import { hasLocale, NextIntlClientProvider } from "next-intl";
+import { getMessages, setRequestLocale } from "next-intl/server";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import localFont from "next/font/local";
+import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
+import { LocaleSync } from "@/components/locale-sync";
 import { ServiceWorkerRegistrar } from "@/components/sw-register";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { routing } from "@/i18n/routing";
 import { getCurrentUser } from "@/lib/auth";
 import { site } from "@/lib/site";
 import "../globals.css";
@@ -68,24 +73,22 @@ export const viewport: Viewport = {
   ],
 };
 
-import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, setRequestLocale } from 'next-intl/server';
-import { notFound } from 'next/navigation';
-import { locales } from '@/i18n/request';
+// Every locale in `routing` gets a shell at build time; anything else 404s
+// below rather than rendering an untranslated page.
+export function generateStaticParams() {
+  return routing.locales.map((locale) => ({ locale }));
+}
 
 // The header and footer live here rather than in each page, so a new route
 // inherits the chrome for free. Resolving the user here is what makes every
 // route dynamic — see the note in the README.
-export default async function RootLayout({ 
-  children,
-  params
-}: LayoutProps<"/[locale]"> & { params: Promise<{ locale: string }> }) {
+export default async function RootLayout({ children, params }: LayoutProps<"/[locale]">) {
   const { locale } = await params;
-  
-  // Validate that the incoming `locale` parameter is valid
-  if (!locales.includes(locale as any)) notFound();
-  
-  // Enable static rendering
+
+  // `hasLocale` narrows the segment to a known locale, which is what lets the
+  // rest of the tree treat it as one instead of casting through `any`.
+  if (!hasLocale(routing.locales, locale)) notFound();
+
   setRequestLocale(locale);
 
   const messages = await getMessages();
@@ -108,14 +111,15 @@ export default async function RootLayout({
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>
             <AppHeader user={user} />
-          {children}
-          <AppFooter user={user} />
-          <Toaster position="bottom-right" />
-          {/* useSearchParams needs a boundary it can suspend against. */}
-          <Suspense fallback={null}>
-            <FlashToaster />
-          </Suspense>
-          <ServiceWorkerRegistrar />
+            {children}
+            <AppFooter user={user} />
+            <Toaster position="bottom-right" />
+            {/* useSearchParams needs a boundary it can suspend against. */}
+            <Suspense fallback={null}>
+              <FlashToaster />
+            </Suspense>
+            <ServiceWorkerRegistrar />
+            <LocaleSync locale={locale} />
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

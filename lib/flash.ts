@@ -5,16 +5,15 @@
  * parameter.
  *
  * Keys, not messages, travel in the URL: nothing user-supplied is ever
- * rendered from the query string.
+ * rendered from the query string — and a key is also what makes the notice
+ * translatable, since the action that sets it and the browser that shows it
+ * can be in different languages only if neither of them carries the words.
  */
 export const FLASH_PARAM = "flash";
 
+/** Flash key → its key in the `AuthErrors` namespace. */
 export const FLASH_MESSAGES = {
-  "signed-out": "Signed out.",
+  "signed-out": "signedOut",
 } as const;
 
 export type FlashKey = keyof typeof FLASH_MESSAGES;
-
-export function flashUrl(path: string, key: FlashKey) {
-  return `${path}?${FLASH_PARAM}=${key}`;
-}

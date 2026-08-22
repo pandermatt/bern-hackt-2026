@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { useChartTokens } from "@/components/echart";
@@ -20,6 +21,7 @@ import type { EChartsChartSpec } from "@/lib/assistant";
 const HEIGHT = 240;
 
 export function ChatEChart({ chart }: { chart: EChartsChartSpec }) {
+  const t = useTranslations("Chat");
   const host = useRef<HTMLDivElement>(null);
   const tokens = useChartTokens();
   const [failed, setFailed] = useState(false);
@@ -67,7 +69,7 @@ export function ChatEChart({ chart }: { chart: EChartsChartSpec }) {
   if (failed) {
     return (
       <p className="text-[12px] text-text-muted">
-        The assistant sent a chart this app could not draw.
+        {t("chartFailed")}
       </p>
     );
   }
@@ -84,7 +86,7 @@ export function ChatEChart({ chart }: { chart: EChartsChartSpec }) {
         className="mt-1"
         style={{ height: HEIGHT }}
         role="img"
-        aria-label={chart.title ?? "Chart from the assistant"}
+        aria-label={chart.title ?? t("chartFallback")}
       />
     </figure>
   );

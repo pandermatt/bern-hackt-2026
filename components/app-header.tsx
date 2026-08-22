@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -6,6 +5,7 @@ import { logout } from "@/app/actions/auth";
 import { LanguageSelector } from "@/components/language-selector";
 import { Logo } from "@/components/logo";
 import type { User } from "@/db/schema";
+import { Link } from "@/i18n/navigation";
 import { displayName } from "@/lib/user";
 
 /**

@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
 /**
@@ -53,13 +54,14 @@ function SectionHeading({
 }
 
 export default function Loading() {
+  const t = useTranslations("Dashboard");
   return (
     <main
       className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12"
       aria-busy="true"
       aria-live="polite"
     >
-      <span className="sr-only">Loading…</span>
+      <span className="sr-only">{t("loading")}</span>
 
       <div className="animate-pulse">
         <Bar className="h-[30px] w-[240px] sm:h-[36px]" />

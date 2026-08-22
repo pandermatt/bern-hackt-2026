@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
 import {
@@ -51,6 +52,7 @@ function buildOption(
   series: MonthPoint[],
   tokens: ChartTokens,
   narrow: boolean,
+  labels: { month: (point: MonthPoint) => string; in: string; out: string },
 ): EChartsOption {
   const peak = niceCeiling(
     Math.max(1, ...series.flatMap((point) => [point.income, point.expense])),
@@ -100,7 +102,7 @@ function buildOption(
     },
     xAxis: {
       type: "category",
-      data: series.map((point) => point.label),
+      data: series.map(labels.month),
       boundaryGap: false,
       axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
       axisTick: { show: false },
@@ -128,18 +130,33 @@ function buildOption(
       splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
     },
     series: [
-      line("In", tokens.flowIn, series.map((point) => point.income)),
-      line("Out", tokens.flowOut, series.map((point) => point.expense)),
+      line(labels.in, tokens.flowIn, series.map((point) => point.income)),
+      line(labels.out, tokens.flowOut, series.map((point) => point.expense)),
     ],
   };
 }
 
 export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
+  const t = useTranslations("Trend");
+  const tMonths = useTranslations("Months");
   const tokens = useChartTokens();
   const narrow = useIsNarrow();
+
+  // The axis labels come from the catalog rather than from `point.label`, which
+  // `lib/insights.ts` fills in English. That module is pure and has no locale
+  // to read, so the translation happens at the one place that does.
+  const labels = useMemo(
+    () => ({
+      month: (point: MonthPoint) => tMonths(`short${Number(point.month.slice(5, 7))}`),
+      in: t("seriesIn"),
+      out: t("seriesOut"),
+    }),
+    [t, tMonths],
+  );
+
   const option = useMemo(
-    () => (tokens ? buildOption(series, tokens, narrow) : null),
-    [series, tokens, narrow],
+    () => (tokens ? buildOption(series, tokens, narrow, labels) : null),
+    [series, tokens, narrow, labels],
   );
 
   if (series.length === 0) return null;
@@ -147,29 +164,30 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   return (
     <Section
       id="trend"
-      heading="Month by month"
-      meta="Money in against money out"
+      heading={t("heading")}
+      meta={t("meta")}
       panelClassName="p-4 sm:p-5"
     >
       <EChart
         option={option}
         height={HEIGHT}
-        label={`Money in and money out in Swiss francs for each month from ${series[0].month} to ${
-          series[series.length - 1].month
-        }. The table below the chart carries the same figures.`}
+        label={t("chartLabel", {
+          first: series[0].month,
+          last: series[series.length - 1].month,
+        })}
       />
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. Also the relief a sub-3:1 fill requires. */}
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
-      <table className="sr-only" aria-label="Money in and out, by month">
+      <table className="sr-only" aria-label={t("tableLabel")}>
         <thead>
           <tr>
-            <th scope="col">Month</th>
-            <th scope="col">In</th>
-            <th scope="col">Out</th>
-            <th scope="col">Net</th>
+            <th scope="col">{t("month")}</th>
+            <th scope="col">{t("in")}</th>
+            <th scope="col">{t("out")}</th>
+            <th scope="col">{t("net")}</th>
           </tr>
         </thead>
         <tbody>
@@ -188,7 +206,7 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
       </table>
 
       <p className="mt-3 font-mono text-[11.5px] text-text-subtle">
-        Amounts in CHF. Transfers between your own accounts are excluded.
+        {t("footnote")}
       </p>
     </Section>
   );

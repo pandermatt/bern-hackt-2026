@@ -1,6 +1,5 @@
-import Link from "next/link";
-
 import { Section } from "@/components/section";
+import { Link } from "@/i18n/navigation";
 import { formatMoney, type Slice } from "@/lib/insights";
 
 /**

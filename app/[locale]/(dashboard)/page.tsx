@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 
 import { getDashboard } from "@/app/actions/transactions";
@@ -15,15 +16,21 @@ import { displayName } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home({ searchParams }: PageProps<"/">) {
+export default async function Home({ params, searchParams }: PageProps<"/[locale]">) {
+  const { locale } = await params;
+  // `getTranslations`, not `useTranslations`: an async server component cannot
+  // call a hook.
+  const t = await getTranslations({ locale, namespace: "Dashboard" });
+  const tm = await getTranslations({ locale, namespace: "Merchants" });
+
   // The authoritative auth check — the proxy only sniffs for a cookie.
   // Signed-out visitors get the landing page rather than a redirect, so "/"
   // stays a usable public entry point.
   const user = await getCurrentUser();
   if (!user) return <Landing />;
 
-  const params = await searchParams;
-  const dashboard = await getDashboard(params);
+  const query = await searchParams;
+  const dashboard = await getDashboard(query);
   if (!dashboard) return <Landing />;
 
   const { facets, view, filters, monthly, stack, totals, merchants } = dashboard;
@@ -35,17 +42,21 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           {/* Bigger than the 26/30px section headings below it, or the page
               would be headed by something smaller than its own sections. */}
           <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
-            Welcome, {displayName(user)}
+            {t("welcome")} {displayName(user)}
           </h1>
           {/* Describes the rows in view, so it tracks the filters. An empty view
               with statements behind it is a filter that matched nothing — a
               different thing to say than having imported nothing at all. */}
           <p className="mt-1 text-[13.5px] text-text-muted">
             {view.first
-              ? `${view.accounts.join(" and ")} · ${view.first} to ${view.last}`
+              ? t("range", {
+                  accounts: view.accounts.join(t("accountJoiner")),
+                  first: view.first,
+                  last: view.last,
+                })
               : facets.first
-                ? "No transactions match these filters."
-                : "No statements imported yet."}
+                ? t("noMatches")
+                : t("nothingImported")}
           </p>
         </div>
 
@@ -60,10 +71,10 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           <CategoryPie stack={stack} />
 
           <BreakdownList
-            heading="Top merchants"
+            heading={tm("heading")}
             slices={merchants}
             linkParam="merchant"
-            emptyLabel="No merchants in this range."
+            emptyLabel={tm("empty")}
           />
 
           {/* Sits directly above the ledger, because that is where the findings
@@ -98,7 +109,7 @@ export default async function Home({ searchParams }: PageProps<"/">) {
             nextOffset={dashboard.nextOffset}
             continuesInto={dashboard.continuesInto}
             totalCount={dashboard.totalCount}
-            filters={params}
+            filters={query}
           />
         </div>
       </main>
