@@ -139,17 +139,6 @@
     "net": "Net",
     "footnote": "Amounts in CHF."
   },
-  "Pie": {
-    "heading": "The whole year",
-    "meta": "Every category, unfiltered · {span}",
-    "span": "{first} to {last}",
-    "totalOut": "Total out",
-    "chartLabel": "Share of total spending by category over {span}. The table below the chart carries the same figures.",
-    "tableLabel": "Share of spending by category, whole range",
-    "category": "Category",
-    "total": "Total",
-    "share": "Share"
-  },
   "TopCategories": {
     "heading": "Top categories",
     "hintBars": "hover a bar to split it by merchant",

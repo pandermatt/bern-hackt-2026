@@ -3,7 +3,6 @@ import { Suspense } from "react";
 
 import { getDashboard } from "@/app/actions/transactions";
 import { BreakdownList } from "@/components/breakdown-list";
-import { CategoryPie } from "@/components/category-pie";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { Landing } from "@/components/landing";
 import { MonthlyTrend } from "@/components/monthly-trend";
@@ -69,18 +68,12 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
 
           <MonthlyTrend series={monthly} />
 
-          {/* One category story per breakpoint, not two stacked tellings of
-              it: the donut on a phone, where eight labelled bars have no room
-              and hover barely exists; the split-on-hover bars from `sm` up,
-              where they can breathe. CSS decides, not JS, so the server HTML
-              carries both and neither flashes in. Colours come from the same
-              slot map, so a category looks identical wherever it shows. */}
-          <div className="sm:hidden">
-            <CategoryPie stack={stack} />
-          </div>
-          <div className="hidden sm:block">
-            <TopCategoryBars data={dashboard.topCategories} stack={stack} />
-          </div>
+          {/* The page's one category story, at every width. It opens as the
+              donut on a phone — eight labelled bars have no room there — and
+              as the split-on-hover bars on desktop; the view toggle then
+              morphs between the two either way. This replaced the year donut
+              (`CategoryPie`) that used to fill the phone slot. */}
+          <TopCategoryBars data={dashboard.topCategories} stack={stack} />
 
           <BreakdownList
             heading={tm("heading")}

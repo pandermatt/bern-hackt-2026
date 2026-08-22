@@ -139,17 +139,6 @@
     "net": "Netto",
     "footnote": "Beträge in CHF."
   },
-  "Pie": {
-    "heading": "Das ganze Jahr",
-    "meta": "Alle Kategorien, ungefiltert · {span}",
-    "span": "{first} bis {last}",
-    "totalOut": "Ausgaben gesamt",
-    "chartLabel": "Anteil der Gesamtausgaben nach Kategorie über {span}. Die Tabelle unter dem Diagramm enthält dieselben Zahlen.",
-    "tableLabel": "Anteil der Ausgaben nach Kategorie, gesamter Zeitraum",
-    "category": "Kategorie",
-    "total": "Total",
-    "share": "Anteil"
-  },
   "TopCategories": {
     "heading": "Top-Kategorien",
     "hintBars": "Balken überfahren, um nach Händlern aufzuteilen",

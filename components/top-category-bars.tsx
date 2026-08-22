@@ -461,7 +461,15 @@ export function TopCategoryBars({
   const tokens = useChartTokens();
   const narrow = useIsNarrow();
   const [periodKey, setPeriodKey] = useState<PeriodKey>("month");
-  const [view, setView] = useState<View>("bars");
+  // A phone always shows the donut — its view toggle is hidden, and a
+  // hidden control must not have a live choice behind it, or rotating a
+  // desktop window with "Bars" picked would strand a phone in a view it
+  // cannot leave. On desktop the choice sticks once made, defaulting to
+  // bars. `narrow` is false during SSR, but the canvas only paints once
+  // `useChartTokens` resolves after hydration, so a phone's first painted
+  // frame is already the donut rather than a flash of bars.
+  const [chosenView, setChosenView] = useState<View | null>(null);
+  const view = narrow ? "donut" : (chosenView ?? "bars");
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [hovered, setHovered] = useState<number | null>(null);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -631,10 +639,12 @@ export function TopCategoryBars({
               </button>
             ))}
           </div>
+          {/* Hidden on a phone, where the donut is the only view — CSS and
+              the `view` derivation above agree on that, deliberately. */}
           <div
             role="group"
             aria-label={t("viewAria")}
-            className="flex rounded-full border border-line-strong bg-surface p-0.5"
+            className="hidden rounded-full border border-line-strong bg-surface p-0.5 sm:flex"
           >
             {(["bars", "donut"] as const).map((key) => (
               <button
@@ -643,7 +653,7 @@ export function TopCategoryBars({
                 aria-pressed={view === key}
                 onClick={() => {
                   setHovered(null);
-                  setView(key);
+                  setChosenView(key);
                 }}
                 className={pill(view === key)}
               >
