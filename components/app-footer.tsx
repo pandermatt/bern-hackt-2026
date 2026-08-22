@@ -2,7 +2,6 @@ import { ShieldCheck, Heart } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { LanguageSelector } from "@/components/language-selector";
-import type { User } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
 import { site } from "@/lib/site";
 import pkg from "@/package.json";
@@ -34,7 +33,15 @@ import pkg from "@/package.json";
 const FOOTER_LINK =
   "inline-flex min-h-10 items-center rounded-md px-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface-muted hover:text-text sm:min-h-0 sm:rounded-none sm:px-0 sm:text-xs sm:hover:bg-transparent";
 
-export function AppFooter({ user }: { user: User | null }) {
+/**
+ * Landing-only, and that is why it takes no props.
+ *
+ * It used to sit in the root layout under every page and hide half of itself
+ * for a signed-in reader. Now `components/landing.tsx` is its only caller, the
+ * reader there is always signed out, and the two `!user` branches that guarded
+ * the language switch and the auth links are gone with the prop.
+ */
+export function AppFooter() {
   const t = useTranslations("AppFooter");
 
   return (
@@ -75,11 +82,11 @@ export function AppFooter({ user }: { user: User | null }) {
             {/* Signed out, this is the only place to change language — signed
                 in, it lives on /account instead, so the footer does not offer
                 the same control twice. */}
-            {!user && <LanguageSelector />}
+            <LanguageSelector />
           </div>
 
           {/* Band two. */}
-          {!user && (
+          {(
             <div className="flex items-center gap-1 sm:contents">
               <Link href="/login" className={FOOTER_LINK}>
                 {t("signIn")}

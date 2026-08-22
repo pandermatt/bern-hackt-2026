@@ -8,13 +8,12 @@ import {
   Lock,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
   UploadCloud,
-  Wallet,
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { AppFooter } from "@/components/app-footer";
 import { Link } from "@/i18n/navigation";
 
 /** The numbers and icons are fixed; the words come from the `Landing`
@@ -25,47 +24,43 @@ const STEPS = [
   { number: "03", key: "step3", icon: BarChart3 },
 ] as const;
 
-const MOCK_CATEGORIES = [
-  { key: "mockCategory1", pct: 38, color: "bg-[var(--chart-1)]" },
-  { key: "mockCategory2", pct: 24, color: "bg-[var(--chart-2)]" },
-  { key: "mockCategory3", pct: 14, color: "bg-[var(--chart-3)]" },
-  { key: "mockCategory4", pct: 12, color: "bg-[var(--chart-4)]" },
-  { key: "mockCategory5", pct: 8, color: "bg-[var(--chart-5)]" },
-  { key: "mockCategory6", pct: 4, color: "bg-[var(--chart-other)]" },
-] as const;
-
-const MOCK_TRANSACTIONS = [
-  {
-    titleKey: "mockTransaction1",
-    accountKey: "mockAccount1",
-    dateKey: "mockToday",
-    amount: "− CHF 86.40",
-    inflow: false,
-  },
-  {
-    titleKey: "mockTransaction2",
-    accountKey: "mockAccount2",
-    dateKey: "mockYesterday",
-    amount: "+ CHF 6’850.00",
-    inflow: true,
-  },
-  {
-    titleKey: "mockTransaction3",
-    accountKey: "mockAccount3",
-    date: "18.08.",
-    amount: "− CHF 42.00",
-    inflow: false,
-  },
-  {
-    titleKey: "mockTransaction4",
-    accountKey: "mockAccount1",
-    date: "15.08.",
-    amount: "− CHF 79.90",
-    inflow: false,
-  },
-] as const;
-
 const FAQ_KEYS = ["faq1", "faq2", "faq3", "faq4"] as const;
+
+/** The three pages under the hero shot, in the order they are worth meeting. */
+const SHOTS = ["dashboard", "budget", "anomalies"] as const;
+
+const cap = (word: string) => word[0].toUpperCase() + word.slice(1);
+
+/**
+ * A product shot, drawn from a `--shot-*` token so it follows the theme.
+ *
+ * A background image rather than an `<img>`, because the source has to change
+ * with the theme and `dark:` cannot do that here — this project declares no
+ * `@custom-variant dark`, so Tailwind's dark variant follows the operating
+ * system while the app's own switch sets a `.dark` class. The token also means
+ * one file is fetched instead of two.
+ *
+ * `role="img"` and a label, because these are content: they are the only place
+ * the landing shows what the app looks like.
+ */
+/** Must match the capture height in `scripts/screenshots.mjs`. */
+const SHOT_ASPECT: Record<string, string> = {
+  home: "aspect-[1280/700]",
+  dashboard: "aspect-[1280/840]",
+  budget: "aspect-[1280/840]",
+  anomalies: "aspect-[1280/840]",
+};
+
+function Shot({ name, label }: { name: string; label: string }) {
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      className={`${SHOT_ASPECT[name]} w-full overflow-hidden rounded-xl border border-line bg-surface bg-cover bg-top shadow-[0_8px_30px_rgb(0,0,0,0.06)]`}
+      style={{ backgroundImage: `var(--shot-${name})` }}
+    />
+  );
+}
 
 export function Landing() {
   const t = useTranslations("Landing");
@@ -122,152 +117,41 @@ export function Landing() {
           </div>
         </div>
 
-        {/* ─────────────────────────────────────────────────────────────
-            2. INTERACTIVE DASHBOARD PREVIEW (Refined pandermatt card aesthetic)
-           ───────────────────────────────────────────────────────────── */}
-        <div className="mx-auto mt-12 w-full max-w-5xl px-5 sm:px-8">
-          <div className="rounded-2xl border border-line/90 bg-surface-hover/70 p-4 sm:p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xs">
-            {/* Mock Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/80 pb-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex size-3 rounded-full bg-danger/80" />
-                <span className="flex size-3 rounded-full bg-brand/80" />
-                <span className="flex size-3 rounded-full bg-positive/80" />
-                <span className="ml-2 text-xs font-mono font-medium text-text-subtle">
-                  {t("previewFile")}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-text-muted shadow-2xs border border-line/60">
-                <Wallet className="size-3.5 text-accent" />
-                <span>{t("previewCurrency")}</span>
-              </div>
-            </div>
+        {/* The hero shot: the entry page, with the assistant open. */}
+        <div className="mx-auto mt-14 w-full max-w-5xl px-5 sm:px-8">
+          <Shot name="home" label={t("shotHomeAlt")} />
+          <p className="mt-3 text-center text-[13px] text-text-subtle">
+            {t("shotHomeCaption")}
+          </p>
+        </div>
+      </section>
 
-            {/* Stat Cards Row */}
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
-                  {t("previewInflow")}
-                </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-positive-hover">
-                  + CHF 68,450.00
-                </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-text-subtle">
-                  {t.rich("previewInflowNote", {
-                    deposits: (chunks) => (
-                      <span className="text-positive font-semibold">{chunks}</span>
-                    ),
-                  })}
-                </div>
-              </div>
+      {/* ─────────────────────────────────────────────────────────────
+          2. WHAT THE APP ACTUALLY LOOKS LIKE
+         ───────────────────────────────────────────────────────────── */}
+      <section className="w-full border-b border-line/60 bg-surface py-16 sm:py-24">
+        <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
+          <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-text-subtle uppercase">
+            {t("showcaseEyebrow")}
+          </p>
+          <h2 className="max-w-[24ch] text-2xl font-bold tracking-tight text-text sm:text-3xl">
+            {t("showcaseTitle")}
+          </h2>
 
-              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
-                  {t("previewSpending")}
-                </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-text">
-                  - CHF 42,120.80
-                </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-text-subtle">
-                  <span>{t("previewSpendingNote")}</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-line/80 bg-surface p-4.5 shadow-2xs">
-                <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-subtle">
-                  {t("previewSavings")}
-                </span>
-                <p className="mt-1 font-mono text-xl sm:text-2xl font-bold text-accent">
-                  + CHF 26,329.20
-                </p>
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-accent">
-                  <TrendingUp className="size-3.5" />
-                  <span>{t("previewSavingsNote")}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Split Visual: Breakdown & Recent Rows */}
-            <div className="mt-4 grid gap-4 lg:grid-cols-12">
-              {/* Category distribution */}
-              <div className="rounded-xl border border-line/80 bg-surface p-5 shadow-2xs lg:col-span-7">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-text-subtle">
-                    {t("previewDistribution")}
-                  </h2>
-                  <span className="text-xs font-medium text-text-subtle">
-                    {t("previewTopCategories")}
+          <div className="mt-10 grid gap-8 sm:grid-cols-3">
+            {SHOTS.map((shot) => (
+              <figure key={shot} className="m-0">
+                <Shot name={shot} label={t(`shot${cap(shot)}Alt`)} />
+                <figcaption className="mt-3">
+                  <span className="block text-[15px] font-semibold text-text">
+                    {t(`shot${cap(shot)}Title`)}
                   </span>
-                </div>
-
-                {/* Stacked bar preview */}
-                <div className="mt-3.5 flex h-3.5 w-full overflow-hidden rounded-full bg-surface-muted p-0.5">
-                  {MOCK_CATEGORIES.map((cat) => (
-                    <div
-                      key={cat.key}
-                      style={{ width: `${cat.pct}%` }}
-                      className={`h-full first:rounded-l-full last:rounded-r-full ${cat.color}`}
-                      title={`${t(cat.key)}: ${cat.pct}%`}
-                    />
-                  ))}
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                  {MOCK_CATEGORIES.slice(0, 4).map((cat) => (
-                    <div
-                      key={cat.key}
-                      className="flex items-center justify-between rounded-lg bg-surface-hover px-2.5 py-1.5"
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className={`size-2.5 rounded-full shrink-0 ${cat.color}`} />
-                        <span className="truncate font-medium text-text-muted">
-                          {t(cat.key)}
-                        </span>
-                      </div>
-                      <span className="font-mono text-text-subtle ml-2">{cat.pct}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sample transactions list */}
-              <div className="rounded-xl border border-line/80 bg-surface p-5 shadow-2xs lg:col-span-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-text-subtle">
-                    {t("previewActivity")}
-                  </h2>
-                  <span className="text-xs font-semibold text-accent">
-                    {t("previewVerified")}
+                  <span className="mt-1 block text-[13.5px] leading-relaxed text-text-muted">
+                    {t(`shot${cap(shot)}Body`)}
                   </span>
-                </div>
-                <div className="space-y-2">
-                  {MOCK_TRANSACTIONS.map((tx) => (
-                    <div
-                      key={tx.titleKey}
-                      className="flex items-center justify-between rounded-lg border border-line/60 bg-surface-hover/60 px-3 py-2 text-xs"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <p className="font-medium text-text truncate">{t(tx.titleKey)}</p>
-                        <p className="text-[11px] text-text-subtle truncate">
-                          {"dateKey" in tx ? t(tx.dateKey) : tx.date} · {t(tx.accountKey)}
-                        </p>
-                      </div>
-                      {/* The same pair the real ledger uses. These were a
-                          hardcoded olive and `text-neutral-900` — the latter is
-                          near-black on the dark theme's `--surface-hover`, so
-                          the preview's outflows were invisible there. */}
-                      <span
-                        className={`font-mono font-semibold shrink-0 ${
-                          tx.inflow ? "text-positive" : "text-text"
-                        }`}
-                      >
-                        {tx.amount}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+                </figcaption>
+              </figure>
+            ))}
           </div>
         </div>
       </section>
@@ -415,6 +299,7 @@ export function Landing() {
           </div>
         </div>
       </section>
+      <AppFooter />
     </div>
   );
 }

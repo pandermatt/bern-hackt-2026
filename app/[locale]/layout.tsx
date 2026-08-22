@@ -6,7 +6,6 @@ import localFont from "next/font/local";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
 import { LocaleSync } from "@/components/locale-sync";
@@ -152,8 +151,11 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[lo
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>
             <AppHeader user={user} />
+            {/* No footer here. It belongs to the landing page and nowhere else
+                — inside the app it was a second navigation nobody used, under
+                every ledger and every chart. `components/landing.tsx` renders
+                it itself. */}
             {children}
-            <AppFooter user={user} />
             <Toaster position="bottom-right" />
             {/* useSearchParams needs a boundary it can suspend against. */}
             <Suspense fallback={null}>

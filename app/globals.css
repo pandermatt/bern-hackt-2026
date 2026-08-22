@@ -46,6 +46,16 @@
      value here already does, and it fetches one file instead of two. */
   --logo-mark: url("/logo-light.png");
 
+  /* The landing's product shots, per theme. Real screenshots of the real
+     pages — `scripts/screenshots.mjs` regenerates them — so the landing cannot
+     drift from the app the way a hand-built mock did. Tokens for the same
+     reason `--logo-mark` is one: `dark:` keys off the operating system here,
+     not off the app's own switch. */
+  --shot-home: url("/preview/home-light.webp");
+  --shot-dashboard: url("/preview/dashboard-light.webp");
+  --shot-budget: url("/preview/budget-light.webp");
+  --shot-anomalies: url("/preview/anomalies-light.webp");
+
   --line: #e5e5ea;
   --line-strong: #d1d1d6;
 
@@ -184,6 +194,11 @@
   --logo-tile: #ffffff;
 
   --logo-mark: url("/logo-dark.png");
+
+  --shot-home: url("/preview/home-dark.webp");
+  --shot-dashboard: url("/preview/dashboard-dark.webp");
+  --shot-budget: url("/preview/budget-dark.webp");
+  --shot-anomalies: url("/preview/anomalies-dark.webp");
 
   --line: #333333;
   /* Control borders need 3:1 against the surface to be perceivable; the light

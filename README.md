@@ -164,6 +164,46 @@ class. Anything themed with `dark:` follows the operating system and ignores
 the toggle — worth knowing, because `components/ui/input.tsx` and
 `components/budget-editor.tsx` still do.
 
+### Landing page
+
+`components/landing.tsx` shows **real screenshots of the running app**, not a
+hand-built mock. It used to inline its own fake dashboard — stat cards, a
+category bar chart, four invented transactions — with its own copy of the chart
+ramp, which meant it drifted from the product every time the product changed.
+
+The shots live in `public/preview/`, one pair per page (light and dark), wired
+up through `--shot-*` tokens in `app/globals.css`. Regenerate them after any
+visible change to home, dashboard, budget or anomalies:
+
+```bash
+npm run dev                      # in another shell
+npx playwright install chromium  # first time only
+node scripts/screenshots.mjs
+```
+
+Playwright is deliberately **not** a dependency: it is a browser download for a
+task that runs a few times a year, and `npx` fetches it on demand. The script
+signs in as the demo account, so that account needs to be seeded and to have
+something worth photographing — savings pots, and a completed anomaly scan
+(run it from `/account`).
+
+Each page is captured at its own height, because they are not the same shape;
+`SHOT_ASPECT` in `components/landing.tsx` has to match the heights in the
+script or the shot letterboxes.
+
+### Footer
+
+`components/app-footer.tsx` renders **only on the landing page**, from inside
+`<Landing />`. It is not in the root layout. Inside the app it was a second
+navigation under every ledger and chart that nobody used, and half of it was
+hidden for a signed-in reader anyway — which is why it takes no props now.
+
+One consequence worth knowing: the language switcher lived there for signed-out
+visitors. It is still on the landing and on `/account`, but a visitor who goes
+straight to `/login` no longer has one. `components/locale-sync.tsx` restores a
+stored preference, so this only bites a first-time visitor who skips the
+landing.
+
 ### Merchant logos
 
 Rows in the ledger and the "Top merchants" list carry the merchant's own brand
