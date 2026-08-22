@@ -270,6 +270,56 @@ Unchanged from the template this app grew out of, and still exactly true.
   Together these took 25k transactions from ~10 minutes to under a second. If
   you touch the engine, re-check it against a large synthetic account.
 
+### Two axes, not one
+
+- **`severity` and `kind` answer different questions, and neither is a rename of
+  the other.** `severity` (`low`/`medium`/`high`) is statistical magnitude — how
+  far from its own baseline a number sits. `kind` (`info`/`warning`/`alert`) is
+  how much a person should worry. A CHF 6'000 bike is `high` severity and only a
+  `warning`: nobody needs alarming about their own purchase. The ledger colours
+  by kind and ranks by kind-then-severity.
+- **`kind` starts as a coarsening of `severity`** — `derivedKind` maps `low` to
+  `info` and everything else to `warning`, stamped in the same final `.map()`
+  that stamps `emoji`, so the 26 rules never spell it out. That coarsening is
+  what keeps the two orderings from contradicting each other, which is what makes
+  the ledger's sort safe. **Escalation is one-way**: the narrative layer may raise
+  a kind, never lower it.
+- **`alert` is red, means "this may not have been you", and needs two keys.** The
+  LLM proposes it; `canEscalateToAlert` in the engine has to co-sign with a
+  numeric predicate on metrics the rules already compute. Nothing deterministic
+  ever emits `alert` — `tests/anomaly-seed-data.test.ts` asserts that, and that no
+  finding in the shipped year is escalatable at all. The allowlist is four rules
+  (`REPEAT_CHARGE`, `LARGE_TRANSFER`, `NEW_COUNTERPARTY`, `CASH_WITHDRAWAL_SPIKE`);
+  everything else was left out because its modal case is a legitimate purchase.
+  **Do not widen it without a co-signature** — the cost of a false red is a person
+  phoning their bank about their own holiday booking, which is exactly what the
+  `merchant_repeat_days <= 1` clause keeps the seed data's airline charges out of.
+- **Card testing is out of reach**, and copy must not claim it: `REPEAT_CHARGE`
+  skips anything under CHF 20, which is precisely what a probe charge is.
+- **Only a crowded row is worth a request — unless an alert is possible.**
+  `selectCrowdedFindings` asks the model about a finding only when one of its
+  transactions carries three or more (`CROWDED_ROW`), which is where the row
+  starts hiding badges behind "+N more" and a person stops being able to read it
+  unaided. On a year of real statements that is a handful of rows rather than all
+  ~79. `selectForNarration` then adds back anything `canEscalateToAlert` already
+  co-signs: `alert` can only be *proposed* by the model, so a finding the cost
+  rule skips can never turn red — and the motivating case, a large transfer to a
+  first-time recipient, is two findings on one row and so never crowded. Keep the
+  two selections separate; folding the alert exemption into the crowding rule
+  makes a cost heuristic silently load-bearing for a safety one.
+- **The narrative layer batches, and the round trip is keyed on synthetic ids.**
+  `lib/llm/analyze-insights.ts` sends ten findings per request, minified, and
+  composes each batch's reply as a **union** — narratives plus every candidate no
+  narrative cited. Both halves are load-bearing and both were once bugs: keying
+  the round trip on `rule_id` pooled every `AMOUNT_SPIKE` in the ledger into one
+  finding, and returning only what the model referenced silently deleted the rest.
+  A batch that fails falls back on its own; the others are unaffected.
+- **The model cannot name a merchant on its own.** The highest-cardinality rules
+  put no merchant, category or month in `supporting_metrics`, and their
+  descriptions do not name one either. `runScan` passes a `contextOf` lookup built
+  from the rows it already holds. Never send `Transaction.description` — on a real
+  statement that is a payment reference.
+
 ## Design system
 
 - The palette is PostFinance's five brand colours, in `app/globals.css`:
@@ -303,6 +353,12 @@ Unchanged from the template this app grew out of, and still exactly true.
 - `--positive` (`#5F7000`) is Pistachio darkened to 5.5:1 for amounts set as
   **text**. Don't use the bright Pistachio for a figure, and don't use
   `--positive` where the brand colour should show.
+- **The ledger's anomaly rows are the `*-soft` tokens' one consumer.**
+  `--accent-soft`, `--brand-soft` and `--danger-soft` are the row washes for
+  `info`, `warning` and `alert`; `--accent`, `--brand`+`--brand-ink` and
+  `--danger` are the matching badge borders and text. The badges also carry an
+  `sr-only` kind word, because hue alone would make the classification a
+  colour-only distinction.
 - `--danger` red is a system colour, not a brand one — brand palettes rarely
   cover error states. Money out and destructive actions share it.
 - **The ramp's hexes are given; its slot *order* is derived.** `--chart-1` …

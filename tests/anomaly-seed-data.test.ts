@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeTransactionAnomalies,
   attentionFor,
+  canEscalateToAlert,
   RULE_ATTENTION,
   RULE_EMOJIS,
   type TransactionInput,
@@ -219,5 +220,52 @@ describe("anomaly engine over the shipped seed statements", () => {
       expect(insight.description.length).toBeGreaterThan(0);
       expect(insight.emoji.length).toBeGreaterThan(0);
     }
+  });
+
+  it("classifies every finding, and never as an alert", () => {
+    /*
+     * `alert` says "this may not have been you". Nothing deterministic is
+     * entitled to say that — it is proposed by the narrative layer and has to be
+     * co-signed. A rule that started emitting it on its own would paint real
+     * purchases red, so this is the assertion that would catch it.
+     */
+    for (const insight of insights) {
+      expect(["info", "warning"]).toContain(insight.kind);
+    }
+  });
+
+  it("keeps kind in step with severity", () => {
+    for (const insight of insights) {
+      expect(insight.kind).toBe(insight.severity === "low" ? "info" : "warning");
+    }
+  });
+
+  it("refuses to escalate the airline's four charges", () => {
+    /*
+     * The most fraud-shaped row in the year, and a perfectly legitimate holiday
+     * booking. It is on the alert allowlist by rule, so what keeps it out of red
+     * is arithmetic: the airline repeats on three of its four active days, and
+     * the co-signature wants a merchant that repeats on at most one.
+     *
+     * If this starts passing, the demo account shows a red "possible fraud"
+     * wash on a real purchase.
+     */
+    const repeats = insights.filter(
+      (i) => i.rule_id === "REPEAT_CHARGE" && i.description.includes("1’766.50"),
+    );
+
+    expect(repeats).toHaveLength(1);
+    expect(repeats[0].supporting_metrics.merchant_repeat_days).toBe(3);
+    expect(canEscalateToAlert(repeats[0], insights)).toBe(false);
+  });
+
+  it("finds nothing in the year's statements that could be escalated", () => {
+    // These are one person's real-shaped statements. Every finding in them has
+    // an innocent explanation, and the gate should agree.
+    const escalatable = insights
+      .filter((i) => canEscalateToAlert(i, insights))
+      .map((i) => i.rule_id);
+
+    expect(escalatable).toEqual([]);
   });
 });

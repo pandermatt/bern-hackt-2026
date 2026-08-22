@@ -130,6 +130,35 @@ describe("running a scan", () => {
     expect(found.some((f) => f.transaction_ids.includes(spike.id))).toBe(true);
   });
 
+  it("round-trips each finding's kind through the database", async () => {
+    /*
+     * `anomalies.kind` carries a column default, so forgetting to write it
+     * compiles cleanly and silently stamps every row `warning`. The only way to
+     * notice is to check a row that should not be one — the outlier is `high`
+     * severity, so it derives `warning`, while the quiet findings around it
+     * derive `info`.
+     */
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+
+    const rows = await db
+      .select()
+      .from(anomalies)
+      .where(eq(anomalies.userId, alice.id));
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.kind).toBe(row.severity === "low" ? "info" : "warning");
+    }
+
+    // And it survives the read path, which regroups rows into insights.
+    const found = await getStoredAnomaliesForPage(rows.map((r) => r.transactionId));
+    for (const insight of found) {
+      expect(insight.kind).toBe(insight.severity === "low" ? "info" : "warning");
+    }
+  });
+
   it("replaces the previous scan's results rather than appending", async () => {
     await db.insert(transactions).values(history(alice.id, "a"));
 

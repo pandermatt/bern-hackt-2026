@@ -36,7 +36,11 @@ import { Fragment, type ReactNode } from "react";
 import { MerchantAvatar } from "@/components/merchant-avatar";
 import type { Transaction } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
-import type { AnomalyInsight, AnomalySeverity } from "@/lib/anomaly-engine";
+import type {
+  AnomalyInsight,
+  AnomalyKind,
+  AnomalySeverity,
+} from "@/lib/anomaly-engine";
 import { formatMoney, type MonthTotal } from "@/lib/insights";
 
 /**
@@ -91,15 +95,59 @@ function getLucideIcon(iconName: string): LucideIcon {
 
 const SEVERITY_RANK: Record<AnomalySeverity, number> = { high: 3, medium: 2, low: 1 };
 
+const KIND_RANK: Record<AnomalyKind, number> = { alert: 3, warning: 2, info: 1 };
+
 /**
- * Badge border and text per severity. The engine has always computed severity;
- * nothing rendered it, so a routine "new merchant" note and a four-times-over
- * duplicate charge arrived looking identical.
+ * Badge border and text per kind.
+ *
+ * Kind, not severity: severity says how far from baseline a number sits, which
+ * is not the same question as how much a person should worry. A CHF 6'000 bike
+ * is `high` severity and still only a `warning` — nobody needs to be alarmed by
+ * their own purchase.
+ *
+ * Teal reads as informational and is the only brand colour legible as text.
+ * Supernova stays a border with `--brand-ink` carrying the type, because the
+ * yellow itself is under 2:1 on white. Red is the system danger colour.
  */
-const SEVERITY_CLASSES: Record<AnomalySeverity, string> = {
-  high: "border-danger/50 text-danger",
-  medium: "border-brand text-brand-ink",
-  low: "border-line-strong text-text-muted",
+const KIND_CLASSES: Record<AnomalyKind, string> = {
+  alert: "border-danger/50 text-danger",
+  warning: "border-brand text-brand-ink",
+  info: "border-accent/40 text-accent",
+};
+
+/**
+ * The row's left border and wash.
+ *
+ * A fade to the right in tokens rather than literal rgba: `--accent-soft`,
+ * `--brand-soft` and `--danger-soft` are each theme's own version of the same
+ * tint, so the row follows the ground it sits on. Hover pushes the transparent
+ * stop further right, which deepens the wash without a second set of values to
+ * keep in step.
+ */
+const KIND_ROW_CLASSES: Record<AnomalyKind, string> = {
+  alert:
+    "border-l-4 border-l-danger bg-[linear-gradient(90deg,var(--danger-soft)_0%,transparent_55%)] hover:bg-[linear-gradient(90deg,var(--danger-soft)_0%,transparent_80%)]",
+  warning:
+    "border-l-4 border-l-brand bg-[linear-gradient(90deg,var(--brand-soft)_0%,transparent_55%)] hover:bg-[linear-gradient(90deg,var(--brand-soft)_0%,transparent_80%)]",
+  info: "border-l-4 border-l-accent bg-[linear-gradient(90deg,var(--accent-soft)_0%,transparent_55%)] hover:bg-[linear-gradient(90deg,var(--accent-soft)_0%,transparent_80%)]",
+};
+
+/** Colour of the sentence printed under the row, matching its wash. */
+const KIND_TEXT_CLASSES: Record<AnomalyKind, string> = {
+  alert: "text-danger",
+  warning: "text-brand-ink",
+  info: "text-accent",
+};
+
+/**
+ * Spoken before the finding's title, so the classification survives for anyone
+ * who cannot see the colour it is otherwise carried by. Hue alone would make
+ * this a colour-only distinction.
+ */
+const KIND_LABELS: Record<AnomalyKind, string> = {
+  alert: "Alert:",
+  warning: "Heads-up:",
+  info: "Note:",
 };
 
 /** Beyond this a row stops being a ledger entry and becomes a badge cloud. */
@@ -237,39 +285,37 @@ function TransactionRow({
   const category = tCategories.has(row.category) ? tCategories(row.category) : row.category;
 
   const hasAnomaly = anomalies.length > 0;
-  const isOnlyNewMerchant =
-    hasAnomaly && anomalies.every((a) => a.rule_id === "NEW_MERCHANT");
-
   /*
-   * Severest first, then capped. Month-level findings — a savings-rate shift, a
-   * category shift — attach to the month's largest charges, so the one big
-   * transaction that triggered several of them collects every badge at once:
-   * eight, on the worst row of a year of real statements. Ordering by severity
-   * means the cap drops the least urgent, and the rest stay reachable on the
+   * Most concerning first, then capped. Month-level findings — a savings-rate
+   * shift, a category shift — attach to the month's largest charges, so the one
+   * big transaction that triggered several of them collects every badge at
+   * once: eight, on the worst row of a year of real statements. Ordering means
+   * the cap drops the least urgent, and the rest stay reachable on the
    * "+N more" tooltip.
+   *
+   * Kind leads and severity breaks ties, which is what keeps an `alert` off the
+   * hidden list. The two orderings cannot contradict each other because kind is
+   * only ever escalated, never lowered, away from what severity derived.
    */
   const rankedAnomalies = [...anomalies].sort(
-    (a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
+    (a, b) =>
+      KIND_RANK[b.kind] - KIND_RANK[a.kind] ||
+      SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
   );
+
+  /*
+   * One kind drives the wash, the first badge and the sentence, so the three
+   * cannot disagree. This used to branch on `rule_id === "NEW_MERCHANT"`, which
+   * stopped matching the moment the narrative layer began merging findings
+   * under a combined id — the teal row was, in practice, only reachable when
+   * the LLM was switched off.
+   */
+  const rowKind = rankedAnomalies[0]?.kind ?? "info";
   const shownAnomalies = rankedAnomalies.slice(0, MAX_VISIBLE_BADGES);
   const hiddenAnomalies = rankedAnomalies.slice(MAX_VISIBLE_BADGES);
   const hiddenCount = hiddenAnomalies.length;
 
-  /*
-   * A wash fading out to the right, in tokens rather than the literal rgba
-   * stops this carried before: those were a light blue and a light yellow
-   * painted straight onto a #1c1c1c surface in dark mode. `--accent-soft` and
-   * `--brand-soft` are each theme's own version of the same idea, so the row
-   * now follows the ground it sits on.
-   *
-   * Teal for a new merchant, Supernova for everything else — the same
-   * informational-versus-noteworthy split the sky/yellow pair was making.
-   * Hover pushes the transparent stop further right, which deepens the wash
-   * without a second set of colour values to keep in step.
-   */
-  const anomalyRowClasses = isOnlyNewMerchant
-    ? "border-l-4 border-l-accent bg-[linear-gradient(90deg,var(--accent-soft)_0%,transparent_55%)] hover:bg-[linear-gradient(90deg,var(--accent-soft)_0%,transparent_80%)]"
-    : "border-l-4 border-l-brand bg-[linear-gradient(90deg,var(--brand-soft)_0%,transparent_55%)] hover:bg-[linear-gradient(90deg,var(--brand-soft)_0%,transparent_80%)]";
+  const anomalyRowClasses = KIND_ROW_CLASSES[rowKind];
 
   return (
     <li
@@ -306,7 +352,6 @@ function TransactionRow({
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {shownAnomalies.map((anomaly, index) => {
               const Icon = getLucideIcon(anomaly.icon);
-              const isNewMerchant = anomaly.rule_id === "NEW_MERCHANT";
               /* Not keyed on `rule_id` alone: one transaction can carry two
                  findings from the same rule — an airline billing two different
                  amounts twice over on one day — and React then sees duplicate
@@ -324,18 +369,20 @@ function TransactionRow({
                        into the wash behind it. On the tinted row a plain surface
                        reads as raised, which is what a badge wants anyway. */
                     className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border bg-surface px-2 py-0.5 text-[11px] font-medium shadow-2xs transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                      isNewMerchant
-                        ? "border-accent/40 text-accent"
-                        : SEVERITY_CLASSES[anomaly.severity]
+                      KIND_CLASSES[anomaly.kind]
                     }`}
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
+                    {/* Carries the kind for anyone the colour does not reach. */}
+                    <span className="sr-only">{KIND_LABELS[anomaly.kind]} </span>
                     {/* The finding's own words. This used to print `rule_id`, so
                         the row read UNUSUAL_FINANCIAL_IMPACT in monospace at a
                         person who wanted to know what happened to their money. */}
                     <span className="font-medium">{anomaly.title}</span>
                   </button>
 
+                  {/* The native title attribute this replaces was unreachable on
+                      touch and unstyleable. */}
                   <FindingPanel id={panelId} anomaly={anomaly} transactionId={row.id} />
                 </Fragment>
               );
@@ -382,11 +429,11 @@ function TransactionRow({
 
         {hasAnomaly && (
           <p
-            className={`mt-0.5 text-[11.5px] font-medium leading-tight ${
-              isOnlyNewMerchant ? "text-accent" : "text-brand-ink"
-            }`}
+            className={`mt-0.5 text-[11.5px] font-medium leading-tight ${KIND_TEXT_CLASSES[rowKind]}`}
           >
-            {anomalies[0].description}
+            {/* `rankedAnomalies`, not `anomalies`: the sentence has to be the
+                same finding the wash and the first badge are showing. */}
+            {rankedAnomalies[0].description}
           </p>
         )}
 
