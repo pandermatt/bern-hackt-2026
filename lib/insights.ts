@@ -78,7 +78,7 @@ export type ForecastPoint = {
 };
 
 export type SpendForecast = {
-  /** Exactly 24: January of the anchor year through December of the next. */
+  /** Exactly 12: January through December of the anchor year. */
   points: ForecastPoint[];
   /** Mean monthly spend over the anchor year's recorded months. */
   average: number;
@@ -86,10 +86,11 @@ export type SpendForecast = {
   year: number;
   /** How many months of the anchor year the average is built from. */
   actualMonths: number;
-  /** Recorded plus projected for the anchor year. */
+  /**
+   * The whole anchor year: recorded where there are statements, projected
+   * after — the figure the tile's note prints.
+   */
   yearTotal: number;
-  /** The next year summed — it is projection all the way down. */
-  nextYearTotal: number;
 };
 
 export type Slice = {
@@ -405,9 +406,15 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
 }
 
 /**
- * Monthly spending across the year the statements end in and the year after,
- * recorded where there are statements and projected at the run rate from there
- * on — the forward-looking tile in the summary row.
+ * Monthly spending across the year the statements end in — recorded where
+ * there are statements, then projected at the run rate to the end of that
+ * year, and no further. The forward-looking tile in the summary row.
+ *
+ * **The horizon stops at December.** A projection carries no trend and gets no
+ * new information as it runs, so a second year of it was twelve more months of
+ * the same twelve factors — half a chart spent restating the first half. What
+ * the tile is read for is where this year lands, so that is what it draws and
+ * what the note under it totals.
  *
  * **The anchor year comes from the data, not from the clock.** This module
  * constructs no `Date` (see `formatDay`), and the rule the rest of the file
@@ -419,8 +426,9 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
  * The projection is the mean of the recorded months, shaped by the statements'
  * own seasonality — see `seasonalFactors`. It carries no *trend*, which is the
  * honest shape for twelve points, and the twelve factors average exactly 1, so
- * the mean of the dashed line is still the number the tile prints above the
- * chart. The tile says one thing; it just no longer draws it as a ruler.
+ * a shaped year still sums to what the flat run rate would — the figure the
+ * tile prints and the year's total under it stay each other's arithmetic. The
+ * tile says one thing; it just no longer draws it as a ruler.
  */
 /** At most this much of an observed deviation carries into a forecast. */
 const SEASONAL_DAMPING = 0.6;
@@ -506,8 +514,8 @@ export function spendForecast(rows: Transaction[]): SpendForecast | null {
   // `monthAxis` fills the charts: a month with no spending is a zero, not a
   // hole, and it belongs in the average.
   const actuals: (number | null)[] = [];
-  for (let index = 0; index < 24; index += 1) {
-    const month = `${year + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+  for (let index = 0; index < 12; index += 1) {
+    const month = `${year}-${String(index + 1).padStart(2, "0")}`;
     actuals.push(month >= first && month <= last ? (buckets.get(month) ?? 0) : null);
   }
 
@@ -522,26 +530,29 @@ export function spendForecast(rows: Transaction[]): SpendForecast | null {
   const factors = seasonalFactors(buckets);
 
   const points: ForecastPoint[] = actuals.map((actual, index) => {
-    const month = `${year + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+    const month = `${year}-${String(index + 1).padStart(2, "0")}`;
     return {
       month,
-      label: MONTH_LABELS[index % 12],
+      label: MONTH_LABELS[index],
       actual,
       // The last recorded month carries both figures on purpose: the solid
       // line and the dashed one share that vertex, so the join is a change of
       // stroke rather than a gap with a jump across it.
       projected:
         month > last
-          ? Math.round(average * factors[index % 12])
+          ? Math.round(average * factors[index])
           : month === last
             ? actual
             : null,
     };
   });
 
-  const yearTotal = points
-    .slice(0, 12)
-    .reduce((sum, point) => sum + (point.actual ?? point.projected ?? 0), 0);
+  // Summed off the points rather than `average * 12`, so the note under the
+  // tile is the total of the line drawn above it to the rappen.
+  const yearTotal = points.reduce(
+    (sum, point) => sum + (point.actual ?? point.projected ?? 0),
+    0,
+  );
 
   return {
     points,
@@ -549,11 +560,6 @@ export function spendForecast(rows: Transaction[]): SpendForecast | null {
     year,
     actualMonths: months.length,
     yearTotal,
-    // Summed off the points rather than `average * 12`, so the note under the
-    // tile is the total of the line drawn above it to the rappen.
-    nextYearTotal: points
-      .slice(12)
-      .reduce((sum, point) => sum + (point.projected ?? 0), 0),
   };
 }
 

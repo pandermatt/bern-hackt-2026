@@ -13,9 +13,10 @@ import {
 import { formatMoney, type SpendForecast } from "@/lib/insights";
 
 /**
- * Twenty-four months of spending inside a summary tile: solid where the
- * statements reach, then dashed at the run rate — shaped by the statements'
- * own seasonality, see `seasonalFactors` — to the end of the year after.
+ * One year of spending inside a summary tile: solid where the statements
+ * reach, then dashed at the run rate — shaped by the statements' own
+ * seasonality, see `seasonalFactors` — to the end of that year and no
+ * further.
  *
  * The stroke change is the whole message — it is where recorded stops and
  * projected starts — so the two are separate series over one axis rather than
@@ -23,9 +24,9 @@ import { formatMoney, type SpendForecast } from "@/lib/insights";
  * vertex (see `spendForecast`) so the join is continuous.
  *
  * No axes. At ~190px of desktop column there is no room for furniture, and
- * the years are named in HTML below the canvas instead, where they cost no
- * plot width. The figures live in the tile's `sr-only` table, server-rendered
- * like every other chart's — the accessibility contract does not lapse just
+ * the year is named in HTML below the canvas instead, where it costs no plot
+ * width. The figures live in the tile's `sr-only` table, server-rendered like
+ * every other chart's — the accessibility contract does not lapse just
  * because the chart is 60px tall.
  *
  * `--flow-out`, not a `--chart-N` slot: money out is a direction, not a
@@ -61,7 +62,7 @@ function buildOption(
     xAxis: {
       type: "category",
       boundaryGap: false,
-      data: forecast.points.map((point) => `${point.label} ${point.month.slice(2, 4)}`),
+      data: forecast.points.map((point) => point.label),
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: { show: false },
@@ -94,17 +95,6 @@ function buildOption(
         lineStyle: { color: withAlpha(tokens.flowOut, 0.55), width: 2, type: "dashed" },
         itemStyle: { color: withAlpha(tokens.flowOut, 0.55) },
         data: forecast.points.map((point) => point.projected),
-        // The turn of the year, standing on January of the next one, so
-        // "this year / next year" is readable without axis labels inside the
-        // plot. A category axis snaps a mark to a tick, so this is an index
-        // and not the 11.5 that would put it in the gap.
-        markLine: {
-          silent: true,
-          symbol: "none",
-          label: { show: false },
-          lineStyle: { color: withAlpha(tokens.ink, 0.35), width: 1, type: "solid" },
-          data: [{ xAxis: 12 }],
-        },
       },
     ],
   };
@@ -132,11 +122,10 @@ export function SpendForecastChart({ forecast }: { forecast: SpendForecast }) {
           average: formatMoney(forecast.average),
         })}
       />
-      {/* The years as HTML, each at the start of its own half of the axis —
-          an ECharts axis would spend plot width on the same two words. */}
-      <div className="grid grid-cols-2 text-[11px] text-text-subtle tabular-nums">
-        <span>{forecast.year}</span>
-        <span>{forecast.year + 1}</span>
+      {/* The year as HTML, under the start of the axis — an ECharts axis
+          would spend plot width on the same four digits. */}
+      <div className="text-[11px] text-text-subtle tabular-nums">
+        {forecast.year}
       </div>
     </div>
   );

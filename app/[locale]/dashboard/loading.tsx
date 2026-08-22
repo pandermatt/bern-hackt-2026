@@ -71,7 +71,7 @@ export default function Loading() {
 
         {/* Two figures, then the balance across both columns, then the
             forecast tile — which is taller by its 60px sparkline and the year
-            labels under it, and sets the row's height on every screen. */}
+            label under it, and sets the row's height on every screen. */}
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[0, 1, 2].map((tile) => (
             <div

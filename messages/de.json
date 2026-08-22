@@ -130,7 +130,7 @@
     "forecast": "Prognose",
     "forecastNote": "≈ {amount} im {year}",
     "forecastEmpty": "Noch keine Ausgaben zum Hochrechnen",
-    "forecastLabel": "Ausgaben pro Monat: {year} wie gebucht, danach gestrichelt zum Schnitt von {average} hochgerechnet",
+    "forecastLabel": "Ausgaben pro Monat im {year}: wie gebucht, danach gestrichelt zum Schnitt von {average} bis Ende Jahr hochgerechnet",
     "forecastMonth": "Monat",
     "forecastAmount": "Ausgaben",
     "forecastKind": "Grundlage",

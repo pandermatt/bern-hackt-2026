@@ -14,10 +14,11 @@ import { formatMoney, type SpendForecast, type Totals } from "@/lib/insights";
  * the Income tile's note breaks the two apart under the total.
  *
  * The fourth tile is the forecast: the average month's spending, over a
- * sparkline of the year the statements end in and the year after. The dashed
- * half undulates with the account's own seasonality, but its twelve factors
- * average exactly 1 — so the printed figure is the mean of the line above it
- * and the tile still says one thing.
+ * sparkline of the year the statements end in — booked to where they reach,
+ * dashed to the end of that year, and no further. The dashed tail undulates
+ * with the account's own seasonality, but its twelve factors average exactly
+ * 1 — so the printed figure is the mean of the line above it and the note
+ * under it is where the year lands.
  */
 export function SummaryCards({
   totals,
@@ -156,8 +157,8 @@ export function SummaryCards({
 
             <p className="mt-2 text-[12.5px] text-text-subtle">
               {t("forecastNote", {
-                amount: formatMoney(forecast.nextYearTotal),
-                year: forecast.year + 1,
+                amount: formatMoney(forecast.yearTotal),
+                year: forecast.year,
               })}
             </p>
           </>

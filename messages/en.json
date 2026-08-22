@@ -130,7 +130,7 @@
     "forecast": "Forecast",
     "forecastNote": "≈ {amount} in {year}",
     "forecastEmpty": "No spending to project yet",
-    "forecastLabel": "Spending per month: {year} as booked, then projected dashed at the {average} average",
+    "forecastLabel": "Spending per month in {year}: as booked, then dashed to the end of the year at the {average} average",
     "forecastMonth": "Month",
     "forecastAmount": "Spending",
     "forecastKind": "Basis",

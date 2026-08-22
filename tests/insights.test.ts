@@ -1378,9 +1378,9 @@ describe("spendForecast", () => {
     ]);
 
     expect(forecast?.year).toBe(2025);
-    expect(forecast?.points).toHaveLength(24);
+    expect(forecast?.points).toHaveLength(12);
     expect(forecast?.points[0].month).toBe("2025-01");
-    expect(forecast?.points[23].month).toBe("2026-12");
+    expect(forecast?.points[11].month).toBe("2025-12");
   });
 
   it("averages only the anchor year's months", () => {
@@ -1407,7 +1407,7 @@ describe("spendForecast", () => {
     expect(forecast?.average).toBe(20000);
   });
 
-  it("projects every month past the statements, to the end of the next year", () => {
+  it("projects every month past the statements, and stops at December", () => {
     const forecast = spendForecast([
       row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
       row({ bookedOn: "2025-02-05", amountMinor: -20000 }),
@@ -1420,9 +1420,9 @@ describe("spendForecast", () => {
     expect(forecast?.points[1].projected).toBe(20000);
     expect(forecast?.points[2].actual).toBeNull();
     expect(forecast?.points[2].projected).toBe(15000);
-    expect(forecast?.points[23].projected).toBe(15000);
-    expect(forecast?.nextYearTotal).toBe(15000 * 12);
-    // Two recorded months plus ten projected ones.
+    expect(forecast?.points[11].projected).toBe(15000);
+    // Two recorded months plus ten projected ones — the whole tile, since the
+    // horizon ends with the year.
     expect(forecast?.yearTotal).toBe(10000 + 20000 + 15000 * 10);
   });
 
@@ -1437,60 +1437,75 @@ describe("spendForecast", () => {
   });
 
   it("shapes the projection with the statements' own seasonality", () => {
-    // A quiet year with one heavy December. The projected December has to
-    // stand above the projected January, or the dashed line is a ruler.
-    const forecast = spendForecast(
-      Array.from({ length: 12 }, (_, index) =>
+    // A quiet 2024 with one heavy December, and a single month of 2025 to
+    // anchor on — so the whole shape lands on months that are projected. The
+    // projected December has to stand above the projected February, or the
+    // dashed line is a ruler.
+    const forecast = spendForecast([
+      ...Array.from({ length: 12 }, (_, index) =>
         row({
-          bookedOn: `2025-${String(index + 1).padStart(2, "0")}-05`,
+          bookedOn: `2024-${String(index + 1).padStart(2, "0")}-05`,
           amountMinor: index === 11 ? -30000 : -10000,
         }),
       ),
-    );
-    const next = forecast!.points.slice(12);
+      row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
+    ]);
+    const projected = forecast!.points.slice(1);
 
-    expect(next[11].projected!).toBeGreaterThan(next[0].projected!);
-    expect(next[11].projected!).toBeGreaterThan(forecast!.average);
-    expect(next[0].projected!).toBeLessThan(forecast!.average);
+    expect(projected[10].projected!).toBeGreaterThan(projected[0].projected!);
+    expect(projected[10].projected!).toBeGreaterThan(forecast!.average);
+    expect(projected[0].projected!).toBeLessThan(forecast!.average);
   });
 
   it("keeps the shaped year summing to the flat run rate", () => {
-    const forecast = spendForecast(
-      Array.from({ length: 12 }, (_, index) =>
+    // A flat 2024 with one month above the run rate and one below it by the
+    // same amount, so the seasonal shape is a wobble that cancels over the
+    // year, and a single January in 2025 to anchor on.
+    const forecast = spendForecast([
+      ...Array.from({ length: 12 }, (_, index) =>
         row({
-          bookedOn: `2025-${String(index + 1).padStart(2, "0")}-05`,
-          amountMinor: -10000 * (index + 1),
+          bookedOn: `2024-${String(index + 1).padStart(2, "0")}-05`,
+          amountMinor: index === 5 ? -15000 : index === 6 ? -5000 : -10000,
         }),
       ),
-    );
+      row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
+    ]);
 
-    // The twelve factors average exactly 1, so the tile's figure is still the
-    // mean of the line drawn above it — only the rounding of twelve points
-    // separates the two, and never by more than half a rappen each.
+    // June sits above the run rate and July below it by as much...
+    expect(forecast!.points[5].projected!).toBeGreaterThan(forecast!.average);
+    expect(forecast!.points[6].projected!).toBeLessThan(forecast!.average);
+    // ...so the year the tile totals is still twelve months of the figure it
+    // prints. The twelve factors average exactly 1; only the rounding of
+    // twelve points can separate the two, and never by more than half a
+    // rappen each.
     expect(
-      Math.abs(forecast!.nextYearTotal - forecast!.average * 12),
+      Math.abs(forecast!.yearTotal - forecast!.average * 12),
     ).toBeLessThanOrEqual(6);
   });
 
   it("lets one freak month gentle the curve, not dominate it", () => {
-    // Eleven ordinary months and a CHF 6'000 bike in January. Undamped that
-    // January is 8× the run rate; the projection must not replay it.
-    const forecast = spendForecast(
-      Array.from({ length: 12 }, (_, index) =>
+    // Eleven ordinary months and a CHF 6'000 bike in July, a year back so the
+    // month it lands on is one the tile projects. Undamped that July is 10×
+    // the run rate; the projection must not replay it.
+    const forecast = spendForecast([
+      ...Array.from({ length: 12 }, (_, index) =>
         row({
-          bookedOn: `2025-${String(index + 1).padStart(2, "0")}-05`,
-          amountMinor: index === 0 ? -610000 : -10000,
+          bookedOn: `2024-${String(index + 1).padStart(2, "0")}-05`,
+          amountMinor: index === 6 ? -610000 : -10000,
         }),
       ),
-    );
-    const next = forecast!.points.slice(12);
+      row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
+    ]);
+    const projected = forecast!.points.slice(1);
 
-    for (const point of next) {
+    for (const point of projected) {
       expect(point.projected!).toBeLessThanOrEqual(forecast!.average * 1.4);
       expect(point.projected!).toBeGreaterThanOrEqual(forecast!.average * 0.6);
     }
     // Still the year's peak — damped, not flattened.
-    expect(next[0].projected!).toBe(Math.max(...next.map((p) => p.projected!)));
+    expect(projected[5].projected!).toBe(
+      Math.max(...projected.map((p) => p.projected!)),
+    );
   });
 
   it("holds a calendar month the statements never reached at the run rate", () => {
