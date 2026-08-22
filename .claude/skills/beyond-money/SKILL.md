@@ -47,6 +47,12 @@ never through the UI.
   log that answer changes meaning the moment someone revises an allocation.
   One row per goal per month makes revising an upsert and keeps the month's
   remaining balance a subtraction rather than a reconciliation.
+- **`updateSavingsGoal` changes the target and nothing else.** The name picks
+  the pot's glyph, and there is no icon column to override that with, so
+  renaming would silently repaint the card. Delete and re-add is the honest way
+  to change what a goal *is*. A target below what is already saved is allowed —
+  the pot reads over 100%, which is true; money is never discarded to make a
+  number fit.
 - **Deleting a goal releases its money rather than destroying it.** A month's
   surplus is a property of the statements, so cascading the allocations away
   makes those francs allocatable again. The confirm dialog says so, because it
@@ -165,12 +171,30 @@ Unchanged from the template this app grew out of, and still exactly true.
   says. **Free has no palm tree** (`fa-tree-palm` is Pro), so holidays get
   `fa-umbrella-beach`.
 - **A glyph's box is not always square** — `fa-laptop` is 640×512 — so fit on
-  `max(width, height)` rather than assuming 512. And the glyph is clipped at
-  the waterline and drawn twice, ink above and a faint wash below, so it stays
-  legible over all ten fills without the component having to know which hue it
-  is sitting on. A `clipPath` resolves in the user space of the element that
-  references it, so the clip must sit on an **untransformed** group or the
-  waterline scales with the glyph.
+  `max(width, height)` rather than assuming 512. A `clipPath` resolves in the
+  user space of the element that references it, so the clip must sit on an
+  **untransformed** group or the waterline scales with the glyph.
+- **The glyph is drawn twice, clipped at the waterline: `--accent` above,
+  `--chart-ink` below.** It sits on the wall, so the level rises past it as the
+  goal fills, and it has to stay legible on whichever of the ten hues it ends
+  up under. Don't use the accent for the submerged half — the brand colour is a
+  teal and three of the fills are teals, so the glyph vanished into its own
+  liquid. Ink only ever darkens (or, in `.dark`, only ever lightens) whatever
+  it lands on.
+- **`potFill` clamps and `potPercent` does not, on purpose.** The jar has a
+  rim, so the drawing stops at 1; the label must not, or a pot holding CHF 300
+  against a CHF 200 goal reads a flat, useless 100%. Both come off the same two
+  amounts — `potPercent` is the one that gets printed, and the progress bar
+  (being a track) uses the clamped one.
+- **A pot at 100% is sealed with a lid.** `full` swaps the open mouth — rim
+  ellipse plus the inner shade of the far wall — for a lid band, crown and
+  knob. The lid is the pot's own material rather than the goal's colour: it
+  says "closed", and a second tinted shape would compete with the fill for
+  that reading. The knob has to sit above the crown (`LID_Y - RY`), or the
+  crown ellipse simply paints over it.
+- **Guard the liquid on `fill > 0`.** The surface at zero sits on the base
+  ellipse's *centre*, so drawing "from the surface down" still paints a
+  crescent along the floor — an empty pot with a sliver of colour in it.
 - **A pot's colour comes from its row id, not its position.** `potSlot` keys on
   the id so deleting one goal does not repaint the rest. Goals have no chart
   counterpart to agree with, so any stable mapping does — this one is stable
@@ -402,6 +426,15 @@ Unchanged from the template this app grew out of, and still exactly true.
 - Month labels are the hardcoded `MONTH_LABELS` array, not
   `Intl.DateTimeFormat` — `en-GB` returns `"Sept"`, four characters where every
   other month has three, which breaks the chart's column rhythm.
+- **`dialog` and `alert-dialog` are not interchangeable.** An alert dialog is
+  an interruption that demands an explicit choice — right for "delete this, are
+  you sure", wrong for a form, where dismissing without choosing is a normal
+  thing to want. Retargeting a pot is a form, so it uses `Dialog`; deleting one
+  is a confirmation, so it uses `AlertDialog`.
+- **On a pot card, retarget sits left and delete sits right.** The reversible
+  action and the irreversible one go as far apart as the card allows, and both
+  are always visible rather than revealed on hover — a hover affordance does
+  not exist on a touch screen.
 - **shadcn `asChild` gotcha**: `AlertDialogAction`/`AlertDialogCancel` wrap a
   `Button`, so the Button's variant classes land on the same element and
   `cn()` cannot merge them. Overrides there need Tailwind v4's trailing

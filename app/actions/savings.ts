@@ -182,6 +182,48 @@ export async function createSavingsGoal(
 }
 
 /**
+ * Changes a goal's target.
+ *
+ * Only the target. The name stays fixed because it is what picks the pot's
+ * glyph — renaming would silently repaint the card, and there is no icon
+ * column to override that with. Delete and re-add is the honest way to change
+ * what a goal *is*.
+ *
+ * A new target below what is already saved is allowed: the pot simply reads
+ * over 100%, which is a truthful thing for it to say. Money is never thrown
+ * away to make a number fit.
+ */
+export async function updateSavingsGoal(
+  goalId: number,
+  amount: string,
+): Promise<SavingsResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Sign in to change a savings goal." };
+
+  const parsed = amountSchema.safeParse(amount);
+  if (!parsed.success) return { ok: false, error: "That target looks malformed." };
+
+  const target = toMinor(parsed.data);
+  if (typeof target === "string") return { ok: false, error: target };
+  if (target <= 0) return { ok: false, error: "A goal needs a target above zero." };
+
+  const changed = await db
+    .update(savingsGoals)
+    .set({ targetMinor: target })
+    // Scoped by owner as well as id: the id alone would let anyone retarget
+    // anyone's goal by guessing a number.
+    .where(and(eq(savingsGoals.id, goalId), eq(savingsGoals.userId, user.id)))
+    .returning({ id: savingsGoals.id });
+
+  if (changed.length === 0) {
+    return { ok: false, error: "That savings goal no longer exists." };
+  }
+
+  revalidatePath("/budget");
+  return { ok: true };
+}
+
+/**
  * Deletes a goal and, by cascade, everything ever allocated to it.
  *
  * That money returns to its months: the surplus a month had is a property of

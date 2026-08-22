@@ -13,6 +13,7 @@ import {
   defaultBudgetMonth,
   monthSurplus,
   potFill,
+  potPercent,
   potSlot,
   slotsOf,
   stackByCategory,
@@ -418,9 +419,35 @@ describe("goalIcon", () => {
     expect(name("Neuer PC")).toBe("laptop");
   });
 
+  it("knows what money looks like", () => {
+    expect(name("Investment")).toBe("coins");
+    expect(name("Investieren")).toBe("coins");
+    expect(name("ETF Sparplan")).toBe("coins");
+    expect(name("3. Säule")).toBe("coins");
+  });
+
   it("falls back to a piggy bank rather than guessing", () => {
     expect(name("Sparbüchse")).toBe("piggy-bank");
     expect(name("")).toBe("piggy-bank");
+  });
+});
+
+describe("potPercent", () => {
+  it("is the plain share, rounded", () => {
+    expect(potPercent(25000, 50000)).toBe(50);
+    expect(potPercent(29000, 30000)).toBe(97);
+  });
+
+  it("does not clamp, unlike the drawing", () => {
+    // The jar has a rim and `potFill` respects it; the label must not, or a pot
+    // holding CHF 300 against a CHF 200 goal reads a flat, useless 100%.
+    expect(potFill(30000, 20000)).toBe(1);
+    expect(potPercent(30000, 20000)).toBe(150);
+  });
+
+  it("treats a zero target as done only once something is in it", () => {
+    expect(potPercent(0, 0)).toBe(0);
+    expect(potPercent(100, 0)).toBe(100);
   });
 });
 
