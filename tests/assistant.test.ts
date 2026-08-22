@@ -17,8 +17,8 @@ import {
   extractSql,
   looksLikeStall,
   routeTool,
-  runTool,
   savingsGoalsToolResult,
+  savingsPotentialToolResult,
   validateSelect,
 } from "@/lib/assistant";
 
@@ -276,7 +276,7 @@ describe("detectSubscriptions", () => {
   });
 });
 
-describe("runTool get_savings_potential", () => {
+describe("savingsPotentialToolResult", () => {
   const slice = (key: string, amount: number, share: number) => ({
     key,
     amount,
@@ -285,7 +285,7 @@ describe("runTool get_savings_potential", () => {
   });
   const dashboard = {
     facets: { accounts: [], first: "2025-01-01", last: "2025-12-31" },
-    totals: { expense: 1_000_000 },
+    totals: { expense: 1_000_000, net: 250_000 },
     categories: [
       slice("Housing", 500_000, 50),
       slice("Travel", 300_000, 30),
@@ -295,15 +295,30 @@ describe("runTool get_savings_potential", () => {
     merchants: [],
     monthly: [],
   } as unknown as Dashboard;
+  const overview: SavingsOverview = {
+    months: ["2025-06", "2025-07"],
+    month: "2025-07",
+    monthEnded: true,
+    surplusMinor: 120_000,
+    allocatedMinor: 20_000,
+    freeMinor: 100_000,
+    pots: [],
+  };
 
-  it("splits fixed costs from the flexible categories", () => {
-    const { result } = runTool("get_savings_potential", dashboard);
-    const payload = result as {
+  it("leads with the Unallocated pot's own figure and splits fixed from flexible", () => {
+    const payload = savingsPotentialToolResult(dashboard, overview) as {
+      unassigned_month: string;
+      unassigned_chf: string;
+      net_saved_chf: string;
       fixed_categories: string[];
       fixed_costs_chf: string;
       flexible_spending_chf: string;
       flexible_categories: { name: string }[];
     };
+    // The same freeMinor the Savings page shows — not a derivation of its own.
+    expect(payload.unassigned_month).toBe("2025-07");
+    expect(payload.unassigned_chf).toBe("1'000.00");
+    expect(payload.net_saved_chf).toBe("2'500.00");
     expect(payload.fixed_categories).toEqual(["Housing", "Taxes & Fees"]);
     expect(payload.fixed_costs_chf).toBe("5'500.00");
     expect(payload.flexible_spending_chf).toBe("4'500.00");
@@ -311,6 +326,25 @@ describe("runTool get_savings_potential", () => {
       "Travel",
       "Clothing",
     ]);
+  });
+
+  it("keeps a negative month honest instead of flooring it", () => {
+    const overdrawn = savingsPotentialToolResult(dashboard, {
+      ...overview,
+      surplusMinor: -40_000,
+      allocatedMinor: 0,
+      freeMinor: -40_000,
+    }) as { unassigned_chf: string };
+    expect(overdrawn.unassigned_chf).toBe("-400.00");
+  });
+
+  it("omits the unassigned block when there are no statement months", () => {
+    const payload = savingsPotentialToolResult(dashboard, null) as Record<
+      string,
+      unknown
+    >;
+    expect(payload.unassigned_chf).toBeUndefined();
+    expect(payload.fixed_costs_chf).toBe("5'500.00");
   });
 });
 
@@ -323,11 +357,13 @@ describe("savingsGoalsToolResult", () => {
     monthMinor: 0,
     targetOn: null,
     monthlyMinor: null,
+    icon: null,
     slot: 0,
   });
 
   it("hands the model the free surplus and each goal's gap", () => {
     const overview: SavingsOverview = {
+      months: ["2025-06", "2025-07"],
       month: "2025-07",
       monthEnded: true,
       surplusMinor: 120_000,
@@ -347,6 +383,7 @@ describe("savingsGoalsToolResult", () => {
 
   it("says so while the month still runs, and when there are no goals", () => {
     const running = savingsGoalsToolResult({
+      months: ["2025-07", "2025-08"],
       month: "2025-08",
       monthEnded: false,
       surplusMinor: null,
@@ -358,6 +395,7 @@ describe("savingsGoalsToolResult", () => {
     expect(running.note).toContain("still running");
 
     const goalless = savingsGoalsToolResult({
+      months: ["2025-06", "2025-07"],
       month: "2025-07",
       monthEnded: true,
       surplusMinor: 50_000,
@@ -394,14 +432,15 @@ describe("parseAllocationArgs", () => {
 
 describe("buildAllocationProposal", () => {
   const overview = (patch: Partial<SavingsOverview> = {}): SavingsOverview => ({
+    months: ["2025-06", "2025-07"],
     month: "2025-07",
     monthEnded: true,
     surplusMinor: 120_000,
     allocatedMinor: 20_000,
     freeMinor: 100_000,
     pots: [
-      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 0 },
-      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, targetOn: null, monthlyMinor: null, slot: 1 },
+      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
     ],
     ...patch,
   });
@@ -655,14 +694,15 @@ describe("resolvePeriod off-enum tokens", () => {
 
 describe("defaultAllocationSplit", () => {
   const overview = (patch: Partial<SavingsOverview> = {}): SavingsOverview => ({
+    months: ["2025-06", "2025-07"],
     month: "2025-07",
     monthEnded: true,
     surplusMinor: 100_000,
     allocatedMinor: 0,
     freeMinor: 100_000,
     pots: [
-      { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 0 },
-      { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 1 },
+      { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
     ],
     ...patch,
   });
@@ -678,8 +718,8 @@ describe("defaultAllocationSplit", () => {
   it("prefers the holder's own monthly plan when any pot declares one", () => {
     const planned = overview({
       pots: [
-        { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: 30_000, slot: 0 },
-        { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 1 },
+        { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: 30_000, icon: null, slot: 0 },
+        { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
       ],
     });
     // The Dauersparauftrag wins outright; the unplanned pot gets nothing and
@@ -692,8 +732,8 @@ describe("defaultAllocationSplit", () => {
   it("falls back to equal parts when every goal is already full", () => {
     const full = overview({
       pots: [
-        { id: 1, name: "A", targetMinor: 100, savedMinor: 100, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 0 },
-        { id: 2, name: "B", targetMinor: 100, savedMinor: 200, monthMinor: 0, targetOn: null, monthlyMinor: null, slot: 1 },
+        { id: 1, name: "A", targetMinor: 100, savedMinor: 100, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 0 },
+        { id: 2, name: "B", targetMinor: 100, savedMinor: 200, monthMinor: 0, targetOn: null, monthlyMinor: null, icon: null, slot: 1 },
       ],
     });
     expect(defaultAllocationSplit(full)).toEqual([

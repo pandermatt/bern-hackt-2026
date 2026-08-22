@@ -22,6 +22,7 @@ import {
   routeTool,
   runTool,
   savingsGoalsToolResult,
+  savingsPotentialToolResult,
   stripModelMarkup,
   subscriptionsToolResult,
   systemPromptFor,
@@ -441,8 +442,25 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
 
       // The context tools read beyond the dashboard aggregate — stored scan
       // findings, the savings tables, the raw rows — so each fetches lazily,
-      // only on the turn the model actually asks. All three resolve the
+      // only on the turn the model actually asks. All of them resolve the
       // account from the session, like every other read.
+      if (name === "get_savings_potential") {
+        // The unassigned figure comes from the same read the Savings page's
+        // Unallocated pot uses, so the assistant and the pot can never quote
+        // two different amounts; the category split stays on the scoped
+        // dashboard, which is why this tool remains in DASHBOARD_TOOLS.
+        const overview = await getSavingsOverview(goalMonthFor(period));
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({
+            tool: name,
+            result: savingsPotentialToolResult(scoped, overview, period),
+          }),
+        });
+        toolRan = true;
+        continue;
+      }
+
       if (name === "get_subscriptions") {
         historyRows ??= await listTransactions({});
         messages.push({

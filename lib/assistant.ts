@@ -181,7 +181,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "get_savings_potential",
     description:
-      "Where the customer could realistically save: spending split into fixed costs (housing, insurance, taxes — not cuttable) and the flexible categories, ranked. The right tool for any 'where could I save money' question; a pie of the flexible spending is shown alongside.",
+      "Where the customer could realistically save. Returns the month's unassigned money (income minus spending minus what is already in savings goals — the same figure the app's Unallocated pot shows, negative when the month overspent) plus spending split into fixed costs (housing, insurance, taxes — not cuttable) and the flexible categories, ranked. The right tool for any 'where/how much could I save' question.",
     parameters: PERIOD_PARAMETERS,
   },
   {
@@ -370,26 +370,8 @@ export function runTool(
         },
       };
     }
-    case "get_savings_potential": {
-      const fixed = categories.filter((s) => FIXED_EXPENSE_CATEGORIES.has(s.key));
-      const flexible = categories.filter(
-        (s) => !FIXED_EXPENSE_CATEGORIES.has(s.key),
-      );
-      const fixedTotal = fixed.reduce((sum, s) => sum + s.amount, 0);
-      const flexibleTotal = flexible.reduce((sum, s) => sum + s.amount, 0);
-      return {
-        result: {
-          period: scope,
-          total_spending_chf: chf(totals.expense),
-          fixed_costs_chf: chf(fixedTotal),
-          fixed_categories: fixed.map((s) => s.key),
-          flexible_spending_chf: chf(flexibleTotal),
-          flexible_categories: sliceRows(flexible),
-          note: "Fixed costs cannot realistically be cut — advise on the largest flexible categories.",
-        },
-      };
-    }
     case "run_sql":
+    case "get_savings_potential":
     case "get_subscriptions":
     case "get_recent_anomalies":
     case "get_savings_goals":
@@ -664,6 +646,49 @@ export function subscriptionsToolResult(rows: Transaction[]): unknown {
       last_charged: s.lastOn,
       cost_per_year_chf: chf(s.yearlyMinor),
     })),
+  };
+}
+
+/**
+ * The get_savings_potential payload: two halves that answer "where could I
+ * save" together. The headline is the **unassigned money**, taken from the
+ * very read the Savings page's Unallocated pot uses (`getSavingsOverview`,
+ * income minus spending minus what is already in goals) — the same logic, so
+ * the assistant and the pot can never quote two different figures. Negative
+ * means the month overspent, and the tool says so instead of flooring it.
+ * The second half is the fixed/flexible category split over the asked
+ * window, which says where future spending could realistically be cut.
+ */
+export function savingsPotentialToolResult(
+  dashboard: Dashboard,
+  overview: SavingsOverview | null,
+  period?: Period,
+): unknown {
+  const { totals, categories } = dashboard;
+  const fixed = categories.filter((s) => FIXED_EXPENSE_CATEGORIES.has(s.key));
+  const flexible = categories.filter(
+    (s) => !FIXED_EXPENSE_CATEGORIES.has(s.key),
+  );
+  const fixedTotal = fixed.reduce((sum, s) => sum + s.amount, 0);
+  const flexibleTotal = flexible.reduce((sum, s) => sum + s.amount, 0);
+  const unassigned =
+    overview && overview.month !== null
+      ? {
+          unassigned_month: overview.month,
+          unassigned_chf: chf(overview.freeMinor),
+          month_over: overview.monthEnded,
+        }
+      : {};
+  return {
+    period: period?.label ?? "all statements",
+    ...unassigned,
+    net_saved_chf: chf(totals.net),
+    total_spending_chf: chf(totals.expense),
+    fixed_costs_chf: chf(fixedTotal),
+    fixed_categories: fixed.map((s) => s.key),
+    flexible_spending_chf: chf(flexibleTotal),
+    flexible_categories: sliceRows(flexible),
+    note: "unassigned_chf is what that month actually left over and has not been put into a goal — the same figure the app's Unallocated pot shows; negative means the month overspent. Lead with it, then advise cutting in the largest flexible categories. Fixed costs cannot realistically be cut.",
   };
 }
 

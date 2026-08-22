@@ -489,8 +489,9 @@ Unchanged from the template this app grew out of, and still exactly true.
 - **On a grey panel, a chart's separators are `--surface-muted`, and a bar
   track is `--surface`.** `useChartTokens()` exposes both. Anything filled with
   its own ground disappears — that is why the donut's wedge borders moved off
-  `--surface` and the merchant bars' tracks moved onto it. `chat-pie.tsx` stays
-  on `--surface`: it sits in the sidebar, not on a panel.
+  `--surface` and the merchant bars' tracks moved onto it. (The chat once had
+  its own pie on `--surface`; the assistant no longer draws, so the dashboard
+  charts are the rule's only consumers.)
 - **Never animate the page shell in.** Motion applies `initial` styles during
   SSR, so an entrance animation on a container ships it at `opacity: 0` and the
   page stays blank until hydration — or forever, if JS fails. `animate-pulse` in
