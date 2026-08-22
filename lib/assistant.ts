@@ -73,7 +73,7 @@ export const SYSTEM_PROMPT = [
   'Every tool accepts an optional period argument for time-scoped questions, e.g. [{"get_spending_by_category": {"period": "ytd"}}]. Accepted values: ytd, a year like 2025, a month like 2025-03, a range like 2025-01-01..2025-03-31, last_month, or last_3_months. When you omit it the app scopes to the current year (year-to-date) by default; pass an explicit range, or the user must say "all time", for the full history.',
   "Be concise: 2–3 short sentences, plain text, no markdown, no lists.",
   "All amounts are Swiss francs. Write them exactly as the tools format them, e.g. CHF 1'234.55 — apostrophe as thousands separator, two decimals.",
-  'Prefer a chart as the answer whenever the data allows it: call display_chart with a source — e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie chart from the customer\'s real data, and the tool result hands you the same figures for your caption, so display_chart alone usually answers spending, habit, and overview questions.',
+  'Default to showing a chart — the answer should almost always include one. For any question about spending, merchants, income, an overview, or how money is split, call display_chart with a source, e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie from the customer\'s real data and hands you the same figures for your caption, so display_chart alone answers most questions. Only skip the chart for a single specific number, a date, or a yes/no answer.',
   "When a chart will be shown, your text is its caption: one or two sentences naming the biggest item and the takeaway. Never describe chart shapes and never list many figures the chart already shows.",
   "When the tools cannot answer — a specific transaction, a day of week, a count, a comparison they don't cover — call run_sql with one SQLite SELECT over the transactions table; the schema is in the tool description.",
   "For a visual that is not a pie — bars over months, a line, a scatter — call display_echart with a complete Apache ECharts option as pure JSON, built only from figures you already fetched with the tools or run_sql. When the user names a chart type that is not a pie, display_echart is the only right tool.",
@@ -895,12 +895,40 @@ export function routeTool(question: string): ToolName | undefined {
     return "get_overview";
   }
   if (
-    /\b(categor(y|ies)|breakdown|distribution|split|share|pie|chart|graph|spend(ing)?|expenses?|allocat|overview|total|finances?|money)\b/.test(q) ||
-    /where .*(go|goes|going|spent?)/.test(q)
+    /\b(categor(y|ies)|breakdown|distribution|split|share|pie|chart|graph|spend(ing)?|expenses?|allocat|overview|summary|total|financ\w*|money|doing|habits?|health|standing)\b/.test(q) ||
+    /where .*(go|goes|going|spent?)/.test(q) ||
+    /how (am|are|is|'?s|are my|is my)\b/.test(q)
   ) {
     return "get_spending_by_category";
   }
   return undefined;
+}
+
+/**
+ * Whether a turn that produced no chart of its own should still get one. True
+ * when the question is about the composition or size of money — the cases a
+ * pie answers well — and false for the row-level, count, and month-series
+ * questions that read better as a sentence or a different shape. Defers to
+ * `routeTool` so this can never disagree with how the question is otherwise
+ * classified.
+ */
+export function shouldDefaultChart(question: string): boolean {
+  const routed = routeTool(question);
+  return (
+    routed === "display_chart" ||
+    routed === "get_spending_by_category" ||
+    routed === "get_top_merchants" ||
+    routed === "get_income_breakdown"
+  );
+}
+
+/** The pie-bearing tool for a default chart's source. */
+export function chartToolForSource(source: ChartSource): ToolName {
+  return source === "merchants"
+    ? "get_top_merchants"
+    : source === "income"
+      ? "get_income_breakdown"
+      : "get_spending_by_category";
 }
 
 /** Drop Apertus special tokens and any tool-call block from a visible reply. */

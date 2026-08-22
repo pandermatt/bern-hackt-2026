@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getDashboard, listTransactions } from "@/app/actions/transactions";
 import {
+  chartToolForSource,
   composeEChart,
   defaultChartSource,
   defaultPeriod,
@@ -20,6 +21,7 @@ import {
   routeTool,
   runTool,
   sanitizeEChartsOption,
+  shouldDefaultChart,
   stripModelMarkup,
   suggestFollowUps,
   wantsNonPieChart,
@@ -421,12 +423,16 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     return failure("The model returned an empty answer — try asking again.");
   }
 
-  // The user named a bar or line chart and the model composed nothing of its
-  // own — the server keeps that promise from the same real aggregates. Never
-  // override a chart the model explicitly produced (it may have deliberately
-  // chosen a pie), only an auto-attached one or none.
+  // Chart safety net — the assistant leans visual. Two cases, both only when
+  // the model didn't compose a chart itself (an explicit chart is never
+  // overridden; it may have deliberately chosen its shape):
+  //   1. the user named a bar/line chart → compose it from real aggregates;
+  //   2. no chart came out but the question is about the shape or size of the
+  //      customer's money → attach a pie from real aggregates by default.
+  // Both draw only figures the tools produced, scoped to the resolved window.
   const wantedType = wantsNonPieChart(question.content);
-  if (wantedType && !chartExplicit) {
+  const wantsDefaultChart = !chart && shouldDefaultChart(question.content);
+  if (!chartExplicit && (wantedType || wantsDefaultChart)) {
     const window = resolvePeriod(
       periodFromQuestion(question.content) ?? defaultPeriod(question.content),
       dashboard.facets.last,
@@ -434,9 +440,16 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     const scopedForChart = window
       ? ((await getDashboard({ from: window.from, to: window.to })) ?? dashboard)
       : dashboard;
-    chart =
-      composeEChart(wantedType, question.content, scopedForChart, window) ??
-      chart;
+    if (wantedType) {
+      chart =
+        composeEChart(wantedType, question.content, scopedForChart, window) ??
+        chart;
+    } else {
+      const source = defaultChartSource(question.content);
+      chart =
+        runTool(chartToolForSource(source), scopedForChart, window).chart ??
+        chart;
+    }
   }
 
   // The model's own proposals lead; the deterministic ones cover the turns

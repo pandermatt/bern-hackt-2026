@@ -7,6 +7,7 @@ import {
   looksLikeStall,
   routeTool,
   sanitizeEChartsOption,
+  shouldDefaultChart,
   validateSelect,
   wantsNonPieChart,
 } from "@/lib/assistant";
@@ -183,6 +184,22 @@ describe("routeTool", () => {
   it("keeps aggregate superlatives on the charting tools", () => {
     expect(routeTool("What's my biggest spending category?")).toBe("get_spending_by_category");
     expect(routeTool("Who is my largest merchant?")).toBe("get_top_merchants");
+  });
+});
+
+describe("shouldDefaultChart", () => {
+  it("attaches a default chart to money-composition questions", () => {
+    expect(shouldDefaultChart("How am I doing with spending?")).toBe(true);
+    expect(shouldDefaultChart("Who are my top merchants?")).toBe(true);
+    expect(shouldDefaultChart("Give me an overview of my finances")).toBe(true);
+    expect(shouldDefaultChart("How is my income split?")).toBe(true);
+  });
+
+  it("does not chart row-level, count, or scalar questions", () => {
+    expect(shouldDefaultChart("What was my single largest expense?")).toBe(false);
+    expect(shouldDefaultChart("How many transactions did I make in March?")).toBe(false);
+    expect(shouldDefaultChart("How much did I save this year?")).toBe(false);
+    expect(shouldDefaultChart("Hi there")).toBe(false);
   });
 });
 
