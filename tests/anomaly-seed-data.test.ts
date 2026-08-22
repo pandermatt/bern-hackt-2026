@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   analyzeTransactionAnomalies,
+  attentionFor,
   canEscalateToAlert,
+  RULE_ATTENTION,
+  RULE_EMOJIS,
   type TransactionInput,
 } from "@/lib/anomaly-engine";
 import { toRecords } from "@/scripts/lib/csv";
@@ -180,6 +183,33 @@ describe("anomaly engine over the shipped seed statements", () => {
     for (const row of rows) {
       const overlapping = rulesCovering(row.id).filter((r) => amountRules.has(r));
       expect(overlapping.length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("explains every rule it can emit, in every language", () => {
+    // The badge panel and the rule page look their explanation up by rule id.
+    // A rule added without one renders bare, and a translation added to one
+    // locale but not the other is invisible until someone switches language.
+    const ruleIds = Object.keys(RULE_EMOJIS).sort();
+    for (const locale of ["en", "de"] as const) {
+      const messages = JSON.parse(
+        readFileSync(join(process.cwd(), `messages/${locale}.json`), "utf8"),
+      );
+      expect(Object.keys(messages.AnomalyRules ?? {}).sort(), locale).toEqual(ruleIds);
+      for (const id of ruleIds) {
+        expect(messages.AnomalyRules[id].length, `${locale}/${id}`).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it("classifies every rule it can emit", () => {
+    // The typed key on RULE_ATTENTION already makes an unclassified rule a
+    // build error; this says the same thing with a readable failure, and this
+    // file is where "does the whole thing still hang together" lives.
+    expect(Object.keys(RULE_ATTENTION).sort()).toEqual(Object.keys(RULE_EMOJIS).sort());
+
+    for (const insight of insights) {
+      expect(["action", "context"]).toContain(attentionFor(insight.rule_id));
     }
   });
 

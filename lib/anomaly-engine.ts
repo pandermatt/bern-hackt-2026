@@ -131,7 +131,7 @@ export function canEscalateToAlert(
   }
 }
 
-export const RULE_EMOJIS: Record<string, string> = {
+export const RULE_EMOJIS = {
   AMOUNT_SPIKE: "🔺",
   UNUSUALLY_LARGE_TRANSACTION: "💰",
   NEW_MERCHANT: "🏪",
@@ -158,7 +158,78 @@ export const RULE_EMOJIS: Record<string, string> = {
   EXPENSE_GROWTH_TREND: "📊",
   SUBSCRIPTION_ACCUMULATION: "📚",
   UNUSUAL_FINANCIAL_IMPACT: "⚠️",
+} as const satisfies Record<string, string>;
+
+/** Every rule the engine can emit. */
+export type RuleId = keyof typeof RULE_EMOJIS;
+
+/** Findings arrive as a bare `string` from the database, so this narrows. */
+export function emojiFor(ruleId: string): string {
+  return (RULE_EMOJIS as Record<string, string>)[ruleId] ?? "⚠️";
+}
+
+/**
+ * Whether a finding is something to *do* something about, or something to
+ * simply know.
+ *
+ * `/anomalies` splits on this, and the split is the whole value of that page: a
+ * duplicate charge is a refund request, a shifted savings rate is a fact about
+ * last month. Both are true, only one has a next step.
+ *
+ * The bar for "action" is deliberately high — is there a plausible next move,
+ * and would you regret not looking? A column of fifteen is not a column anyone
+ * works through. Three that look actionable and are not:
+ *
+ *  - `AMOUNT_SPIKE` is merchant-relative and the highest-volume of the amount
+ *    rules. "You spent more at Coop than usual" — you know.
+ *  - `BALANCE_DROP` describes a seven-day window, not an event, so there is
+ *    nothing to act on.
+ *  - `LARGE_TRANSFER` moves your own money between your own accounts; this app
+ *    defines a transfer that way (see `applyFilters` in lib/insights.ts).
+ *
+ * `NEW_COUNTERPARTY` is the close call — a first payment to an unseen recipient
+ * is the strongest fraud signal here — but under that same definition a
+ * transfer has no third party, so it stays context until one can exist.
+ *
+ * Typed against `RuleId`, so a rule added later fails the build rather than
+ * defaulting quietly into "just so you know".
+ */
+export type Attention = "action" | "context";
+
+export const RULE_ATTENTION: Record<RuleId, Attention> = {
+  REPEAT_CHARGE: "action",
+  MISSING_EXPECTED_INCOME: "action",
+  INCOME_DEVIATION: "action",
+  RECURRING_PAYMENT_CHANGE: "action",
+  NEW_RECURRING_PAYMENT: "action",
+  RECURRING_PAYMENT_DISAPPEARANCE: "action",
+  SUBSCRIPTION_ACCUMULATION: "action",
+  UNUSUALLY_LARGE_TRANSACTION: "action",
+  UNUSUAL_FINANCIAL_IMPACT: "action",
+
+  AMOUNT_SPIKE: "context",
+  NEW_MERCHANT: "context",
+  NEW_CATEGORY: "context",
+  FREQUENCY_SPIKE: "context",
+  CATEGORY_SPENDING_SPIKE: "context",
+  UNUSUAL_DAY: "context",
+  NEW_COUNTERPARTY: "context",
+  LARGE_TRANSFER: "context",
+  BALANCE_DROP: "context",
+  SAVINGS_RATE_CHANGE: "context",
+  CATEGORY_SHIFT: "context",
+  MERCHANT_CONCENTRATION: "context",
+  ROUND_NUMBER_TRANSACTION: "context",
+  REFUND_ANOMALY: "context",
+  CASH_WITHDRAWAL_SPIKE: "context",
+  PAYMENT_METHOD_SHIFT: "context",
+  EXPENSE_GROWTH_TREND: "context",
 };
+
+/** Unknown ids (a stale finding from an older engine) read as context. */
+export function attentionFor(ruleId: string): Attention {
+  return (RULE_ATTENTION as Record<string, Attention>)[ruleId] ?? "context";
+}
 
 export interface AnomalyInsight {
   rule_id: string;
@@ -1695,7 +1766,7 @@ export function analyzeTransactionAnomalies(
    */
   const stamped = finalInsights.map((r) => ({
     ...r,
-    emoji: RULE_EMOJIS[r.rule_id] ?? "⚠️",
+    emoji: emojiFor(r.rule_id),
     kind: derivedKind(r.severity),
   }));
 

@@ -1,4 +1,4 @@
-import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
+import { LogIn, LogOut, TriangleAlert, User as UserIcon, ArrowRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { logout } from "@/app/actions/auth";
@@ -31,6 +31,16 @@ export function AppHeader({ user }: { user: User | null }) {
 
         {user ? (
           <div className="flex items-center gap-2.5">
+            {/* Label hidden below `sm` like the account pill's: at 375px this
+                row is already logo, account and sign-out. */}
+            <Link
+              href="/anomalies"
+              aria-label={t('anomalies')}
+              className={`flex min-h-10 shrink-0 items-center gap-2 sm:min-h-0 ${CONTROL}`}
+            >
+              <TriangleAlert className="size-3.5 text-text-subtle" />
+              <span className="hidden sm:inline">{t('anomalies')}</span>
+            </Link>
             <Link
               href="/account"
               aria-label={t('accountSettings')}

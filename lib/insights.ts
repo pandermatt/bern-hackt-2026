@@ -19,6 +19,13 @@ export type Filters = {
   merchant?: string;
   kind?: "expense" | "income";
   q?: string;
+  /**
+   * A rule id from the anomaly engine — the ledger narrowed to the rows one
+   * kind of finding implicates. The matching transaction ids cannot be derived
+   * from a row (findings live in their own table), so the caller resolves them
+   * and hands them to `applyFilters` alongside this.
+   */
+  anomaly?: string;
   includeTransfers: boolean;
 };
 
@@ -191,13 +198,28 @@ function prevMonth(month: string): string {
     : `${year}-${String(index - 1).padStart(2, "0")}`;
 }
 
+/**
+ * `anomalyIds` carries the transactions matching `filters.anomaly`. It is a
+ * parameter rather than a lookup because this module is pure and has no
+ * database — findings live in their own table, and a `Transaction` cannot say
+ * whether one points at it.
+ *
+ * The predicate below keys off the *filter*, not the set, so a caller that asks
+ * for an anomaly and forgets the set gets an empty ledger rather than an
+ * unfiltered one. That matters because there are two callers — the dashboard
+ * and the infinite-scroll chunk — and a silent disagreement between them
+ * corrupts the offsets the chunks index by. Failing closed is also the right
+ * answer for a rule id nothing matches: no rows, like `?merchant=nonesuch`.
+ */
 export function applyFilters(
   rows: Transaction[],
   filters: Filters,
+  anomalyIds?: ReadonlySet<number>,
 ): Transaction[] {
   const needle = filters.q?.toLowerCase();
 
   return rows.filter((row) => {
+    if (filters.anomaly && !anomalyIds?.has(row.id)) return false;
     // Transfers move money between the owner's own accounts. Counting them as
     // spending would double every credit-card purchase, so they are out unless
     // asked for explicitly.

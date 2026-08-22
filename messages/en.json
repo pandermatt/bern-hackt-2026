@@ -3,7 +3,8 @@
     "accountSettings": "Account settings",
     "signOut": "Sign out",
     "signIn": "Sign in",
-    "getStarted": "Get started"
+    "getStarted": "Get started",
+    "anomalies": "Anomalies"
   },
   "AppFooter": {
     "tagline": "Private spending insights from your own statements.",
@@ -234,23 +235,56 @@
     "Finished": "Finished",
     "Failed": "Failed"
   },
-  "AnomalyInsights": {
-    "emptyTitle": "Statistical Anomaly Engine",
-    "emptyBody": "No statistical anomalies or behavioral deviations detected in the current transaction set.",
-    "heading": "Deterministic Anomaly Detection",
-    "count": "{count, plural, one {# insight} other {# insights}}",
-    "subtitle": "Mathematical deviations computed against your historical transaction baselines (MAD, percentiles & intervals).",
-    "filterAll": "All ({count})",
-    "filterHigh": "High ({count})",
-    "filterMedium": "Medium ({count})",
-    "filterLow": "Low ({count})",
-    "showEvidence": "Evidence",
-    "hideEvidence": "Hide data",
-    "metricsHeading": "Deterministic Supporting Metrics & Proof",
-    "referencedIds": "Referenced Transaction IDs:",
-    "severityHigh": "High",
-    "severityMedium": "Medium",
-    "severityLow": "Low"
+  "Anomalies": {
+    "title": "Anomalies",
+    "subtitle": "What the last scan found, grouped by the kind of finding.",
+    "subtitleUnscanned": "Nothing has been analysed yet.",
+    "actionHeading": "Worth a look",
+    "actionMeta": "Findings you may want to act on",
+    "contextHeading": "Just so you know",
+    "contextMeta": "Patterns in your spending, for context",
+    "count": "{count, plural, one {# transaction} other {# transactions}}",
+    "emptyTitle": "Nothing looks off",
+    "emptyBody": "The last scan found nothing worth flagging across your transactions.",
+    "neverScannedTitle": "No scan has run yet",
+    "neverScannedBody": "Run a scan to flag duplicate charges, unusual amounts and missed recurring payments.",
+    "runningBody": "A scan is running now. Findings will appear here as soon as it finishes.",
+    "runScan": "Run a scan",
+    "staleTitle": "These findings are out of date",
+    "staleBody": "Your statements have been re-imported since the last scan, so its findings no longer line up with your transactions. Run it again.",
+    "seeAll": "See all of this kind",
+    "seeInLedger": "Show these in the ledger",
+    "thisFinding": "This finding",
+    "otherOfThisKind": "Others of this kind",
+    "allOfThisKind": "All of this kind"
+  },
+  "AnomalyRules": {
+    "AMOUNT_SPIKE": "Much larger than what this merchant usually charges you. Sometimes a bulk purchase, sometimes a mistyped amount.",
+    "BALANCE_DROP": "An unusually heavy week of outflows taken together, rather than any single payment.",
+    "CASH_WITHDRAWAL_SPIKE": "A cash withdrawal well above your usual amount.",
+    "CATEGORY_SHIFT": "This category takes up a noticeably different share of your spending than it used to.",
+    "CATEGORY_SPENDING_SPIKE": "Spending in this category rose sharply against the months before it.",
+    "EXPENSE_GROWTH_TREND": "Spending in this category has climbed steadily for several months in a row.",
+    "FREQUENCY_SPIKE": "You used this merchant far more often than usual in a short window.",
+    "INCOME_DEVIATION": "Regular income arrived, but for a noticeably different amount than usual. Check the payslip or invoice behind it.",
+    "LARGE_TRANSFER": "A transfer between your own accounts that is much larger than your usual one.",
+    "MERCHANT_CONCENTRATION": "One merchant accounted for an unusually large share of the month's spending.",
+    "MISSING_EXPECTED_INCOME": "A payment that normally arrives on a regular rhythm is overdue. If it is your salary, it is worth chasing.",
+    "NEW_CATEGORY": "The first spending you have recorded in this category.",
+    "NEW_COUNTERPARTY": "Money moved to a recipient that has not appeared in your transfers before.",
+    "NEW_MERCHANT": "The first time this merchant has appeared in your statements.",
+    "NEW_RECURRING_PAYMENT": "A payment has started repeating on a schedule that was not there before — often a free trial that has begun charging.",
+    "PAYMENT_METHOD_SHIFT": "Your spending moved between accounts or cards compared with previous months.",
+    "RECURRING_PAYMENT_CHANGE": "A subscription or standing payment changed price. Decide whether it is still worth what it now costs.",
+    "RECURRING_PAYMENT_DISAPPEARANCE": "A regular payment has stopped arriving. That can mean a cancelled service, or a card that expired and a payment that silently failed.",
+    "REFUND_ANOMALY": "A refund noticeably larger than the ones you usually receive.",
+    "REPEAT_CHARGE": "The same merchant billed an identical amount more than once on one day. Often a genuine double charge — worth comparing against your receipt and asking for a refund.",
+    "ROUND_NUMBER_TRANSACTION": "A large, exactly round amount — more typical of a transfer or a manual payment than a purchase.",
+    "SAVINGS_RATE_CHANGE": "The share of income you kept this month moved sharply against recent months.",
+    "SUBSCRIPTION_ACCUMULATION": "Several new recurring payments have appeared over a short period. Together they add up to more than any one of them looks.",
+    "UNUSUALLY_LARGE_TRANSACTION": "One of the largest outflows in your whole history. Worth a glance simply to confirm you made it.",
+    "UNUSUAL_DAY": "This merchant is normally used on other days of the week.",
+    "UNUSUAL_FINANCIAL_IMPACT": "A single payment large enough to matter against a month's income, not just against your usual spending."
   },
   "DemoData": {
     "heading": "Demo & Synthetic Data",
@@ -432,6 +466,7 @@
     "login": "Sign in",
     "register": "Create an account",
     "account": "Account settings",
-    "offline": "Offline"
+    "offline": "Offline",
+    "anomalies": "Anomalies"
   }
 }

@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/db";
-import { transactions, users, type NewTransaction, type User } from "@/db/schema";
+import {
+  anomalies,
+  transactions,
+  users,
+  type NewTransaction,
+  type User,
+} from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
 
 /*
@@ -267,6 +273,121 @@ describe("filters", () => {
       const chunk = await getLedgerChunk(Number.NaN, {});
       expect(chunk?.rows).toHaveLength(2);
     });
+  });
+});
+
+describe("the anomaly filter", () => {
+  /** Hangs a finding on a transaction, the way a completed scan would. */
+  async function flag(transactionId: number, ruleId: string) {
+    await db.insert(anomalies).values({
+      userId: alice.id,
+      transactionId,
+      ruleId,
+      severity: "medium",
+      title: `${ruleId} title`,
+      description: `${ruleId} description`,
+      icon: "lucide:copy",
+      emoji: "👯",
+      metrics: "{}",
+    });
+  }
+
+  async function seed(count: number, overrides: Partial<NewTransaction> = {}) {
+    const rows: NewTransaction[] = [];
+    for (let i = 0; i < count; i++) {
+      rows.push(
+        line({
+          userId: alice.id,
+          externalId: `flagged-${i}-${Math.random()}`,
+          bookedOn: `2025-0${(i % 9) + 1}-15`,
+          ...overrides,
+        }),
+      );
+    }
+    return db.insert(transactions).values(rows).returning();
+  }
+
+  it("narrows the ledger to the transactions the finding implicates", async () => {
+    const rows = await seed(3);
+    await flag(rows[0].id, "REPEAT_CHARGE");
+    await flag(rows[2].id, "REPEAT_CHARGE");
+
+    const dashboard = await getDashboard({ anomaly: "REPEAT_CHARGE" });
+    expect(dashboard?.transactions.map((r) => r.id).sort()).toEqual(
+      [rows[0].id, rows[2].id].sort(),
+    );
+    expect(dashboard?.totalCount).toBe(2);
+  });
+
+  it("shows nothing for a rule that matched nothing, rather than everything", async () => {
+    await seed(3);
+    const dashboard = await getDashboard({ anomaly: "NO_SUCH_RULE" });
+    expect(dashboard?.transactions).toEqual([]);
+    expect(dashboard?.totalCount).toBe(0);
+  });
+
+  it("reaches a flagged transfer only when transfers are asked for", async () => {
+    // The reason every link on /anomalies carries includeTransfers.
+    const [transfer] = await seed(1, { kind: "transfer" });
+    await flag(transfer.id, "LARGE_TRANSFER");
+
+    expect((await getDashboard({ anomaly: "LARGE_TRANSFER" }))?.totalCount).toBe(0);
+    expect(
+      (await getDashboard({ anomaly: "LARGE_TRANSFER", includeTransfers: "true" }))
+        ?.totalCount,
+    ).toBe(1);
+  });
+
+  it("composes with the other filters", async () => {
+    const rows = await seed(2, { bookedOn: "2025-01-10" });
+    const [late] = await seed(1, { bookedOn: "2025-08-10" });
+    for (const r of [...rows, late]) await flag(r.id, "REPEAT_CHARGE");
+
+    const dashboard = await getDashboard({
+      anomaly: "REPEAT_CHARGE",
+      from: "2025-06-01",
+    });
+    expect(dashboard?.transactions.map((r) => r.id)).toEqual([late.id]);
+  });
+
+  it("labels the filter with what the rule calls itself", async () => {
+    const [row] = await seed(1);
+    await flag(row.id, "REPEAT_CHARGE");
+
+    expect((await getDashboard({ anomaly: "REPEAT_CHARGE" }))?.anomalyLabel).toBe(
+      "REPEAT_CHARGE title",
+    );
+    // Unknown rule: no label, but the chip still has to render, so the filter
+    // stays clearable rather than stranding an empty ledger.
+    expect((await getDashboard({ anomaly: "NO_SUCH_RULE" }))?.anomalyLabel).toBeNull();
+  });
+
+  it("falls back to no filter on a malformed value instead of throwing", async () => {
+    await seed(3);
+    for (const anomaly of [123, "lowercase", "x".repeat(500), ["a", "b"]]) {
+      const dashboard = await getDashboard({ anomaly });
+      expect(dashboard?.filters.anomaly).toBeUndefined();
+      expect(dashboard?.totalCount).toBeGreaterThan(0);
+    }
+  });
+
+  it("agrees with the ledger chunk past the first page", async () => {
+    // More than PAGE_SIZE flagged rows, so a non-zero offset is exercised. This
+    // is the case that catches getDashboard and getLedgerChunk resolving the
+    // anomaly id set differently — the offsets would silently stop lining up.
+    const rows = await seed(60);
+    for (const r of rows) await flag(r.id, "REPEAT_CHARGE");
+
+    const filters = { anomaly: "REPEAT_CHARGE" };
+    const dashboard = await getDashboard(filters);
+    expect(dashboard?.totalCount).toBe(60);
+    expect(dashboard?.transactions).toHaveLength(50);
+
+    const second = await getLedgerChunk(dashboard!.nextOffset!, filters);
+    expect(second?.rows).toHaveLength(10);
+    // No overlap with the first page, and nothing skipped between them.
+    const seen = new Set(dashboard!.transactions.map((r) => r.id));
+    expect(second!.rows.every((r) => !seen.has(r.id))).toBe(true);
   });
 });
 

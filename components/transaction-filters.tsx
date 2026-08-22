@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useTransition, type ReactNode } from "react";
@@ -78,11 +78,14 @@ export function TransactionFilters({
   facets,
   filters,
   accountTotals,
+  anomalyLabel,
 }: {
   facets: Facets;
   filters: Filters;
   /** Net movement per account, shown against each name in the dropdown. */
   accountTotals: Record<string, number>;
+  /** What the active `?anomaly=` filter is called, when there is one. */
+  anomalyLabel?: string | null;
 }) {
   const t = useTranslations("Filters");
   const router = useRouter();
@@ -153,6 +156,22 @@ export function TransactionFilters({
           ))}
         </select>
       </Field>
+
+      {/* The one filter with no control of its own — it arrives from a link on
+          /anomalies. It renders even when the label came back null (a rule id
+          that matches nothing), because otherwise the ledger is empty with
+          nothing on screen explaining why or offering a way out. */}
+      {filters.anomaly && (
+        <button
+          type="button"
+          onClick={() => update("anomaly", "")}
+          className="inline-flex h-10 items-center gap-2 rounded-full border border-accent bg-accent-soft pl-4 pr-3 text-[13px] font-medium text-accent transition-colors hover:bg-surface-muted"
+        >
+          <span className="truncate">{anomalyLabel ?? filters.anomaly}</span>
+          <X aria-hidden className="size-3.5 shrink-0" />
+          <span className="sr-only">{t("clear")}</span>
+        </button>
+      )}
 
       {active && (
         <button
