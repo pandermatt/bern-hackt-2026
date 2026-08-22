@@ -6,7 +6,6 @@ import localFont from "next/font/local";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
 import { LocaleSync } from "@/components/locale-sync";
@@ -179,8 +178,17 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[lo
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>
             <AppHeader user={user} />
+            {/* No footer here. It is the marketing footer — under the ledger
+                or the budget page it was a second, weaker navigation arguing
+                with the header and the tab bar — so `app/[locale]/page.tsx`
+                renders it for itself and no other route has one.
+
+                Deliberately *not* a route check around it in this layout: the
+                only way to ask which route is rendering, from here, is a client
+                component, and that ships the whole footer to every page to drop
+                it after hydration — a flash on every navigation, and a footer
+                that never leaves with JavaScript off. */}
             {children}
-            <AppFooter user={user} />
             {/* Gated on `user` for the same reason `HeaderNav` is — signed-out
                 visitors have nothing to navigate between. */}
             {user && <TabBar />}

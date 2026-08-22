@@ -5,6 +5,7 @@ import { HeaderNav } from "@/components/header-nav";
 
 import { logout } from "@/app/actions/auth";
 import { HideOnRoute } from "@/components/hide-on-route";
+import { LanguageSelector } from "@/components/language-selector";
 import { Logo } from "@/components/logo";
 import type { User } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
@@ -65,10 +66,16 @@ export function AppHeader({ user }: { user: User | null }) {
             </form>
           </div>
         ) : (
-          /* Each of these is dropped on the page it leads to — see
-             `HideOnRoute`. On `/login` and `/register` that leaves one
-             control, which is the one offering the *other* page. */
-          <div className="flex items-center gap-3">
+          /* Each of the two links is dropped on the page it leads to — see
+             `HideOnRoute`. On `/login` and `/register` that leaves one link,
+             which is the one offering the *other* page. */
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Signed out, this is now the only place to change language: the
+                footer used to carry it, and the footer now renders on the
+                landing page alone — which would have left a visitor reading
+                /login or /register with no way to switch. Signed in it lives
+                on /account, so this pair never both appear. */}
+            <LanguageSelector />
             <HideOnRoute route="/login">
               <Link
                 href="/login"

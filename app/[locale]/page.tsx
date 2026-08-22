@@ -1,3 +1,4 @@
+import { AppFooter } from "@/components/app-footer";
 import { Landing } from "@/components/landing";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
@@ -26,5 +27,18 @@ export default async function Index({ params }: PageProps<"/[locale]">) {
   const user = await getCurrentUser();
   if (user) return redirect({ href: "/home", locale });
 
-  return <Landing />;
+  // The footer lives here rather than in the layout: it is the marketing
+  // footer, and this is the marketing page. Rendering it from the route keeps
+  // it server-side — a client-side route check in the layout would ship it to
+  // every page and drop it after hydration, which is a flash on each
+  // navigation and no removal at all without JavaScript.
+  //
+  // It takes no `user`, and cannot: anyone with a session was redirected to
+  // /home three lines up, so this page is only ever read signed out.
+  return (
+    <>
+      <Landing />
+      <AppFooter />
+    </>
+  );
 }

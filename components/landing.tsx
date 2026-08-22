@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { LandingPreview } from "@/components/landing-preview";
+import { LandingDragon } from "@/components/landing-dragon";
 import { TABS } from "@/components/nav-tabs";
 import { Link } from "@/i18n/navigation";
 
@@ -98,14 +98,16 @@ export function Landing() {
         </div>
 
         {/* ─────────────────────────────────────────────────────────────
-            2. INTERACTIVE DASHBOARD PREVIEW
+            2. THE DRAGON, WAITING TO BE ASKED
 
-            The app's own charts, on invented figures — see
-            `components/landing-preview.tsx`. It is the one client component on
-            this page.
+            This slot used to hold a mock dashboard: four ECharts views on
+            invented figures. It advertised the charts, which are the least
+            distinctive thing here — every finance app has a donut. The mascot
+            and the assistant are what nobody else has, so they take the hero
+            and the figures wait until they have an account to be about.
            ───────────────────────────────────────────────────────────── */}
-        <div className="mx-auto mt-12 w-full max-w-5xl px-5 sm:px-8">
-          <LandingPreview />
+        <div className="mx-auto mt-12 w-full max-w-3xl px-5 sm:px-8">
+          <LandingDragon />
         </div>
       </section>
 

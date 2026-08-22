@@ -1,10 +1,8 @@
 import { Heart } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { HideOnRoute } from "@/components/hide-on-route";
 import { LanguageSelector } from "@/components/language-selector";
 import { LogoMark } from "@/components/logo";
-import type { User } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
 import { site } from "@/lib/site";
 import pkg from "@/package.json";
@@ -32,16 +30,25 @@ import pkg from "@/package.json";
 const FOOTER_LINK =
   "inline-flex min-h-10 items-center rounded-md px-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface-muted hover:text-text sm:min-h-0 sm:rounded-none sm:px-0 sm:text-xs sm:hover:bg-transparent";
 
-export function AppFooter({ user }: { user: User | null }) {
+/**
+ * No `user` prop, and it cannot have one: this renders from
+ * `app/[locale]/page.tsx` alone, and that route redirects anyone with a
+ * session to /home before it gets here. Everything below is therefore the
+ * signed-out arrangement, which used to be half of a conditional.
+ */
+export function AppFooter() {
   const t = useTranslations("AppFooter");
 
   return (
-    /* Gone in the installed app on a phone. This is the marketing footer — the
-       wordmark, a version string and, signed out, the only sign-in links there
-       are. An app opened from a home screen has no use for any of it, and it is
-       the one thing the fixed tab bar would otherwise cover. Untouched at every
-       other width and in every browser tab. */
-    <footer className="w-full border-t border-line bg-surface py-8 app-shell:hidden sm:py-12">
+    /* Rendered by the landing route and nowhere else. It is the marketing
+       footer, and under the ledger or the budget page it was a second, weaker
+       navigation arguing with the header and the tab bar.
+
+       No `app-shell:hidden` any more, either. That was there because the fixed
+       tab bar covered the footer in the installed app; the bar only renders for
+       a signed-in reader, and a signed-in reader is redirected off "/" to
+       /home, so the two can no longer be on screen together. */
+    <footer className="w-full border-t border-line bg-surface py-8 sm:py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-6 px-5 sm:flex-row sm:px-8">
         <div className="flex flex-col items-center gap-2 text-center sm:items-start sm:text-left">
           {/* Not a link: the header's wordmark already goes home, and it knows
@@ -64,32 +71,28 @@ export function AppFooter({ user }: { user: User | null }) {
         </div>
 
         <div className="flex w-full flex-col items-center gap-3 text-xs font-medium text-text-muted sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center sm:gap-5">
-          {/* Signed out, this is the only place to change language — signed
-              in, it lives on /account instead, so the footer does not offer
-              the same control twice. */}
-          {!user && <LanguageSelector />}
+          {/* Also in the header, which is where a visitor reading /login or
+              /register now finds it — this footer does not reach those pages
+              any more. Signed in, the control lives on /account instead, and
+              a signed-in reader never sees this footer at all. */}
+          <LanguageSelector />
 
           {/* The two links share a row of their own below `sm`; `sm:contents`
               drops the box at `sm` so they rejoin the parent row rather than
               needing a second copy behind a breakpoint.
 
-              Each is dropped on the page it leads to, the same way the
-              header's pair is — the footer of `/login` offering "Anmelden"
-              points at the form the reader is looking at. */}
-          {!user && (
-            <div className="flex items-center gap-1 sm:contents">
-              <HideOnRoute route="/login">
-                <Link href="/login" className={FOOTER_LINK}>
-                  {t("signIn")}
-                </Link>
-              </HideOnRoute>
-              <HideOnRoute route="/register">
-                <Link href="/register" className={FOOTER_LINK}>
-                  {t("register")}
-                </Link>
-              </HideOnRoute>
-            </div>
-          )}
+              They used to be wrapped in `HideOnRoute`, so neither pointed at
+              the page the reader was already on. That guard is gone with the
+              footer's other routes: this only renders on "/", which is neither
+              of them. */}
+          <div className="flex items-center gap-1 sm:contents">
+            <Link href="/login" className={FOOTER_LINK}>
+              {t("signIn")}
+            </Link>
+            <Link href="/register" className={FOOTER_LINK}>
+              {t("register")}
+            </Link>
+          </div>
 
           <span className="font-mono text-[11px] text-text-subtle">
             v{pkg.version}
