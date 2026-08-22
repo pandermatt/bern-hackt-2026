@@ -374,9 +374,12 @@ function buildOption(
             : `${Math.round(value / 100).toLocaleString("de-CH")}${
                 value >= max && clipped ? "+" : ""
               }`,
-        // The rings run under these numbers; a plate of page colour keeps them
-        // readable without moving them off the spoke.
-        backgroundColor: tokens.surface,
+        // The rings run under these numbers; a plate of the panel's own colour
+        // keeps them readable without moving them off the spoke. That is
+        // `--surface-muted`, not `--surface`: the radar sits on the grey
+        // section panel now, and a white plate there is a visible chip behind
+        // every tick rather than a hole in the rings.
+        backgroundColor: tokens.surfaceMuted,
         padding: [1, 3],
       },
       axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.12) } },

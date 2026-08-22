@@ -95,7 +95,11 @@ export function SavingsAllocator({
   }
 
   return (
-    <div className="border-t border-line bg-surface-muted/40 px-4 py-4 sm:px-5">
+    /* Sits inside the savings panel, which is already `--surface-muted`, so
+       the tinted strip this used to wear has nothing left to distinguish it
+       from — the rule above is the whole separation, and it is the panel's own
+       surface showing through, like the ledger's dividers. */
+    <div className="border-t border-surface px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="flex items-center gap-1.5 text-[13.5px] font-semibold text-text">
           <PiggyBank className="size-4 text-accent" aria-hidden />
@@ -159,7 +163,9 @@ export function SavingsAllocator({
           type="button"
           onClick={spreadEvenly}
           disabled={pending}
-          className="h-9 cursor-pointer rounded-md border border-line-strong px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-default disabled:opacity-60"
+          /* `bg-surface`, hovering to `surface-hover`: on the grey panel a
+             hover to `surface-muted` is a hover to its own ground. */
+          className="h-9 cursor-pointer rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-default disabled:opacity-60"
         >
           {t("splitEvenly")}
         </button>

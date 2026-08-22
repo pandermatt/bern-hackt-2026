@@ -44,7 +44,8 @@ export function SavingsGoalForm() {
         event.preventDefault();
         if (ready && !pending) submit();
       }}
-      className="flex flex-wrap items-end gap-2.5 border-t border-line px-4 py-3.5 sm:px-5"
+      /* The panel's own surface as the rule, matching the divider above it. */
+      className="flex flex-wrap items-end gap-2.5 border-t border-surface px-4 py-3.5 sm:px-5"
     >
       <label className="min-w-[10rem] flex-1">
         <span className="text-[12.5px] font-medium text-text-muted">
