@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  defaultPeriod,
   extractJsonAfter,
   extractSql,
   looksLikeStall,
@@ -182,6 +183,19 @@ describe("routeTool", () => {
   it("keeps aggregate superlatives on the charting tools", () => {
     expect(routeTool("What's my biggest spending category?")).toBe("get_spending_by_category");
     expect(routeTool("Who is my largest merchant?")).toBe("get_top_merchants");
+  });
+});
+
+describe("defaultPeriod", () => {
+  it("defaults an unscoped question to year-to-date", () => {
+    expect(defaultPeriod("Where does my money go?")).toBe("ytd");
+    expect(defaultPeriod("Who are my top merchants?")).toBe("ytd");
+  });
+
+  it("yields the full history only for an explicit all-time ask", () => {
+    expect(defaultPeriod("Show my spending over all time")).toBeUndefined();
+    expect(defaultPeriod("What are my biggest merchants ever?")).toBeUndefined();
+    expect(defaultPeriod("my lifetime savings")).toBeUndefined();
   });
 });
 

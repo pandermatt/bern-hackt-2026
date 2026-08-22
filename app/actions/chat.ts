@@ -6,6 +6,7 @@ import { getDashboard, listTransactions } from "@/app/actions/transactions";
 import {
   composeEChart,
   defaultChartSource,
+  defaultPeriod,
   extractFollowUps,
   extractJsonAfter,
   extractSql,
@@ -265,10 +266,15 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       routed = true;
     }
 
-    // Time scope: the model's period argument wins; when it passed none,
-    // a period the question itself names ("all data ytd", "in March") still
-    // applies. Relative periods anchor to the newest statement date.
-    const periodRaw = parsePeriod(content) ?? periodFromQuestion(question.content);
+    // Time scope: the model's period argument wins; then a period the
+    // question itself names ("in March", "last 3 months"); and when neither
+    // supplies one the turn defaults to year-to-date, unless the question
+    // explicitly asks for the whole history. Relative periods anchor to the
+    // newest statement date.
+    const periodRaw =
+      parsePeriod(content) ??
+      periodFromQuestion(question.content) ??
+      defaultPeriod(question.content);
     const period =
       calls.length > 0 ? resolvePeriod(periodRaw, dashboard.facets.last) : undefined;
 
@@ -422,7 +428,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   const wantedType = wantsNonPieChart(question.content);
   if (wantedType && !chartExplicit) {
     const window = resolvePeriod(
-      periodFromQuestion(question.content),
+      periodFromQuestion(question.content) ?? defaultPeriod(question.content),
       dashboard.facets.last,
     );
     const scopedForChart = window

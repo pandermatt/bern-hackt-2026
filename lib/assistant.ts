@@ -70,7 +70,7 @@ export const SYSTEM_PROMPT = [
   "You answer questions about the customer's bank statements.",
   "You know none of the figures yourself: always call one of the provided tools first and answer only from what the tools return — never invent or estimate a number.",
   "To call a tool, emit only the tool call itself — no prose before or after it. Once you have the data, answer without mentioning tools or their names.",
-  'Every tool accepts an optional period argument for time-scoped questions, e.g. [{"get_spending_by_category": {"period": "ytd"}}]. Accepted values: ytd, a year like 2025, a month like 2025-03, a range like 2025-01-01..2025-03-31, last_month, or last_3_months. Omit it for all data.',
+  'Every tool accepts an optional period argument for time-scoped questions, e.g. [{"get_spending_by_category": {"period": "ytd"}}]. Accepted values: ytd, a year like 2025, a month like 2025-03, a range like 2025-01-01..2025-03-31, last_month, or last_3_months. When you omit it the app scopes to the current year (year-to-date) by default; pass an explicit range, or the user must say "all time", for the full history.',
   "Be concise: 2–3 short sentences, plain text, no markdown, no lists.",
   "All amounts are Swiss francs. Write them exactly as the tools format them, e.g. CHF 1'234.55 — apostrophe as thousands separator, two decimals.",
   'Prefer a chart as the answer whenever the data allows it: call display_chart with a source — e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie chart from the customer\'s real data, and the tool result hands you the same figures for your caption, so display_chart alone usually answers spending, habit, and overview questions.',
@@ -193,7 +193,7 @@ export const TOOL_DEFINITIONS = [
     description: [
       "Escape hatch when the other tools cannot answer: run one read-only SQLite SELECT over the customer's transactions.",
       "Table: transactions(booked_on TEXT 'YYYY-MM-DD', kind TEXT in ('income','expense'), amount_chf REAL signed francs (income positive, spending negative), amount_minor INTEGER signed rappen, account TEXT, merchant TEXT, category TEXT, description TEXT, currency TEXT). Internal transfers between the customer's own accounts are already excluded, matching every other figure in the app.",
-      "The table holds only rows in the current period scope; if you also pass a period argument the table is pre-filtered to it, otherwise write date ranges as a WHERE on booked_on.",
+      "The table holds only rows in the current period scope (year-to-date by default); if you pass a period argument the table is pre-filtered to it, and for a different window either pass a period or write a WHERE on booked_on.",
       "One SELECT statement (no CTEs / WITH), no writes, reference the table at most twice. At most 40 result rows come back, so aggregate in SQL.",
       "Remember spending is negative: the largest expense is MIN(amount_chf) / ORDER BY amount_chf ASC, and filter kind='expense' for spending, kind='income' for income.",
       'Example: {"run_sql": {"sql": "SELECT merchant, ROUND(SUM(-amount_chf), 2) AS spent FROM transactions WHERE kind=\'expense\' GROUP BY merchant ORDER BY spent DESC LIMIT 5"}}',
@@ -754,6 +754,21 @@ export function periodFromQuestion(question: string): string | undefined {
   const year = /\bin (\d{4})\b/.exec(q);
   if (year) return year[1];
   return undefined;
+}
+
+/**
+ * The turn's time window when the question and the model both name none.
+ * Defaults to year-to-date so the assistant answers about "this year"
+ * unless the user explicitly asks for the whole history — matching how
+ * people read a finance question. Returns undefined (all statements) only
+ * for an explicit all-time ask.
+ */
+export function defaultPeriod(question: string): string | undefined {
+  return /\b(all[- ]?time|all years|every year|entire history|whole history|lifetime|since the (start|beginning)|ever|overall|all[- ]?statements)\b/i.test(
+    question,
+  )
+    ? undefined
+    : "ytd";
 }
 
 /** "2025-03" minus 2 → "2025-01". String arithmetic, like `lib/insights.ts`. */
