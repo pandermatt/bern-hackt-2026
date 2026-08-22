@@ -124,8 +124,8 @@ Unchanged from the template this app grew out of, and still exactly true.
   transaction mutations. `app/actions/auth.ts` has its own contract
   (`AuthState`); keep it there.
 - **One fetch, then aggregate in JavaScript.** `getDashboard` pulls the
-  account's rows once and hands them to `lib/insights.ts`. A year of statements
-  is ~500 rows through a synchronous in-process driver — a full scan is under a
+  account's rows once and hands them to `lib/insights.ts`. Twenty months of
+  statements is ~930 rows through a synchronous in-process driver — a full scan is under a
   millisecond, and cheaper than five `GROUP BY` round trips that would each
   re-resolve the session. Integer amounts make JS addition exact where
   drizzle's SQLite `sum()` is typed `string | null`.
@@ -348,6 +348,11 @@ Unchanged from the template this app grew out of, and still exactly true.
   `sr-only` box — Safari paints it as a stray line of text under the chart.
   `aria-label` gives a screen reader the identical name and renders nothing
   anywhere. Don't reintroduce `<caption>` on a visually hidden table.
+  `components/summary-cards.tsx` (the forecast tile) and
+  `components/transaction-calendar.tsx` were the last two carrying a
+  `<caption>` on a bare `sr-only` table — both bugs at once — and were
+  converted to the wrapper-div-plus-`aria-label` shape; every hidden table
+  now follows both rules.
 - **The assistant lives on `/home` and nowhere else, and its state lives in
   the shell.** `components/chat-panel.tsx` exports `useAssistantChat()` beside
   `<ChatPanel>`; `HomeChat` is the one shell around it, inline and already
@@ -542,6 +547,37 @@ Unchanged from the template this app grew out of, and still exactly true.
   `scripts/seed-data/`) and imports it into the **demo account**, creating that
   account if it is missing. Both halves are idempotent — the account is matched
   by email, the rows are replaced — so a manual re-run is a no-op.
+- **Four statements ship, from three real formats, all committed normalized.**
+  The `jeanine_2025_*` pair is the original synthetic export. The 2026 files
+  are real bank shapes converted offline — `Account2` a ZKB Kontoauszug
+  (semicolon-separated, German headers, `DD.MM.YYYY` dates), `Account4` a
+  Revolut statement (comma CSV, `Started`/`Completed` timestamps, a `Fee`
+  column, `REVERTED` rows) — because the importer reads exactly one shape and
+  a raw bank export dropped into `seed-data/` unconverted parses as garbage.
+  Decisions baked into the converted rows rather than the code: `REVERTED`
+  lines are dropped (they never settled), Card Refunds are typed `income` so
+  the Refund rule catches them, Revolut's "Metal plan fee" (amount 0, fee 180)
+  is a CHF 180 `Revolut` fee line, the ATM line is `Cash withdrawal` → Other,
+  and TWINT lines naming a private person (name and phone number) were
+  sanitized to "Belastung TWINT: Privatzahlung" before committing.
+- **A `naturalKey` collision is disambiguated in the data, not the code.** Two
+  identical Swiss tickets bought together — same day, merchant and amount —
+  are one key, and the dedupe would eat the second; it ships with " (2)"
+  appended to its name. Do the same in any future conversion.
+- **Salary lands every month of the covered range.** The 2026 statements only
+  carried May–July paydays, so Jan–Apr and Aug rows were added by hand on the
+  same pattern (CHF 5'617.70 from Employer AG, 22nd–25th, a weekday). Keep
+  the every-month invariant if the range grows — the balance line and the
+  income tiles are read for it.
+- **The opening balance is CHF 20'000** — `OPENING_BALANCE_MINOR` in
+  `scripts/lib/statement.ts`, shared by both importers and pinned by
+  `tests/demo-data.test.ts`. Change it there and nowhere else.
+- **The `/account` demo-data button imports the same directory.**
+  `lib/demo-loader.ts` discovers `scripts/seed-data/*.csv` exactly like
+  `scripts/seed.ts` does — it used to hardcode the two 2025 files and
+  silently skipped every statement added later, while `npm run seed`
+  imported them fine. `tests/demo-data.test.ts` pins its row count to the
+  script's, which is the drift alarm.
 - **`npm run start` seeds only an empty database.** It passes `--if-empty`,
   which exits early when the `transactions` table holds any row, so a fresh
   volume comes up populated with no manual step and every later boot leaves the
@@ -574,10 +610,24 @@ Unchanged from the template this app grew out of, and still exactly true.
   category and the canonical merchant name.** The exports spell the same
   merchant several ways; grouping on the raw label silently splits the ranking.
   Add new merchants there, not at read time — categories are assigned once, at
-  import.
+  import. An explicit entry is allowed to classify to `Other` — TWINT
+  person-to-person payments, a cash withdrawal, a barber: no spending category
+  would be honest. Both the seed's unmapped warning and
+  `tests/seed-rules.test.ts` check `slug in MERCHANTS` first, so only a
+  *keyword fallback* landing on `Other` reads as a mapping gap. And every
+  canonical name added here needs an entry in `MERCHANT_BRANDS`
+  (`lib/merchant-brands.ts`) — a real domain or a deliberate `null` —
+  because `tests/merchant-brands.test.ts` asserts coverage; that is what
+  keeps "no logo exists" distinguishable from "someone forgot".
 - **A refund is not income.** 39 of the 60 lines typed `income` are merchant
   credits. They get the `Refund` category and their own tile; folding them into
   salary overstates the earnings by CHF 7,038.
+- **`CATEGORIES` includes `Gaming`, and adding a category is cheap.** The
+  Revolut statement's Steam / Nintendo / Google Play tail is ~40 rows;
+  filing it under "Subscriptions" would have been dishonest. The const is
+  consumed as a type, as a validation set in `tests/demo-data.test.ts`, and
+  as the assistant's fixed-expense name-set — an additive entry breaks
+  nothing, and category strings render raw in the UI.
 - **EUR lines are not converted.** All 13 carry `exchange_rate = 1.0` and
   `base_amount == amount`, so the source asserts 1 EUR = 1 CHF. Store what the
   file says; keep `currency` and `originalAmountMinor` so a real rate can be
@@ -655,6 +705,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   `getAnomalyOverview` and `getAnomalyRuleDetail` compute it that way, and a
   cheaper "any row resolved" would let a heading claim more than the rows under
   it.
+- **`NEW_MERCHANT` fires only on significant amounts.** A first-time merchant
+  is reported when the charge is at or above the 75th percentile of the
+  account's non-recurring expenses; below that the merchant is still marked
+  *seen*, so a later, larger charge does not re-fire either. Ungated, the
+  Revolut statement alone produced 136 first-time-merchant findings — one per
+  CHF 15 lunch — and drowned the ledger. The readability contract this serves
+  lives in `tests/anomaly-seed-data.test.ts`: 20–200 findings, under a
+  quarter of rows flagged, and still nothing escalatable to red.
 - **The engine is performance-sensitive and easy to regress.** Two things keep
   it near-linear, and both look like harmless cleanups:
   - `parseTransactionDate` memoises on the transaction object. Several rules
@@ -701,8 +759,8 @@ Unchanged from the template this app grew out of, and still exactly true.
   `selectCrowdedFindings` asks the model about a finding only when one of its
   transactions carries three or more (`CROWDED_ROW`), which is where the row
   starts hiding badges behind "+N more" and a person stops being able to read it
-  unaided. On a year of real statements that is a handful of rows rather than all
-  ~79. `selectForNarration` then adds back anything `canEscalateToAlert` already
+  unaided. On the shipped ledger that is a handful of rows rather than all
+  ~180. `selectForNarration` then adds back anything `canEscalateToAlert` already
   co-signs: `alert` can only be *proposed* by the model, so a finding the cost
   rule skips can never turn red — and the motivating case, a large transfer to a
   first-time recipient, is two findings on one row and so never crowded. Keep the
