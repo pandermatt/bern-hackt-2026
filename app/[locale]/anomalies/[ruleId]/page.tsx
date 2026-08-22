@@ -114,14 +114,23 @@ function GroupedRows({
   const groups = groupByDayMerchant(rows);
 
   return (
-    <ul className="divide-y divide-surface">
+    <div className="space-y-4">
       {groups.map((group) => {
         const ids = group.rows.map((row) => row.id);
         const groupResolved = ids.every((id) => resolvedIds.has(id));
+        // A group of one already says its amount on its row, so repeating it in
+        // the heading would print the same figure twice on adjacent lines.
+        const many = group.rows.length > 1;
 
         return (
-          <li key={group.key}>
-            <div className="flex items-center gap-3 bg-surface-muted px-4 py-2.5 sm:px-5">
+          <div key={group.key}>
+            {/* On the page's own ground, not on a panel: the ledger's month
+                headings work exactly this way, and it is what makes this read
+                as a title over a list rather than as the list's first row.
+                Smaller than a month heading, though, because this sits one
+                level further in -- the Section above it already owns the
+                26/30px step. */}
+            <div className="flex items-center gap-3 px-1 pb-1.5">
               <ResolveToggle
                 ruleId={ruleId}
                 transactionIds={ids}
@@ -141,44 +150,48 @@ function GroupedRows({
                 </p>
                 <p className="font-mono text-[12px] text-text-subtle tabular-nums">
                   {formatDay(group.bookedOn)}
-                  {/* Only worth saying when the group is more than its one
-                      row — otherwise the count restates the line below it. */}
-                  {group.rows.length > 1 &&
-                    ` · ${t("count", { count: group.rows.length })}`}
+                  {many && ` · ${t("count", { count: group.rows.length })}`}
                 </p>
               </div>
-              <span className="shrink-0 font-mono text-[13px] text-text tabular-nums">
-                {formatMoney(group.totalMinor)}
-              </span>
+              {many && (
+                <span className="shrink-0 font-mono text-[13px] text-text tabular-nums">
+                  {formatMoney(group.totalMinor)}
+                </span>
+              )}
             </div>
 
-            {/* A group of one is its own heading already — a single row
-                underneath would be the same line twice, with a second toggle
-                that does exactly what the first does. */}
-            {group.rows.length > 1 && (
-              <ul className="divide-y divide-surface border-t border-surface">
-                {group.rows.map((row) => (
-                  <Row
-                    key={row.id}
-                    row={row}
-                    ruleId={ruleId}
-                    resolved={resolvedIds.has(row.id)}
-                    /* Named by the line the row actually shows, not by the
-                       merchant: two salary payments from one employer on one
-                       day are two buttons, and naming both after the merchant
-                       and the amount gives them the same accessible name. */
-                    label={t(resolvedIds.has(row.id) ? "unresolveOne" : "resolveOne", {
-                      amount: formatMoney(row.amountMinor),
-                      line: row.description || row.merchant,
-                    })}
-                  />
-                ))}
-              </ul>
-            )}
-          </li>
+            {/* Every group gets its rows now, single-row ones included. They
+                used to be folded into the heading to avoid saying the same
+                thing twice, which worked while the heading sat on the panel;
+                with the heading lifted off it, a one-row group would otherwise
+                have no panel at all and its amount would float on the page.
+
+                `overflow-clip` on the list itself is what rounds the first and
+                last rows -- a radius on an ancestor does not clip a child's
+                background. Dividers are `--surface` showing through the grey,
+                the same as the ledger's panels. */}
+            <ul className="divide-y divide-surface overflow-clip rounded-lg bg-surface-muted">
+              {group.rows.map((row) => (
+                <Row
+                  key={row.id}
+                  row={row}
+                  ruleId={ruleId}
+                  resolved={resolvedIds.has(row.id)}
+                  /* Named by the line the row actually shows, not by the
+                     merchant: two salary payments from one employer on one
+                     day are two buttons, and naming both after the merchant
+                     and the amount gives them the same accessible name. */
+                  label={t(resolvedIds.has(row.id) ? "unresolveOne" : "resolveOne", {
+                    amount: formatMoney(row.amountMinor),
+                    line: row.description || row.merchant,
+                  })}
+                />
+              ))}
+            </ul>
+          </div>
         );
       })}
-    </ul>
+    </div>
   );
 }
 
@@ -289,9 +302,14 @@ export default async function AnomalyRulePage({
             id="focus"
             heading={t("thisFinding")}
             meta={formatMoney(detail.focus.totalMinor)}
-            panelClassName=""
+            /* No ground of its own: each group below brings its own panel, and
+               a panel inside a panel reads as neither. */
+            panelClassName="bg-transparent overflow-visible"
           >
-            <p className="border-b border-surface px-4 py-3 text-[13px] text-text-muted sm:px-5">
+            {/* Was a strip across the top of the panel, with a border where the
+                panel used to end. On the bare ground it is just the section's
+                own lead-in. */}
+            <p className="px-1 pb-3 text-[13px] text-text-muted">
               {detail.focus.description}
             </p>
             <GroupedRows
@@ -308,7 +326,7 @@ export default async function AnomalyRulePage({
             id="others"
             heading={detail.focus ? t("otherOfThisKind") : t("allOfThisKind")}
             meta={t("count", { count: detail.others.length })}
-            panelClassName=""
+            panelClassName="bg-transparent overflow-visible"
           >
             <GroupedRows
               rows={detail.others}

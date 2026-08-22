@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { cn } from "@/lib/utils";
+
 /**
  * One dashboard section: a big heading sitting on the page's own ground, then
  * the content as a rounded grey panel underneath.
@@ -32,7 +34,12 @@ export function Section({
   /** Right-aligned, baseline-aligned with the heading. Wraps under it when the
    * two cannot share a line. */
   meta?: ReactNode;
-  /** Padding and anything else the panel needs. */
+  /**
+   * Padding and anything else the panel needs, merged with `cn` so it can also
+   * *override* the defaults below. `/anomalies/[ruleId]` drops the grey ground
+   * here, because its groups carry their own panels and a panel inside a panel
+   * reads as neither.
+   */
   panelClassName?: string;
   children: ReactNode;
 }) {
@@ -53,7 +60,12 @@ export function Section({
       {/* `overflow-clip` so the radius actually cuts whatever is inside —
           including a canvas, which does not respect an ancestor's radius on its
           own. */}
-      <div className={`overflow-clip rounded-lg bg-surface-muted ${panelClassName}`}>
+      <div
+        className={cn(
+          "overflow-clip rounded-lg bg-surface-muted",
+          panelClassName,
+        )}
+      >
         {children}
       </div>
     </section>
