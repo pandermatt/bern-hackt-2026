@@ -898,16 +898,28 @@ export const SAVINGS_SLOTS = CATEGORY_SLOTS;
 /**
  * A savings goal with its pot filled in.
  *
- * `savedMinor` is every allocation ever made to it, not the month's; the pot
- * is cumulative, which is the whole idea of a pot.
+ * `savedMinor` is every allocation ever made to it less everything ever taken
+ * back out, not the month's; the pot is cumulative, which is the whole idea of
+ * a pot. It never goes negative — a withdrawal is capped at what the pot
+ * holds.
  */
 export type SavingsPot = {
   id: number;
   name: string;
   targetMinor: number;
   savedMinor: number;
-  /** Allocated out of the month being viewed, so the row can show it back. */
+  /**
+   * Allocated out of the month being viewed, so the row can show it back —
+   * what that month's surplus put in, never net of a withdrawal. This is the
+   * figure the allocator's input carries, and that input cannot hold a minus.
+   */
   monthMinor: number;
+  /**
+   * Taken back out of this pot during the month being viewed, positive.
+   * Only ever non-zero when more was reclaimed than the month itself put in —
+   * money an earlier month saved. See `withdrawnMinor` in `db/schema.ts`.
+   */
+  monthWithdrawnMinor: number;
   /** `YYYY-MM-DD`, or null for a goal with no deadline. */
   targetOn: string | null;
   /**

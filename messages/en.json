@@ -305,6 +305,7 @@
     "unallocatedLabel": "Unallocated",
     "unallocatedHint": "Drag into a pot to save it",
     "unallocatedOverspent": "Spent more than you had this month",
+    "unallocatedTakeBack": "Drag a pot here to take savings back",
     "allocateTitle": "Put money into {to}",
     "allocateDescription": "{amount} is unallocated this month.",
     "allocateFieldLabel": "Amount to put away (CHF)",

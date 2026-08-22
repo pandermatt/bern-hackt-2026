@@ -301,6 +301,7 @@ describe("savingsPotentialToolResult", () => {
     monthEnded: true,
     surplusMinor: 120_000,
     allocatedMinor: 20_000,
+    withdrawnMinor: 0,
     freeMinor: 100_000,
     pots: [],
   };
@@ -333,6 +334,7 @@ describe("savingsPotentialToolResult", () => {
       ...overview,
       surplusMinor: -40_000,
       allocatedMinor: 0,
+      withdrawnMinor: 0,
       freeMinor: -40_000,
     }) as { unassigned_chf: string };
     expect(overdrawn.unassigned_chf).toBe("-400.00");
@@ -355,6 +357,7 @@ describe("savingsGoalsToolResult", () => {
     targetMinor,
     savedMinor,
     monthMinor: 0,
+    monthWithdrawnMinor: 0,
     targetOn: null,
     icon: null,
     slot: 0,
@@ -367,6 +370,7 @@ describe("savingsGoalsToolResult", () => {
       monthEnded: true,
       surplusMinor: 120_000,
       allocatedMinor: 20_000,
+      withdrawnMinor: 0,
       freeMinor: 100_000,
       pots: [pot("Ferien", 500_000, 350_000)],
     };
@@ -387,6 +391,7 @@ describe("savingsGoalsToolResult", () => {
       monthEnded: false,
       surplusMinor: null,
       allocatedMinor: 0,
+      withdrawnMinor: 0,
       freeMinor: 0,
       pots: [pot("Auto", 100_000, 0)],
     }) as { surplus_chf: null; note: string };
@@ -399,6 +404,7 @@ describe("savingsGoalsToolResult", () => {
       monthEnded: true,
       surplusMinor: 50_000,
       allocatedMinor: 0,
+      withdrawnMinor: 0,
       freeMinor: 50_000,
       pots: [],
     }) as { note: string };
@@ -436,10 +442,11 @@ describe("buildAllocationProposal", () => {
     monthEnded: true,
     surplusMinor: 120_000,
     allocatedMinor: 20_000,
+    withdrawnMinor: 0,
     freeMinor: 100_000,
     pots: [
-      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, icon: null, slot: 0 },
-      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, targetOn: null, icon: null, slot: 1 },
+      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, monthWithdrawnMinor: 0, targetOn: null, icon: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, monthWithdrawnMinor: 0, targetOn: null, icon: null, slot: 1 },
     ],
     ...patch,
   });
@@ -698,10 +705,11 @@ describe("defaultAllocationSplit", () => {
     monthEnded: true,
     surplusMinor: 100_000,
     allocatedMinor: 0,
+    withdrawnMinor: 0,
     freeMinor: 100_000,
     pots: [
-      { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, icon: null, slot: 0 },
-      { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, targetOn: null, icon: null, slot: 1 },
+      { id: 1, name: "Ferien", targetMinor: 400_000, savedMinor: 100_000, monthMinor: 0, monthWithdrawnMinor: 0, targetOn: null, icon: null, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 200_000, savedMinor: 100_000, monthMinor: 0, monthWithdrawnMinor: 0, targetOn: null, icon: null, slot: 1 },
     ],
     ...patch,
   });
@@ -717,8 +725,8 @@ describe("defaultAllocationSplit", () => {
   it("falls back to equal parts when every goal is already full", () => {
     const full = overview({
       pots: [
-        { id: 1, name: "A", targetMinor: 100, savedMinor: 100, monthMinor: 0, targetOn: null, icon: null, slot: 0 },
-        { id: 2, name: "B", targetMinor: 100, savedMinor: 200, monthMinor: 0, targetOn: null, icon: null, slot: 1 },
+        { id: 1, name: "A", targetMinor: 100, savedMinor: 100, monthMinor: 0, monthWithdrawnMinor: 0, targetOn: null, icon: null, slot: 0 },
+        { id: 2, name: "B", targetMinor: 100, savedMinor: 200, monthMinor: 0, monthWithdrawnMinor: 0, targetOn: null, icon: null, slot: 1 },
       ],
     });
     expect(defaultAllocationSplit(full)).toEqual([

@@ -401,7 +401,9 @@ export const savingsGoals = sqliteTable(
  *
  * Zero is not stored. Unlike a budget — where zero is a real limit of nothing
  * and `null` means unset — an allocation of zero francs and no allocation are
- * the same event, so clearing a field deletes the row.
+ * the same event, so clearing a field deletes the row. With two amount columns
+ * that rule needs both of them: a row goes only when the month holds neither
+ * an allocation nor a withdrawal, or clearing one would take the other with it.
  */
 export const savingsAllocations = sqliteTable(
   "savings_allocations",
@@ -415,8 +417,27 @@ export const savingsAllocations = sqliteTable(
       .references(() => savingsGoals.id, { onDelete: "cascade" }),
     /** `YYYY-MM` — which month's surplus this came out of. */
     month: text("month").notNull(),
-    /** Positive minor units. */
+    /** Positive minor units — what this month's surplus put in. */
     amountMinor: integer("amount_minor").notNull(),
+    /**
+     * Positive minor units taken back *out* of this pot during this month,
+     * beyond whatever `amountMinor` put in. Nullable, read as `?? 0`.
+     *
+     * A pot's month is therefore `amountMinor - withdrawnMinor`, and the two
+     * are separate columns rather than one signed figure for a plain reason:
+     * `amountMinor` is what the allocator's input holds, and that input cannot
+     * carry a minus. Undoing this month's own allocation stays a matter of
+     * typing a smaller number; this column only exists for the case that
+     * cannot express — taking out more than the month put in, which is money
+     * some *earlier* month saved.
+     *
+     * It is booked into the month the withdrawal happens in and never touches
+     * the month the money was originally saved from. A finished month's
+     * figures are a property of statements already issued, so nothing done
+     * later gets to edit them — draining the oldest month first would quietly
+     * rewrite what those months claim to have saved.
+     */
+    withdrawnMinor: integer("withdrawn_minor"),
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

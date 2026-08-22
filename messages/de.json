@@ -305,6 +305,7 @@
     "unallocatedLabel": "Nicht zugeteilt",
     "unallocatedHint": "In einen Topf ziehen, um es zu sparen",
     "unallocatedOverspent": "Diesen Monat mehr ausgegeben als übrig war",
+    "unallocatedTakeBack": "Ziehen Sie einen Topf hierher, um Erspartes zurückzuholen",
     "allocateTitle": "Geld in {to} legen",
     "allocateDescription": "{amount} sind diesen Monat nicht zugeteilt.",
     "allocateFieldLabel": "Zurückzulegender Betrag (CHF)",

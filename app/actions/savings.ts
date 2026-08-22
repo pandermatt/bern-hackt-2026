@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -55,10 +55,18 @@ export type SavingsOverview = {
   /** Already put away out of that month. */
   allocatedMinor: number;
   /**
-   * Surplus minus what is already allocated — what the "Unallocated" pot
-   * shows. **Can go negative**: a month that spent more than it earned has a
-   * negative surplus and nothing allocated, so this is that deficit, and the
-   * pot pulses to say so.
+   * Taken back out of the pots during that month — money an earlier month
+   * saved and this one needed. Adds to what is free, because a withdrawal
+   * puts francs back into the pool the month is spending from.
+   */
+  withdrawnMinor: number;
+  /**
+   * Surplus, less what is already allocated, plus anything taken back out —
+   * what the "Unallocated" pot shows. **Can go negative**, and that is the
+   * signal rather than an error: a month that spent more than it earned, or
+   * one whose pots hold more than it left over, is a month that has to give
+   * some savings back. The pot pulses to say so and the tile says what to do
+   * about it.
    */
   freeMinor: number;
   pots: SavingsPot[];
@@ -189,12 +197,21 @@ export async function getSavingsOverview(
   // One pass over every allocation rather than a query per pot: an account has
   // a handful of goals and a few dozen rows, and this is the same "fetch once,
   // aggregate in JavaScript" trade the dashboard makes.
+  // Three totals, because a month can both put money in and take money out.
+  // `saved` is the pot's real balance and nets the two; `thisMonth` is what
+  // the month's surplus put in, which is the figure the allocator's input
+  // holds; `thisMonthOut` is what was taken back.
   const saved = new Map<number, number>();
   const thisMonth = new Map<number, number>();
+  const thisMonthOut = new Map<number, number>();
   for (const row of allocations) {
-    saved.set(row.goalId, (saved.get(row.goalId) ?? 0) + row.amountMinor);
+    // `?? 0` on every read: the column is nullable, so every row predating it
+    // reads as "nothing taken out", which is exactly what happened.
+    const out = row.withdrawnMinor ?? 0;
+    saved.set(row.goalId, (saved.get(row.goalId) ?? 0) + row.amountMinor - out);
     if (month && row.month === month) {
       thisMonth.set(row.goalId, (thisMonth.get(row.goalId) ?? 0) + row.amountMinor);
+      thisMonthOut.set(row.goalId, (thisMonthOut.get(row.goalId) ?? 0) + out);
     }
   }
 
@@ -209,6 +226,10 @@ export async function getSavingsOverview(
     (sum, amount) => sum + amount,
     0,
   );
+  const withdrawnMinor = [...thisMonthOut.values()].reduce(
+    (sum, amount) => sum + amount,
+    0,
+  );
 
   return {
     months,
@@ -216,7 +237,8 @@ export async function getSavingsOverview(
     monthEnded,
     surplusMinor,
     allocatedMinor,
-    freeMinor: (surplusMinor ?? 0) - allocatedMinor,
+    withdrawnMinor,
+    freeMinor: (surplusMinor ?? 0) - allocatedMinor + withdrawnMinor,
     // Soonest deadline first, undated last — see `byTargetDate`. Sorted here
     // rather than in the query because the comparator has a rule SQL's NULL
     // ordering does not share, and it is worth having under test.
@@ -227,6 +249,7 @@ export async function getSavingsOverview(
         targetMinor: goal.targetMinor,
         savedMinor: saved.get(goal.id) ?? 0,
         monthMinor: thisMonth.get(goal.id) ?? 0,
+        monthWithdrawnMinor: thisMonthOut.get(goal.id) ?? 0,
         targetOn: goal.targetOn,
         icon: goal.icon,
         slot: potSlot(goal.id),
@@ -445,34 +468,60 @@ export async function allocateSurplus(
   // surplus, so they count against it here. The budget page's allocator posts
   // every pot, so for it this term is zero and nothing changes.
   const posted = new Set(parsed.data.map((entry) => entry.goalId));
-  const untouched = (
-    await db
-      .select({
-        goalId: savingsAllocations.goalId,
-        amountMinor: savingsAllocations.amountMinor,
-      })
-      .from(savingsAllocations)
-      .where(
-        and(
-          eq(savingsAllocations.userId, user.id),
-          eq(savingsAllocations.month, month),
-        ),
-      )
-  )
+  const monthRows = await db
+    .select({
+      goalId: savingsAllocations.goalId,
+      amountMinor: savingsAllocations.amountMinor,
+      withdrawnMinor: savingsAllocations.withdrawnMinor,
+    })
+    .from(savingsAllocations)
+    .where(
+      and(
+        eq(savingsAllocations.userId, user.id),
+        eq(savingsAllocations.month, month),
+      ),
+    );
+
+  const untouched = monthRows
     .filter((row) => !posted.has(row.goalId))
     .reduce((sum, row) => sum + row.amountMinor, 0);
+  // Money taken back out of the pots this month is money the month has to
+  // spend, so it lifts the ceiling by exactly as much as it lowered the pots.
+  // Without this term a month that reclaimed savings could not then re-commit
+  // them, which is the whole point of having reclaimed them.
+  const reclaimed = monthRows.reduce(
+    (sum, row) => sum + (row.withdrawnMinor ?? 0),
+    0,
+  );
 
-  if (total + untouched > surplus) return savingsError("overSurplus");
+  if (total + untouched - reclaimed > surplus) return savingsError("overSurplus");
 
   try {
     db.transaction((tx) => {
       if (clears.length > 0) {
+        const cleared = and(
+          eq(savingsAllocations.userId, user.id),
+          eq(savingsAllocations.month, month),
+          inArray(savingsAllocations.goalId, clears),
+        );
+        // Zeroed first, deleted second, and the order is the point. A row may
+        // also carry a withdrawal, which is not the allocator's to undo:
+        // clearing a field says "this month's surplus put nothing in", not
+        // "forget that I took money back out".
+        tx.update(savingsAllocations)
+          .set({ amountMinor: 0, updatedAt: new Date() })
+          .where(cleared)
+          .run();
+        // Only rows left holding nothing at all go — "zero is not stored",
+        // now asking about both columns.
         tx.delete(savingsAllocations)
           .where(
             and(
-              eq(savingsAllocations.userId, user.id),
-              eq(savingsAllocations.month, month),
-              inArray(savingsAllocations.goalId, clears),
+              cleared,
+              or(
+                isNull(savingsAllocations.withdrawnMinor),
+                eq(savingsAllocations.withdrawnMinor, 0),
+              ),
             ),
           )
           .run();
@@ -576,6 +625,121 @@ export async function applyAllocationAdds(
  * already hold a contribution from that same month — so the insert is an
  * upsert that adds rather than overwrites.
  */
+/**
+ * Takes money back out of one pot and returns it to a month's free balance.
+ *
+ * The counterpart to `allocateSurplus`, and the answer to a month whose pots
+ * hold more than it left over. That happens for two ordinary reasons: the
+ * month spent more than it earned, or its statements changed under an
+ * allocation made earlier. Either way the arithmetic is not wrong — the pots
+ * really do hold money this month cannot account for — so the fix is to give
+ * some of it back rather than to hide the figure.
+ *
+ * **It reaches past the month's own allocation.** Reclaiming what *this* month
+ * put in is just typing a smaller number in the allocator, and that path is
+ * unchanged. This exists for the rest: money an earlier month saved, which the
+ * allocator has no way to express. So the ceiling is the pot's whole balance.
+ *
+ * The two columns are spent in order — this month's `amountMinor` first, then
+ * `withdrawnMinor` — so the common case leaves no withdrawal row at all and
+ * the allocator's input keeps matching what is stored. Earlier months are
+ * never touched: a finished month's figures are final, and draining the oldest
+ * first would rewrite what those months claim to have saved.
+ */
+export async function withdrawSavings(
+  month: string,
+  goalId: number,
+  amount: string,
+): Promise<SavingsResult> {
+  const user = await getCurrentUser();
+  if (!user) return savingsError("notSignedInAllocate");
+
+  if (!/^\d{4}-\d{2}$/.test(month)) return savingsError("notAMonth");
+  if (!monthHasEnded(month)) return savingsError("monthRunning");
+
+  const parsed = allocationSchema.safeParse({ goalId, amount });
+  if (!parsed.success) return savingsError("malformedAllocation");
+
+  const minor = toMinor(parsed.data.amount);
+  if (typeof minor !== "number") return amountError(minor);
+  if (minor <= 0) return savingsError("targetAboveZero");
+
+  // Scoped by owner as well as id, so a guessed id cannot drain someone
+  // else's pot — the same stance every other write in this file takes.
+  const owned = await db
+    .select({ id: savingsGoals.id })
+    .from(savingsGoals)
+    .where(
+      and(eq(savingsGoals.id, parsed.data.goalId), eq(savingsGoals.userId, user.id)),
+    );
+  if (owned.length === 0) return savingsError("goalGone");
+
+  const rows = await db
+    .select()
+    .from(savingsAllocations)
+    .where(
+      and(
+        eq(savingsAllocations.userId, user.id),
+        eq(savingsAllocations.goalId, parsed.data.goalId),
+      ),
+    );
+
+  // What the pot actually holds, across every month, net of anything already
+  // taken back. A pot is never allowed to go negative: you cannot un-save
+  // money that was never saved.
+  const balance = rows.reduce(
+    (sum, row) => sum + row.amountMinor - (row.withdrawnMinor ?? 0),
+    0,
+  );
+  if (minor > balance) return savingsError("overSaved");
+
+  const here = rows.find((row) => row.month === month);
+  // This month's own allocation goes first, and only the remainder becomes a
+  // withdrawal — see the note above.
+  const fromAllocation = Math.min(minor, here?.amountMinor ?? 0);
+  const fromSavings = minor - fromAllocation;
+
+  try {
+    db.transaction((tx) => {
+      if (here) {
+        const amountLeft = here.amountMinor - fromAllocation;
+        const withdrawn = (here.withdrawnMinor ?? 0) + fromSavings;
+        if (amountLeft === 0 && withdrawn === 0) {
+          // Zero is not stored — see the table's note.
+          tx.delete(savingsAllocations)
+            .where(eq(savingsAllocations.id, here.id))
+            .run();
+        } else {
+          tx.update(savingsAllocations)
+            .set({
+              amountMinor: amountLeft,
+              withdrawnMinor: withdrawn,
+              updatedAt: new Date(),
+            })
+            .where(eq(savingsAllocations.id, here.id))
+            .run();
+        }
+      } else {
+        tx.insert(savingsAllocations)
+          .values({
+            userId: user.id,
+            goalId: parsed.data.goalId,
+            month,
+            amountMinor: 0,
+            withdrawnMinor: fromSavings,
+            updatedAt: new Date(),
+          })
+          .run();
+      }
+    });
+  } catch {
+    return savingsError("moveFailed");
+  }
+
+  revalidatePath("/[locale]/savings", "page");
+  return { ok: true };
+}
+
 export async function transferSavings(
   fromGoalId: number,
   toGoalId: number,

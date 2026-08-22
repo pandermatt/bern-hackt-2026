@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { toast } from "sonner";
 
-import { allocateSurplus, transferSavings } from "@/app/actions/savings";
+import { allocateSurplus, transferSavings, withdrawSavings } from "@/app/actions/savings";
 import { SavingsPot, type Spark } from "@/components/savings-pot";
 import {
   Dialog,
@@ -380,8 +380,12 @@ function UnallocatedSlot({
         </span>
       </p>
 
+      {/* A negative pool is not an error state to be hidden — it is the month
+          saying its pots hold money it cannot account for. So the line stops
+          describing the problem and names the fix, which is a gesture the
+          reader can make right here. */}
       <p className="mt-0.5 line-clamp-2 font-mono text-[10.5px] text-text-subtle">
-        {overspent ? t("unallocatedOverspent") : t("unallocatedHint")}
+        {overspent ? t("unallocatedTakeBack") : t("unallocatedHint")}
       </p>
     </li>
   );
@@ -536,10 +540,16 @@ function AllocationDialog({
   const [pending, startTransition] = useTransition();
   const field = useRef<HTMLInputElement>(null);
 
-  // What can actually move: the pool itself going in, or only what this pot
-  // already holds for the month coming out. Never negative — a month that is
-  // itself overspent has nothing free to give away.
-  const limit = direction === "into" ? Math.max(0, freeMinor) : goal.monthMinor;
+  // What can actually move: the pool itself going in, or the pot's **whole
+  // balance** coming out. Never negative — a month that is itself overspent
+  // has nothing free to give away.
+  //
+  // Coming out this used to stop at `goal.monthMinor`, which meant a month
+  // could only ever undo its own allocation. That left the case this dialog
+  // now exists for unreachable: a month whose pots hold more than it had, or
+  // one that simply overspent, has to give back money an *earlier* month
+  // saved, and the cap forbade exactly that.
+  const limit = direction === "into" ? Math.max(0, freeMinor) : goal.savedMinor;
   // Suggested, not a ceiling — same stance as `TransferDialog`. Into a pot,
   // default to whatever closes the gap to its target; out of one, default to
   // reclaiming all of it, since "drag the whole pot onto the pool" is the
@@ -563,12 +573,21 @@ function AllocationDialog({
   function move() {
     if (!month || !valid) return;
     startTransition(async () => {
-      const newMonthMinor = goal.monthMinor + delta;
+      // Two different operations behind one gesture. Going in is still an
+      // allocation, and posts every pot so the month's total is checked as a
+      // whole. Coming out is `withdrawSavings`, which spends this month's own
+      // allocation first and only then reaches into the balance — a reach the
+      // allocator's non-negative input cannot express at all.
       const entries = pots.map((pot) => ({
         goalId: pot.id,
-        amount: toField(pot.id === goal.id ? newMonthMinor : pot.monthMinor),
+        amount: toField(
+          pot.id === goal.id ? goal.monthMinor + delta : pot.monthMinor,
+        ),
       }));
-      const result = await allocateSurplus(month, entries);
+      const result =
+        direction === "into"
+          ? await allocateSurplus(month, entries)
+          : await withdrawSavings(month, goal.id, amount);
       if (result.ok) {
         toast.success(
           t(direction === "into" ? "allocated" : "unallocatedAgain", {

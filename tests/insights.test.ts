@@ -679,6 +679,7 @@ describe("byTargetDate", () => {
     targetMinor: 100000,
     savedMinor: 0,
     monthMinor: 0,
+    monthWithdrawnMinor: 0,
     targetOn,
     icon: null,
     slot: 1,
