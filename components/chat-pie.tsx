@@ -9,7 +9,7 @@ import {
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
-import type { ChartSpec } from "@/lib/assistant";
+import type { PieChartSpec } from "@/lib/assistant";
 import { formatMoney } from "@/lib/insights";
 
 /**
@@ -23,7 +23,7 @@ import { formatMoney } from "@/lib/insights";
  */
 const HEIGHT = 210;
 
-function buildOption(chart: ChartSpec, tokens: ChartTokens): EChartsOption {
+function buildOption(chart: PieChartSpec, tokens: ChartTokens): EChartsOption {
   return {
     animationDuration: 500,
     legend: {
@@ -63,7 +63,7 @@ function buildOption(chart: ChartSpec, tokens: ChartTokens): EChartsOption {
   };
 }
 
-export function ChatPie({ chart }: { chart: ChartSpec }) {
+export function ChatPie({ chart }: { chart: PieChartSpec }) {
   const tokens = useChartTokens();
   const option = useMemo(
     () => (tokens ? buildOption(chart, tokens) : null),

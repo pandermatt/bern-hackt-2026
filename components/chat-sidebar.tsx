@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Bug, MessageCircle, Send, Sparkles, X } from "lucide-react";
 
 import { askAssistant } from "@/app/actions/chat";
 import { ChatDebug } from "@/components/chat-debug";
+import { ChatEChart } from "@/components/chat-echart";
 import { ChatPie } from "@/components/chat-pie";
 import type { ChartSpec, ChatRole } from "@/lib/assistant";
 
@@ -20,8 +21,8 @@ type Message = {
  * trip a different branch of `pickChart`, so the demo shows a chart early.
  */
 const SUGGESTIONS = [
-  "Where does my money go YTD?",
-  "Who are my top merchants YTD?",
+  "Where does my money go?",
+  "Who are my top merchants?",
   "How much of my income is salary?",
   "How much did I save this year?",
 ];
@@ -32,6 +33,18 @@ const SUGGESTIONS = [
  * stay server-side. The bundle holds no transaction rows; the only figures
  * that ever reach the browser are the ones a reply explicitly carries.
  */
+/** The drag-resizable panel width, in pixels, clamped to sane bounds. */
+const MIN_WIDTH = 340;
+const MAX_WIDTH = 900;
+const DEFAULT_WIDTH = 400;
+const WIDTH_KEY = "beyond-money:assistant-width";
+
+function clampWidth(value: number): number {
+  // Never wider than the viewport minus a sliver, so the page stays reachable.
+  const ceiling = Math.min(MAX_WIDTH, window.innerWidth - 80);
+  return Math.max(MIN_WIDTH, Math.min(ceiling, value));
+}
+
 export function ChatSidebar() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"chat" | "debug">("chat");
@@ -39,9 +52,41 @@ export function ChatSidebar() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
+  // Below the `sm` breakpoint the panel is full-width and resizing is off; on
+  // wider screens the width is a drag-set, persisted pixel value. Read from
+  // localStorage in a lazy initializer (not an effect): it is SSR-safe via the
+  // window guard, and the width-bearing panel isn't rendered until the user
+  // opens it — a client interaction — so there is no hydration mismatch.
+  const [width, setWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return DEFAULT_WIDTH;
+    const saved = Number(window.localStorage.getItem(WIDTH_KEY));
+    return Number.isFinite(saved) && saved > 0 ? clampWidth(saved) : DEFAULT_WIDTH;
+  });
+  const [dragging, setDragging] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const startResize = useCallback((event: React.PointerEvent) => {
+    event.preventDefault();
+    setDragging(true);
+    const move = (e: PointerEvent) => {
+      // The panel is anchored to the right edge, so its width is the distance
+      // from the pointer to that edge.
+      setWidth(clampWidth(window.innerWidth - e.clientX));
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setWidth((current) => {
+        window.localStorage.setItem(WIDTH_KEY, String(current));
+        return current;
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, []);
 
   // Keep the newest bubble in view — including the typing indicator.
   useEffect(() => {
@@ -111,11 +156,37 @@ export function ChatSidebar() {
       )}
 
       {open && (
+        <>
+        {/* Transparent, viewport-filling capture layer during a drag, so the
+            pointer stream isn't lost the moment it crosses the chart canvas. */}
+        {dragging && (
+          <div className="fixed inset-0 z-50 cursor-col-resize" aria-hidden />
+        )}
         <aside
           role="dialog"
           aria-label="Money assistant"
-          className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-surface shadow-lg duration-300 animate-in fade-in slide-in-from-right sm:w-[400px]"
+          className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-surface shadow-lg animate-in fade-in slide-in-from-right sm:w-(--assistant-width) ${
+            dragging ? "" : "duration-300"
+          }`}
+          style={{ "--assistant-width": `${width}px` } as React.CSSProperties}
         >
+          {/* Drag handle: a hairline that widens the hit target beyond it, and
+              only exists at the sm breakpoint where the panel isn't full-width.
+              While dragging, an overlay (below) captures the pointer. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize assistant"
+            onPointerDown={startResize}
+            className="absolute inset-y-0 left-0 hidden w-1.5 -translate-x-1/2 cursor-col-resize touch-none sm:block"
+          >
+            <div
+              className={`h-full w-px transition-colors ${
+                dragging ? "bg-accent" : "bg-transparent hover:bg-line-strong"
+              }`}
+            />
+          </div>
+
           <header className="flex items-center gap-3 border-b border-line px-4 py-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand">
               <Sparkles className="size-4 text-text" />
@@ -200,7 +271,11 @@ export function ChatSidebar() {
                     }`}
                   >
                     {message.content}
-                    {message.chart && (
+                    {message.chart && message.chart.kind === "echarts" ? (
+                      <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
+                        <ChatEChart chart={message.chart} />
+                      </div>
+                    ) : message.chart && (
                       <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
                         <ChatPie chart={message.chart} />
                       </div>
@@ -283,6 +358,7 @@ export function ChatSidebar() {
             </>
           )}
         </aside>
+        </>
       )}
     </>
   );
