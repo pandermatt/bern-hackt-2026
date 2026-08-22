@@ -48,7 +48,9 @@ export function SummaryCards({
       // Grouped by the formatter rather than interpolated raw: a five-figure
       // purchase count reads as 12'480, the same way every other number on
       // this page does.
-      note: t("spendingNote", { count: totals.expenseCount.toLocaleString("de-CH") }),
+      note: t("spendingNote", {
+        count: totals.expenseCount.toLocaleString("de-CH"),
+      }),
       wide: false,
     },
     {
@@ -79,7 +81,9 @@ export function SummaryCards({
             tile.wide ? "col-span-2 lg:col-span-1" : ""
           }`}
         >
-          <p className="text-[13px] font-medium text-text-muted">{tile.label}</p>
+          <p className="text-[13px] font-medium text-text-muted">
+            {tile.label}
+          </p>
           <p
             /* 16px, not the desktop 20px: a half-width tile at 390px has
                ~141px of inner box, and `−CHF 92’969.40` — a negative Balance,
@@ -99,7 +103,9 @@ export function SummaryCards({
       ))}
 
       <li className="col-span-2 rounded-lg bg-surface-muted p-3.5 sm:p-4 lg:col-span-1">
-        <p className="text-[13px] font-medium text-text-muted">{t("forecast")}</p>
+        <p className="text-[13px] font-medium text-text-muted">
+          {t("forecast")}
+        </p>
         {forecast ? (
           <>
             <p className="mt-1.5 font-mono text-[16px] leading-none font-medium tracking-tight tabular-nums text-text sm:text-[20px]">
@@ -111,34 +117,42 @@ export function SummaryCards({
                 rendered HTML — see components/echart.tsx. */}
             <SpendForecastChart forecast={forecast} />
 
-            <table className="sr-only">
-              <caption>
-                {t("forecastLabel", {
+            {/* The wrapper div takes `sr-only` because a table ignores its
+                1px width, and `aria-label` rather than `<caption>` because a
+                caption box escapes the clipped area — Safari paints it as a
+                stray line under the chart. Same contract as the two big
+                charts' hidden tables. */}
+            <div className="sr-only">
+              <table
+                aria-label={t("forecastLabel", {
                   year: forecast.year,
                   average: formatMoney(forecast.average),
                 })}
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("forecastMonth")}</th>
-                  <th scope="col">{t("forecastAmount")}</th>
-                  <th scope="col">{t("forecastKind")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {forecast.points.map((point) => (
-                  <tr key={point.month}>
-                    <th scope="row">{point.month}</th>
-                    <td>{formatMoney(point.actual ?? point.projected ?? 0)}</td>
-                    <td>
-                      {point.actual !== null
-                        ? t("forecastActual")
-                        : t("forecastProjected")}
-                    </td>
+              >
+                <thead>
+                  <tr>
+                    <th scope="col">{t("forecastMonth")}</th>
+                    <th scope="col">{t("forecastAmount")}</th>
+                    <th scope="col">{t("forecastKind")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {forecast.points.map((point) => (
+                    <tr key={point.month}>
+                      <th scope="row">{point.month}</th>
+                      <td>
+                        {formatMoney(point.actual ?? point.projected ?? 0)}
+                      </td>
+                      <td>
+                        {point.actual !== null
+                          ? t("forecastActual")
+                          : t("forecastProjected")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             <p className="mt-2 text-[12.5px] text-text-subtle">
               {t("forecastNote", {
