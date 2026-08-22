@@ -12,10 +12,8 @@
     "home": "Start"
   },
   "AppFooter": {
-    "tagline": "Private Einblicke in Ihre Ausgaben — aus Ihren eigenen Kontoauszügen.",
     "builtWith": "Mit Sorgfalt gebaut",
     "inSwitzerland": "in Zürich & Bern, Schweiz 🇨🇭",
-    "clientScoped": "Daten nur für Ihr Konto",
     "signIn": "Anmelden",
     "register": "Registrieren"
   },

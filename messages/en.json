@@ -12,10 +12,8 @@
     "home": "Home"
   },
   "AppFooter": {
-    "tagline": "Private spending insights from your own statements.",
     "builtWith": "Built with precision",
     "inSwitzerland": "in Zurich & Bern, Switzerland 🇨🇭",
-    "clientScoped": "Client Scoped Data",
     "signIn": "Sign in",
     "register": "Register"
   },
