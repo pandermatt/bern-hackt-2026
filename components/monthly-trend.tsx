@@ -1,13 +1,16 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   EChart,
   useChartTokens,
   withAlpha,
   type ChartTokens,
+  type CustomSeriesRenderItem,
+  type CustomSeriesRenderItemReturn,
   type EChartsOption,
 } from "@/components/echart";
 import { Section } from "@/components/section";
@@ -16,11 +19,20 @@ import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
  * The month's net balance — money in minus money out — as bars diverging from
- * a zero line.
+ * a zero line, one year at a time. A stepper pages between the years the
+ * statements cover, and hovering a column widens it and hangs its amount off
+ * the data end — the hover feedback *is* the tooltip, so there is no second
+ * floating box saying the same thing.
+ *
+ * The bars are a `custom` series, not a `bar` series, because the expansion is
+ * per column: a bar series has one `barWidth` for all its marks, and every
+ * multi-series workaround (overlaid series, pictorial bars) either expands
+ * off-centre or loses the rounded data end. `renderItem` draws each month as
+ * its own rounded rect, so the hovered one can grow symmetrically in place —
+ * `transition: ["shape"]` is what animates the growth.
  *
  * Deliberately **not** broken down by category (the donut below owns that
- * story), and deliberately balance-only: this chart answers the one question
- * "did the month keep money or overspend", and the sign carries it twice —
+ * story), and deliberately balance-only: the sign carries the reading twice —
  * position against the zero line and the in/out direction pair. One series, so
  * no legend box; the heading names it.
  *
@@ -39,10 +51,15 @@ const HEIGHT = 320;
  * On a 390px screen the card leaves ~310px of canvas, and a 58px left gutter
  * spends a fifth of it on axis labels. The narrow gutter is paid for by the
  * `2.5k` formatter below. No legend strip — a single series needs none — so
- * the bottom holds only the month labels.
+ * the bottom holds only the month labels; the top holds the hovered bar's
+ * amount when the tallest bar is hovered.
  */
-const GRID = { left: 58, right: 14, top: 16, bottom: 30 };
-const GRID_NARROW = { left: 40, right: 10, top: 16, bottom: 26 };
+const GRID = { left: 58, right: 14, top: 26, bottom: 30 };
+const GRID_NARROW = { left: 40, right: 10, top: 24, bottom: 26 };
+
+/** Base and hovered column widths. The growth is symmetric about the tick. */
+const BAR = { base: 26, hover: 40 };
+const BAR_NARROW = { base: 14, hover: 22 };
 
 /** Rounds a rappen amount up to a tidy gridline so the axis reads cleanly. */
 function niceCeiling(value: number): number {
@@ -56,47 +73,104 @@ function signedMoney(rappen: number): string {
   return `${rappen < 0 ? "−" : ""}${formatMoney(rappen)}`;
 }
 
+/** The hover label: whole francs, real minus — the footnote says CHF once. */
+function signedFrancs(rappen: number): string {
+  const francs = Math.round(Math.abs(rappen) / 100).toLocaleString("de-CH");
+  return rappen < 0 ? `−${francs}` : francs;
+}
+
 function buildOption(
-  series: MonthPoint[],
+  months: (MonthPoint | null)[],
   tokens: ChartTokens,
   narrow: boolean,
-  labels: { month: (point: MonthPoint) => string },
+  hovered: number | null,
+  monthLabel: (index: number) => string,
 ): EChartsOption {
-  const nets = series.map((point) => point.net);
-  const peak = niceCeiling(Math.max(1, ...nets));
+  const nets = months.flatMap((point) => (point ? [point.net] : []));
+  // 8% of headroom past the nice gridline, so the hovered bar's amount label
+  // never leaves the plot even on the year's tallest bar.
+  const peak = niceCeiling(Math.max(1, ...nets) * 1.08);
   const lowest = Math.min(0, ...nets);
-  const floor = lowest < 0 ? -niceCeiling(-lowest) : 0;
+  const floor = lowest < 0 ? -niceCeiling(-lowest * 1.08) : 0;
+  const bar = narrow ? BAR_NARROW : BAR;
+
+  const renderItem: CustomSeriesRenderItem = (params, api) => {
+    const { dataIndex } = params;
+    const net = api.value(1) as number;
+    if (!Number.isFinite(net)) return null;
+
+    const [x, yEnd] = api.coord([dataIndex, net]);
+    const [, yZero] = api.coord([dataIndex, 0]);
+    const positive = net >= 0;
+    const isHovered = hovered === dataIndex;
+    const width = isHovered ? bar.hover : bar.base;
+    const top = Math.min(yEnd, yZero);
+    // A near-zero month still gets a perceptible sliver to hover.
+    const height = Math.max(2, Math.abs(yZero - yEnd));
+    const fill = positive
+      ? { fill: tokens.flowIn, stroke: tokens.flowInEdge, lineWidth: 1 }
+      : { fill: tokens.flowOut };
+
+    // Cast because the graphic-element option types don't narrow from this
+    // literal; the shape is the documented rect/text group.
+    return {
+      type: "group" as const,
+      children: [
+        {
+          type: "rect" as const,
+          shape: {
+            x: x - width / 2,
+            y: top,
+            width,
+            height,
+            // The rounded end is the data end, so it flips on a negative bar.
+            r: positive ? [4, 4, 0, 0] : [0, 0, 4, 4],
+          },
+          style: fill,
+          // Pin the hover state to the normal style: the width change is the
+          // hover feedback, and the default emphasis lift would repaint the
+          // fill off its token on top of it.
+          emphasis: { style: fill },
+          // Width and value changes morph in place — this is the expansion.
+          transition: ["shape" as const, "style" as const],
+          enterFrom: { shape: { y: yZero, height: 0 } },
+        },
+        // The amount, hanging off the data end. Always in the tree with empty
+        // text when idle, so hover updates morph the rect instead of replacing
+        // a lone rect with a rect-plus-label group.
+        {
+          type: "text" as const,
+          silent: true,
+          style: {
+            x,
+            y: positive ? top - 6 : top + height + 6,
+            text: isHovered ? signedFrancs(net) : "",
+            align: "center" as const,
+            verticalAlign: positive ? ("bottom" as const) : ("top" as const),
+            fill: tokens.ink,
+            fontSize: 11,
+          },
+        },
+      ],
+    } as unknown as CustomSeriesRenderItemReturn;
+  };
 
   return {
     animationDuration: 600,
+    // The hover expansion and the year-step morph. Snappy enough that sweeping
+    // across columns never feels laggy.
+    animationDurationUpdate: 250,
     grid: narrow ? GRID_NARROW : GRID,
-    tooltip: {
-      trigger: "axis",
-      // The whole month column is the hit target, not just the bar — a small
-      // near-zero bar would otherwise be almost impossible to hover.
-      axisPointer: { type: "shadow" },
-      confine: true,
-      backgroundColor: tokens.surface,
-      borderColor: tokens.line,
-      textStyle: { color: tokens.text, fontSize: 12 },
-      formatter: (params: unknown) => {
-        const [point] = params as { dataIndex: number }[];
-        const month = series[point.dataIndex];
-        if (!month) return "";
-        // Month plus year: the axis can afford the ambiguity of a bare "Nov"
-        // across several years, the tooltip cannot.
-        return `${labels.month(month)} ${month.month.slice(0, 4)}<br/>${signedMoney(month.net)}`;
-      },
-    },
     xAxis: {
       type: "category",
-      data: series.map(labels.month),
-      // The default puts a category axis on the value axis's zero — which,
-      // with negative months, floats the month labels into the middle of the
-      // plot. The axis stays at the bottom; the markLine below draws the zero.
-      axisLine: { onZero: false, lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
+      data: Array.from({ length: 12 }, (_, index) => monthLabel(index)),
+      axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
       axisTick: { show: false },
-      axisLabel: { color: tokens.ink, fontSize: 11, interval: narrow ? 1 : "auto" },
+      axisLabel: {
+        color: tokens.ink,
+        fontSize: 11,
+        interval: narrow ? 1 : 0,
+      },
     },
     yAxis: {
       type: "value",
@@ -122,34 +196,34 @@ function buildOption(
     },
     series: [
       {
+        id: "balance",
+        type: "custom",
+        renderItem,
+        encode: { x: 0, y: 1 },
+        // Unclipped so a tall bar's amount label can use the grid's own top
+        // padding; the rects themselves cannot leave the plot, because the
+        // axis extents are derived from the same values they draw.
+        clip: false,
+        data: months.map((point, index) => [index, point ? point.net : NaN]),
+      },
+      // A custom series cannot carry a markLine, so an empty bar series holds
+      // the zero baseline the bars diverge from — heavier than the grid so
+      // "above or below" is readable at a glance.
+      {
+        id: "baseline",
         type: "bar",
-        barMaxWidth: narrow ? 16 : 28,
-        data: series.map((point) => ({
-          value: point.net,
-          // Direction pair, not category slots: positive months in `flow-in`,
-          // negative in `flow-out`. The rounded end is the data end, so it
-          // flips to the bottom on a negative bar.
-          itemStyle:
-            point.net >= 0
-              ? {
-                  color: tokens.flowIn,
-                  borderColor: tokens.flowInEdge,
-                  borderWidth: 1,
-                  borderRadius: [4, 4, 0, 0],
-                }
-              : {
-                  color: tokens.flowOut,
-                  borderRadius: [0, 0, 4, 4],
-                },
-        })),
-        // The zero baseline the bars diverge from — heavier than the grid so
-        // "above or below" is readable at a glance.
+        silent: true,
+        data: [],
         markLine: {
           silent: true,
           symbol: "none",
           animation: false,
           label: { show: false },
-          lineStyle: { color: withAlpha(tokens.ink, 0.45), width: 1, type: "solid" as const },
+          lineStyle: {
+            color: withAlpha(tokens.ink, 0.45),
+            width: 1,
+            type: "solid" as const,
+          },
           data: [{ yAxis: 0 }],
         },
       },
@@ -163,22 +237,92 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   const tokens = useChartTokens();
   const narrow = useIsNarrow();
 
+  // The years the statements cover, ascending. The stepper walks this list —
+  // it never offers a year with no data.
+  const years = useMemo(
+    () => [...new Set(series.map((point) => point.month.slice(0, 4)))].sort(),
+    [series],
+  );
+  const [chosenYear, setChosenYear] = useState<string | null>(null);
+  const year = chosenYear ?? years[years.length - 1];
+  const yearIndex = years.indexOf(year);
+
+  const [hovered, setHovered] = useState<number | null>(null);
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sweeping across a column's edge fires mouseout-then-mouseover; clearing on
+  // a short delay (cancelled by the next mouseover) keeps the expansion from
+  // snapping shut and re-opening between neighbours.
+  const events = useMemo(() => {
+    const cancel = () => {
+      if (clearTimer.current) {
+        clearTimeout(clearTimer.current);
+        clearTimer.current = null;
+      }
+    };
+    return {
+      mouseover: (params: unknown) => {
+        cancel();
+        const point = params as { componentType?: string; dataIndex?: number };
+        if (point.componentType === "series" && typeof point.dataIndex === "number") {
+          setHovered(point.dataIndex);
+        }
+      },
+      mouseout: () => {
+        cancel();
+        clearTimer.current = setTimeout(() => setHovered(null), 140);
+      },
+      globalout: () => {
+        cancel();
+        setHovered(null);
+      },
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+    },
+    [],
+  );
+
+  // Always twelve slots, January to December, empty months as gaps — the
+  // x axis keeps one shape whichever year is showing, so stepping morphs the
+  // bars instead of reflowing the plot.
+  const months = useMemo<(MonthPoint | null)[]>(() => {
+    const slots: (MonthPoint | null)[] = Array.from({ length: 12 }, () => null);
+    for (const point of series) {
+      if (point.month.slice(0, 4) === year) {
+        slots[Number(point.month.slice(5, 7)) - 1] = point;
+      }
+    }
+    return slots;
+  }, [series, year]);
+
   // The axis labels come from the catalog rather than from `point.label`, which
   // `lib/insights.ts` fills in English. That module is pure and has no locale
   // to read, so the translation happens at the one place that does.
-  const labels = useMemo(
-    () => ({
-      month: (point: MonthPoint) => tMonths(`short${Number(point.month.slice(5, 7))}`),
-    }),
+  const monthLabel = useMemo(
+    () => (index: number) => tMonths(`short${index + 1}`),
     [tMonths],
   );
 
   const option = useMemo(
-    () => (tokens ? buildOption(series, tokens, narrow, labels) : null),
-    [series, tokens, narrow, labels],
+    () => (tokens ? buildOption(months, tokens, narrow, hovered, monthLabel) : null),
+    [months, tokens, narrow, hovered, monthLabel],
   );
 
   if (series.length === 0) return null;
+
+  const stepYear = (delta: number) => {
+    const next = years[yearIndex + delta];
+    if (!next) return;
+    setHovered(null);
+    setChosenYear(next);
+  };
+
+  const stepButton =
+    "flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-text-muted transition-colors hover:text-text disabled:cursor-default disabled:opacity-40 disabled:hover:text-text-muted";
 
   return (
     <Section
@@ -187,17 +331,51 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
       meta={t("meta")}
       panelClassName="p-4 sm:p-5"
     >
+      {/* The year pager — same pill idiom as the top-categories controls. */}
+      <div className="flex items-center pb-3">
+        <div
+          role="group"
+          aria-label={t("yearAria")}
+          className="flex items-center rounded-full border border-line-strong bg-surface p-0.5"
+        >
+          <button
+            type="button"
+            aria-label={t("prevYear")}
+            disabled={yearIndex <= 0}
+            onClick={() => stepYear(-1)}
+            className={stepButton}
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+          </button>
+          <span
+            aria-live="polite"
+            className="min-w-12 text-center font-mono text-[13px] font-medium tabular-nums"
+          >
+            {year}
+          </span>
+          <button
+            type="button"
+            aria-label={t("nextYear")}
+            disabled={yearIndex >= years.length - 1}
+            onClick={() => stepYear(1)}
+            className={stepButton}
+          >
+            <ChevronRight className="size-4" aria-hidden />
+          </button>
+        </div>
+      </div>
+
       <EChart
         option={option}
         height={HEIGHT}
-        label={t("chartLabel", {
-          first: series[0].month,
-          last: series[series.length - 1].month,
-        })}
+        notMerge={false}
+        onEvents={events}
+        label={t("chartLabel", { year })}
       />
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
-          canvas fails. Also the relief a sub-3:1 fill requires. */}
+          canvas fails. Also the relief a sub-3:1 fill requires. Every year at
+          once, so nobody has to operate the stepper to hear the history. */}
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
       <table className="sr-only" aria-label={t("tableLabel")}>

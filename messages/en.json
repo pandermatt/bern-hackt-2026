@@ -133,8 +133,11 @@
   },
   "Trend": {
     "heading": "Month by month",
-    "meta": "Net balance per month",
-    "chartLabel": "Net balance in Swiss francs for each month from {first} to {last} — bars above the zero line are months that kept money, bars below are months that overspent. The table below the chart carries the same figures.",
+    "meta": "Net balance per month, one year at a time",
+    "yearAria": "Shown year",
+    "prevYear": "Previous year",
+    "nextYear": "Next year",
+    "chartLabel": "Net balance in Swiss francs for each month of {year} — bars above the zero line are months that kept money, bars below are months that overspent. The table below the chart carries every year's figures.",
     "tableLabel": "Net balance, by month",
     "month": "Month",
     "net": "Net",

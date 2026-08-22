@@ -2,9 +2,9 @@
 
 import {
   BarChart,
+  CustomChart,
   LineChart,
   PieChart,
-  RadarChart,
   ScatterChart,
 } from "echarts/charts";
 import {
@@ -16,7 +16,11 @@ import {
 import * as echarts from "echarts/core";
 import { UniversalTransition } from "echarts/features";
 import { CanvasRenderer } from "echarts/renderers";
-import type { EChartsOption } from "echarts";
+import type {
+  CustomSeriesRenderItem,
+  CustomSeriesRenderItemReturn,
+  EChartsOption,
+} from "echarts";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -41,6 +45,10 @@ import { useHydrated } from "@/lib/use-hydrated";
 // charts use — the barrel import is the whole library and roughly triples this.
 echarts.use([
   BarChart,
+  // The balance chart's bars: a plain bar series has one width for the whole
+  // series, and its hover interaction is a single column growing wider — only
+  // `renderItem` can size a bar per data item.
+  CustomChart,
   LineChart,
   PieChart,
   RadarChart,
@@ -243,4 +251,8 @@ export function EChart({
   );
 }
 
-export type { EChartsOption };
+export type {
+  CustomSeriesRenderItem,
+  CustomSeriesRenderItemReturn,
+  EChartsOption,
+};

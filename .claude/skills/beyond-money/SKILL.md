@@ -280,8 +280,14 @@ Unchanged from the template this app grew out of, and still exactly true.
 - **The two charts answer different questions, and neither should grow into
   the other.** "Month by month" is the **net balance** over time — one bar per
   month diverging from a zero line, coloured by the `--flow-in`/`--flow-out`
-  direction pair, no category breakdown. (It was two overlaid in/out areas
-  before being reduced to balance-only bars.) The donut carries the category
+  direction pair, no category breakdown, **one year at a time** behind a
+  prev/next year pager. (It was two overlaid in/out areas before being reduced
+  to balance-only bars.) Hovering a column widens it in place and hangs its
+  amount off the data end — that label *is* the tooltip, so the chart has no
+  floating one. The per-column width is why the bars are an ECharts `custom`
+  series (`renderItem`): a `bar` series has one width for the whole series,
+  and its zero baseline rides an empty companion `bar` series because a custom
+  series cannot carry a `markLine`. The donut carries the category
   story — and since the ranked "Where it goes" list was dropped as a second
   telling of it, the donut is the **only** thing carrying it, which is why its
   legend now shows at every width rather than only from `sm` up. A category

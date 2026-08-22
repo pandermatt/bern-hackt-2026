@@ -77,10 +77,10 @@ export default function Loading() {
           ))}
         </div>
 
-        {/* Month by month: 320px of canvas, p-5 either side, plus the footnote
-            line and its margin. */}
+        {/* Month by month: the year pager row (32px + 12px gap), 320px of
+            canvas, p-5 either side, plus the footnote line and its margin. */}
         <SectionHeading titleWidth="w-[210px]" metaWidth="w-[180px]" />
-        <div className="h-[394px] rounded-lg bg-surface-muted" />
+        <div className="h-[438px] rounded-lg bg-surface-muted" />
 
         {/* Top categories, at every width: the period and view badges with
             the chip strip, 300px of canvas, p-5 either side, plus the

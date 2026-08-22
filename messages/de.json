@@ -133,8 +133,11 @@
   },
   "Trend": {
     "heading": "Monat für Monat",
-    "meta": "Nettosaldo pro Monat",
-    "chartLabel": "Nettosaldo in Schweizer Franken pro Monat, von {first} bis {last} — Balken über der Nulllinie sind Monate mit Überschuss, Balken darunter Monate mit Mehrausgaben. Die Tabelle unter dem Diagramm enthält dieselben Zahlen.",
+    "meta": "Nettosaldo pro Monat, ein Jahr aufs Mal",
+    "yearAria": "Angezeigtes Jahr",
+    "prevYear": "Vorheriges Jahr",
+    "nextYear": "Nächstes Jahr",
+    "chartLabel": "Nettosaldo in Schweizer Franken pro Monat im Jahr {year} — Balken über der Nulllinie sind Monate mit Überschuss, Balken darunter Monate mit Mehrausgaben. Die Tabelle unter dem Diagramm enthält die Zahlen aller Jahre.",
     "tableLabel": "Nettosaldo nach Monat",
     "month": "Monat",
     "net": "Netto",
