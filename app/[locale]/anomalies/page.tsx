@@ -51,21 +51,21 @@ function GroupRow({
   group,
   countLabel,
   progressLabel,
-  hideResolved,
+  showResolved,
 }: {
   group: AnomalyGroup;
   countLabel: string;
   progressLabel: string;
-  hideResolved: boolean;
+  showResolved: boolean;
 }) {
   return (
     <li>
       {/* The flag travels with the click. It is URL state, so a rule page
-          reached from a list with the resolved ones hidden has to be told
-          that too — otherwise walking one hop in silently puts back exactly
-          what the reader just asked to be rid of. */}
+          reached from a list with the resolved ones showing has to be told
+          that too — otherwise walking one hop in silently re-hides exactly
+          what the reader just asked to see. */}
       <Link
-        href={`/anomalies/${group.ruleId}${hideResolved ? "?hideResolved=true" : ""}`}
+        href={`/anomalies/${group.ruleId}${showResolved ? "?showResolved=true" : ""}`}
         className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover sm:px-5"
       >
         {/* How much of this kind has been worked through. An indicator, not a
@@ -74,11 +74,11 @@ function GroupRow({
             inside the anchor: a button here would be interactive content
             nested in a link.
 
-            With `hideResolved` on it reads empty, because the resolved part is
-            not in the list any more and a ring claiming progress the page is
-            not showing would be describing something else. */}
+            In the default hidden state it reads empty, because the resolved
+            part is not in the list any more and a ring claiming progress the
+            page is not showing would be describing something else. */}
         <ResolveRing
-          resolved={hideResolved ? 0 : group.resolvedCount}
+          resolved={showResolved ? group.resolvedCount : 0}
           total={group.transactionCount}
           label={progressLabel}
         />
@@ -116,7 +116,7 @@ export default async function AnomaliesPage({
   searchParams,
 }: PageProps<"/[locale]/anomalies">) {
   const { locale } = await params;
-  const { hideResolved } = await searchParams;
+  const { showResolved } = await searchParams;
   const t = await getTranslations({ locale, namespace: "Anomalies" });
 
   const user = await getCurrentUser();
@@ -124,10 +124,11 @@ export default async function AnomaliesPage({
   if (!user) return redirect({ href: "/login", locale });
 
   // The literal string, the way `includeTransfers` is read — anything else in
-  // the query string simply is not the flag.
-  const hidingResolved = hideResolved === "true";
+  // the query string simply is not the flag. Resolved findings are hidden by
+  // default; this flag is the reader asking for them back.
+  const showingResolved = showResolved === "true";
 
-  const overview = await getAnomalyOverview(hidingResolved);
+  const overview = await getAnomalyOverview(!showingResolved);
   const total = overview.action.length + overview.context.length;
 
   return (
@@ -204,10 +205,10 @@ export default async function AnomaliesPage({
                   group={group}
                   countLabel={t("count", { count: group.transactionCount })}
                   progressLabel={t("resolvedOf", {
-                    resolved: hidingResolved ? 0 : group.resolvedCount,
+                    resolved: showingResolved ? group.resolvedCount : 0,
                     total: group.transactionCount,
                   })}
-                  hideResolved={hidingResolved}
+                  showResolved={showingResolved}
                 />
               ))}
             </ul>
@@ -228,22 +229,23 @@ export default async function AnomaliesPage({
                   group={group}
                   countLabel={t("count", { count: group.transactionCount })}
                   progressLabel={t("resolvedOf", {
-                    resolved: hidingResolved ? 0 : group.resolvedCount,
+                    resolved: showingResolved ? group.resolvedCount : 0,
                     total: group.transactionCount,
                   })}
-                  hideResolved={hidingResolved}
+                  showResolved={showingResolved}
                 />
               ))}
             </ul>
           </Section>
         )}
 
-        {/* Everything worked through, and the toggle is what is hiding it. A
+        {/* Everything worked through, and the default hiding is what took it
+            off the page. A
             fourth kind of nothing, and the only one that is a statement about
             the reader rather than about the statements — folding it into
             `emptyTitle` would claim the scan found nothing when in fact it
             found plenty and someone dealt with all of it. */}
-        {total === 0 && hidingResolved && overview.resolvedGroupCount > 0 && (
+        {total === 0 && !showingResolved && overview.resolvedGroupCount > 0 && (
           <div className="mt-6 rounded-lg bg-surface-muted px-5 py-10 text-center">
             <CheckCircle2 aria-hidden className="mx-auto size-6 text-accent" />
             <p className="mt-3 text-[15px] font-medium text-text">
@@ -258,7 +260,7 @@ export default async function AnomaliesPage({
           </div>
         )}
 
-        {total === 0 && !(hidingResolved && overview.resolvedGroupCount > 0) && (
+        {total === 0 && !(!showingResolved && overview.resolvedGroupCount > 0) && (
           <div className="mt-6 rounded-lg bg-surface-muted px-5 py-10 text-center">
             <Sparkles aria-hidden className="mx-auto size-6 text-accent" />
             {/* Three different nothings, and telling them apart is the whole

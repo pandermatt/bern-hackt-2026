@@ -8,7 +8,12 @@ import { useTransition } from "react";
 import { usePathname, useRouter } from "@/i18n/navigation";
 
 /**
- * Takes the finished findings out of the page you are on.
+ * Puts the finished findings back onto the page you are on.
+ *
+ * **Resolved rows are hidden by default** — ticking one off is asking to be
+ * done with it, so it leaves the list on the next refresh; this switch is how
+ * the reader looks back at the worked-through pile. The flag is therefore
+ * `showResolved`, and its absence is the default state.
  *
  * **URL state, not React state.** The server computes what to show, so it needs
  * the flag anyway; putting it in the query string is what also makes the view
@@ -41,12 +46,12 @@ export function HideResolvedToggle({ resolvedCount = 0 }: { resolvedCount?: numb
 
   // The literal string, not `z.coerce.boolean()` — the same choice
   // `includeTransfers` makes, where "false" would otherwise be truthy.
-  const hidden = searchParams.get("hideResolved") === "true";
+  const shown = searchParams.get("showResolved") === "true";
 
   function toggle() {
     const params = new URLSearchParams(searchParams);
-    if (hidden) params.delete("hideResolved");
-    else params.set("hideResolved", "true");
+    if (shown) params.delete("showResolved");
+    else params.set("showResolved", "true");
 
     const query = params.toString();
 
@@ -55,22 +60,22 @@ export function HideResolvedToggle({ resolvedCount = 0 }: { resolvedCount?: numb
     });
   }
 
-  const Icon = hidden ? Eye : EyeOff;
+  const Icon = shown ? EyeOff : Eye;
 
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-pressed={hidden}
+      aria-pressed={shown}
       disabled={pending}
       className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition-colors disabled:opacity-60 ${
-        hidden
+        shown
           ? "bg-accent-soft text-accent"
           : "bg-surface-muted text-text-muted hover:text-text"
       }`}
     >
       <Icon aria-hidden className="size-3.5 shrink-0" />
-      {t(hidden ? "showResolved" : "hideResolved")}
+      {t(shown ? "hideResolved" : "showResolved")}
       {/* Only when there is something to hide — a zero here would put a number
           on a control that has nothing to act on. The control itself stays,
           so it is in the same place on every page whether or not anything has
