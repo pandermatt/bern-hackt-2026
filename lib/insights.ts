@@ -1164,3 +1164,50 @@ export function calendarMonths(
 
   return months;
 }
+
+/** One booking day at one merchant, and everything flagged there. */
+export type DayMerchantGroup = {
+  /** `${bookedOn}|${merchant}` — stable, and what the resolve control keys on. */
+  key: string;
+  bookedOn: string;
+  merchant: string;
+  rows: Transaction[];
+  /** Unsigned, so it reads as "how much is in this group". */
+  totalMinor: number;
+};
+
+/**
+ * Rows folded into one group per (booking day, merchant).
+ *
+ * That pair is the unit `consolidateInsights` in `lib/anomaly-engine.ts`
+ * already merges findings on, so grouping the rule page by it puts the same
+ * boundary in front of the reader that the engine used behind them — four
+ * charges of one duplicate billing read as one thing to resolve, not four.
+ *
+ * Not a single forward pass like `groupByMonth`: the caller's ordering is
+ * `desc(bookedOn), asc(id)`, which keeps a day contiguous but lets one
+ * merchant's rows be split by another's within it. The map keeps first-seen
+ * order, so the result still runs newest day first.
+ */
+export function groupByDayMerchant(rows: Transaction[]): DayMerchantGroup[] {
+  const groups = new Map<string, DayMerchantGroup>();
+
+  for (const row of rows) {
+    const key = `${row.bookedOn}|${row.merchant}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        bookedOn: row.bookedOn,
+        merchant: row.merchant,
+        rows: [],
+        totalMinor: 0,
+      };
+      groups.set(key, group);
+    }
+    group.rows.push(row);
+    group.totalMinor += Math.abs(row.amountMinor);
+  }
+
+  return [...groups.values()];
+}

@@ -10,6 +10,7 @@ import {
   type NewTransaction,
   type User,
 } from "@/db/schema";
+import { fingerprintOf, rebindAnomalies } from "@/lib/anomaly-sync";
 import { hashPassword } from "@/lib/auth";
 
 const signedIn = vi.hoisted(() => ({ user: null as User | null }));
@@ -38,6 +39,7 @@ const {
   getAnomalyScanState,
   getAnomalyScanStatus,
   getStoredAnomaliesForPage,
+  setAnomalyResolved,
   startAnomalyScan,
 } = await import("@/app/actions/anomalies");
 
@@ -238,25 +240,11 @@ describe("running a scan", () => {
 
 describe("scan state (drives the dashboard prompt)", () => {
   /** A finding pointing at an id no transaction has — what a re-import leaves. */
-  function leftover(userId: number) {
-    return {
-      userId,
-      transactionId: 999_999,
-      ruleId: "REPEAT_CHARGE",
-      severity: "medium" as const,
-      title: "REPEAT_CHARGE title",
-      description: "REPEAT_CHARGE description",
-      icon: "lucide:arrow-up",
-      emoji: "🔺",
-      metrics: "{}",
-    };
-  }
-
   it("reports no completed scan on a fresh account", async () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: false,
-      stale: false,
+      outdated: false,
     });
   });
 
@@ -268,7 +256,7 @@ describe("scan state (drives the dashboard prompt)", () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: true,
-      stale: false,
+      outdated: false,
     });
   });
 
@@ -283,38 +271,95 @@ describe("scan state (drives the dashboard prompt)", () => {
     const state = await getAnomalyScanState();
     expect(state.hasCompletedScan).toBe(true);
     expect(state.running).toBe(false);
-    // Nothing was left behind, so this is a clean result and not a stale one.
-    expect(state.stale).toBe(false);
+    // The statements have not moved, so there is nothing to re-run for.
+    expect(state.outdated).toBe(false);
   });
 
-  it("keeps a completed scan un-stale while any finding still has its row", async () => {
+  it("stays current when the same statements are re-imported", async () => {
+    /*
+     * The whole point of the fingerprint. `npm run start` re-seeds on every
+     * boot, and the delete-then-insert reissues every transaction id — which is
+     * what used to make a scan look out of date on every single deploy.
+     */
+    const rows = history(alice.id, "a");
+    await db.insert(transactions).values(rows);
+    await startAnomalyScan();
+    await waitForScan();
+
+    await db.delete(transactions).where(eq(transactions.userId, alice.id));
+    await db.insert(transactions).values(rows);
+
+    expect((await getAnomalyScanState()).outdated).toBe(false);
+  });
+
+  it("reports a scan as outdated once a transaction is added", async () => {
     await db.insert(transactions).values(history(alice.id, "a"));
-    const [live] = await db.select({ id: transactions.id }).from(transactions).limit(1);
-    await db.insert(anomalies).values([
-      { ...leftover(alice.id), transactionId: live.id },
-      // A re-import reissues ids, so some findings can be orphaned while others
-      // survive. One survivor is enough for the results to still be about these
-      // transactions.
-      leftover(alice.id),
-    ]);
+    await startAnomalyScan();
+    await waitForScan();
+    expect((await getAnomalyScanState()).outdated).toBe(false);
 
-    expect((await getAnomalyScanState()).stale).toBe(false);
+    await db.insert(transactions).values({
+      userId: alice.id,
+      externalId: "a-new",
+      bookedOn: "2025-07-01",
+      kind: "expense",
+      amountMinor: -4200,
+      currency: "CHF",
+      originalAmountMinor: 4200,
+      account: "Privatkonto",
+      merchant: "Neue AG",
+      category: "Other",
+      description: "arrived after the scan",
+    });
+
+    expect((await getAnomalyScanState()).outdated).toBe(true);
+
+    // And re-running settles it.
+    await startAnomalyScan();
+    await waitForScan();
+    expect((await getAnomalyScanState()).outdated).toBe(false);
   });
 
-  it("reports findings left behind by a re-import as stale", async () => {
-    // What a re-seed leaves: every finding points at a transaction id that no
-    // longer exists, so the ledger shows no badges at all. Without this the
-    // dashboard would silently look like a clean account.
+  it("reports a scan as outdated once a transaction is removed", async () => {
     await db.insert(transactions).values(history(alice.id, "a"));
-    await db.insert(anomalies).values(leftover(alice.id));
+    await startAnomalyScan();
+    await waitForScan();
 
-    expect((await getAnomalyScanState()).stale).toBe(true);
+    await db.delete(transactions).where(eq(transactions.externalId, "a-spike"));
+
+    expect((await getAnomalyScanState()).outdated).toBe(true);
   });
 
-  it("does not call another account's leftovers stale", async () => {
-    await db.insert(anomalies).values(leftover(bob.id));
+  it("treats a run with no fingerprint as unknown rather than outdated", async () => {
+    /*
+     * Scans that predate the column carry no fingerprint. They must not start
+     * nagging just because it shipped — silence is the better wrong answer than
+     * a prompt nobody can clear except by re-running.
+     */
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await db.insert(anomalyRuns).values({
+      userId: alice.id,
+      status: "done",
+      startedAt: new Date(),
+      finishedAt: new Date(),
+    });
 
-    expect((await getAnomalyScanState()).stale).toBe(false);
+    expect((await getAnomalyScanState()).outdated).toBe(false);
+  });
+
+  it("does not read another account's scan", async () => {
+    await db.insert(transactions).values(history(bob.id, "b"));
+    signedIn.user = bob;
+    await startAnomalyScan();
+    await waitForScan();
+
+    // Alice has transactions Bob's scan never saw, and no scan of her own.
+    signedIn.user = alice;
+    await db.insert(transactions).values(history(alice.id, "a"));
+
+    const state = await getAnomalyScanState();
+    expect(state.hasCompletedScan).toBe(false);
+    expect(state.outdated).toBe(false);
   });
 
   it("reports nothing for a signed-out visitor", async () => {
@@ -322,7 +367,7 @@ describe("scan state (drives the dashboard prompt)", () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: false,
-      stale: false,
+      outdated: false,
     });
   });
 });
@@ -419,20 +464,18 @@ describe("the anomaly overview", () => {
     expect(overview.action.find((g) => g.ruleId === "REPEAT_CHARGE")?.transactionCount).toBe(1);
     // Nothing live at all, so the group is gone rather than a dead link.
     expect(overview.action.some((g) => g.ruleId === "MISSING_EXPECTED_INCOME")).toBe(false);
-    // Something survived, so this is a real result rather than a stale one.
-    expect(overview.stale).toBe(false);
+    // No scan has run here at all, so there is no fingerprint to be behind.
+    expect(overview.outdated).toBe(false);
   });
 
-  it("calls out findings left behind by a re-import instead of reporting all clear", async () => {
-    // Every finding pointing at a vanished transaction is what a re-seed leaves:
-    // ids are reissued, so the old ones match nothing. Saying "nothing looks
-    // off" there would be the one wrong answer — nothing was checked.
+  it("drops a finding whose transaction is gone rather than rendering a dead link", async () => {
+    // Findings can still outlive their rows between an import and the re-bind,
+    // and a group with nothing live left is not a group.
     await finding(alice.id, 999_999, "REPEAT_CHARGE");
 
     const overview = await getAnomalyOverview();
     expect(overview.action).toEqual([]);
     expect(overview.context).toEqual([]);
-    expect(overview.stale).toBe(true);
   });
 
   it("orders deterministically, breaking ties on the rule id", async () => {
@@ -602,12 +645,16 @@ describe("ownership", () => {
       context: [],
       hasCompletedScan: false,
       running: false,
-      stale: false,
+      outdated: false,
+      resolvedGroupCount: 0,
     });
     expect(await startAnomalyScan()).toEqual({
       ok: false,
       error: "sessionExpired",
     });
+    expect(
+      await setAnomalyResolved({ ruleId: "REPEAT_CHARGE", resolved: true }),
+    ).toEqual({ ok: false, error: "Sign in to resolve a finding." });
   });
 });
 
@@ -650,5 +697,435 @@ describe("getAnomalyKindByTransaction", () => {
     const mine = await getAnomalyKindByTransaction();
     expect(mine.has(99)).toBe(false);
     expect(mine.get(1)).toBe("info");
+  });
+});
+
+describe("resolving findings", () => {
+  /** One rule, three transactions, two of them the same day at the same shop. */
+  async function seedFindings(userId: number, prefix: string) {
+    const rows: NewTransaction[] = [
+      {
+        userId,
+        externalId: `${prefix}-1`,
+        bookedOn: "2025-03-01",
+        kind: "expense",
+        amountMinor: -2500,
+        currency: "CHF",
+        originalAmountMinor: 2500,
+        account: "Privatkonto",
+        merchant: "Coop",
+        category: "Groceries",
+        description: "first",
+      },
+      {
+        userId,
+        externalId: `${prefix}-2`,
+        bookedOn: "2025-03-01",
+        kind: "expense",
+        amountMinor: -2500,
+        currency: "CHF",
+        originalAmountMinor: 2500,
+        account: "Privatkonto",
+        merchant: "Coop",
+        category: "Groceries",
+        description: "second, same day same shop",
+      },
+      {
+        userId,
+        externalId: `${prefix}-3`,
+        bookedOn: "2025-04-02",
+        kind: "expense",
+        amountMinor: -9900,
+        currency: "CHF",
+        originalAmountMinor: 9900,
+        account: "Privatkonto",
+        merchant: "SBB",
+        category: "Transport",
+        description: "another day, another merchant",
+      },
+    ];
+    const inserted = await db.insert(transactions).values(rows).returning();
+
+    await db.insert(anomalies).values(
+      inserted.map((row) => ({
+        userId,
+        transactionId: row.id,
+        transactionExternalId: row.externalId,
+        ruleId: "REPEAT_CHARGE",
+        severity: "medium" as const,
+        kind: "warning" as const,
+        title: "Repeat charge",
+        description: `finding for ${row.externalId}`,
+        icon: "lucide:copy",
+      })),
+    );
+
+    return inserted;
+  }
+
+  it("resolves one finding without touching its neighbours", async () => {
+    const [first, second, third] = await seedFindings(alice.id, "a");
+
+    expect(
+      await setAnomalyResolved({
+        ruleId: "REPEAT_CHARGE",
+        transactionIds: [first.id],
+        resolved: true,
+      }),
+    ).toEqual({ ok: true, changed: 1 });
+
+    const detail = await getAnomalyRuleDetail("REPEAT_CHARGE");
+    expect(detail?.resolvedIds).toEqual([first.id]);
+    expect(detail?.resolvedIds).not.toContain(second.id);
+    expect(detail?.resolvedIds).not.toContain(third.id);
+  });
+
+  it("resolves a day-and-merchant group in one call, and reopens it", async () => {
+    const [first, second, third] = await seedFindings(alice.id, "a");
+    const group = [first.id, second.id];
+
+    await setAnomalyResolved({
+      ruleId: "REPEAT_CHARGE",
+      transactionIds: group,
+      resolved: true,
+    });
+
+    let detail = await getAnomalyRuleDetail("REPEAT_CHARGE");
+    expect(new Set(detail?.resolvedIds)).toEqual(new Set(group));
+    expect(detail?.resolvedIds).not.toContain(third.id);
+
+    // Reversible — a mis-click on a group is not a one-way door.
+    await setAnomalyResolved({
+      ruleId: "REPEAT_CHARGE",
+      transactionIds: group,
+      resolved: false,
+    });
+
+    detail = await getAnomalyRuleDetail("REPEAT_CHARGE");
+    expect(detail?.resolvedIds).toEqual([]);
+  });
+
+  it("resolves every finding of a rule when no ids are named", async () => {
+    const inserted = await seedFindings(alice.id, "a");
+
+    expect(
+      await setAnomalyResolved({ ruleId: "REPEAT_CHARGE", resolved: true }),
+    ).toEqual({ ok: true, changed: inserted.length });
+
+    const detail = await getAnomalyRuleDetail("REPEAT_CHARGE");
+    expect(new Set(detail?.resolvedIds)).toEqual(new Set(inserted.map((r) => r.id)));
+  });
+
+  it("never reaches another account's findings", async () => {
+    const mine = await seedFindings(alice.id, "a");
+    const theirs = await seedFindings(bob.id, "b");
+
+    // Alice asks for every finding of the rule, and Bob's are of the same rule.
+    await setAnomalyResolved({ ruleId: "REPEAT_CHARGE", resolved: true });
+
+    const bobRows = await db
+      .select()
+      .from(anomalies)
+      .where(eq(anomalies.userId, bob.id));
+    expect(bobRows).toHaveLength(theirs.length);
+    expect(bobRows.every((row) => row.resolvedAt === null)).toBe(true);
+
+    const aliceRows = await db
+      .select()
+      .from(anomalies)
+      .where(eq(anomalies.userId, alice.id));
+    expect(aliceRows).toHaveLength(mine.length);
+    expect(aliceRows.every((row) => row.resolvedAt !== null)).toBe(true);
+  });
+
+  it("refuses a hand-edited rule id before it queries anything", async () => {
+    await seedFindings(alice.id, "a");
+
+    expect(
+      await setAnomalyResolved({ ruleId: "'; DROP TABLE anomalies; --", resolved: true }),
+    ).toEqual({ ok: false, error: "That finding could not be identified." });
+
+    const rows = await db.select().from(anomalies);
+    expect(rows.every((row) => row.resolvedAt === null)).toBe(true);
+  });
+
+  it("counts a transaction resolved only when every finding on it is", async () => {
+    const [first] = await seedFindings(alice.id, "a");
+
+    // A second finding of the same rule on the same transaction — one rule can
+    // flag a row twice, and half of it being ticked off is not being done.
+    await db.insert(anomalies).values({
+      userId: alice.id,
+      transactionId: first.id,
+      transactionExternalId: first.externalId,
+      ruleId: "REPEAT_CHARGE",
+      severity: "medium",
+      kind: "warning",
+      title: "Repeat charge",
+      description: "a second finding on the same row",
+      icon: "lucide:copy",
+    });
+
+    await db
+      .update(anomalies)
+      .set({ resolvedAt: new Date() })
+      .where(eq(anomalies.description, "finding for a-1"));
+
+    const detail = await getAnomalyRuleDetail("REPEAT_CHARGE");
+    expect(detail?.resolvedIds).not.toContain(first.id);
+  });
+});
+
+describe("the overview's resolved counts", () => {
+  it("reports progress per rule and hides the finished ones on request", async () => {
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+
+    const before = await getAnomalyOverview();
+    const groups = [...before.action, ...before.context];
+    expect(groups.length).toBeGreaterThan(0);
+    expect(groups.every((g) => g.resolvedCount === 0)).toBe(true);
+    expect(before.resolvedGroupCount).toBe(0);
+
+    const target = groups[0];
+    await setAnomalyResolved({ ruleId: target.ruleId, resolved: true });
+
+    const after = await getAnomalyOverview();
+    const resolved = [...after.action, ...after.context].find(
+      (g) => g.ruleId === target.ruleId,
+    );
+    expect(resolved?.resolvedCount).toBe(target.transactionCount);
+    expect(after.resolvedGroupCount).toBe(1);
+
+    // Hidden, but still counted — that count is what lets the page say "you
+    // resolved everything" rather than "nothing was found".
+    const hidden = await getAnomalyOverview(true);
+    expect(
+      [...hidden.action, ...hidden.context].some((g) => g.ruleId === target.ruleId),
+    ).toBe(false);
+    expect(hidden.resolvedGroupCount).toBe(1);
+  });
+});
+
+describe("resolutions across a re-scan", () => {
+  it("survives a re-scan of the same statements", async () => {
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+
+    const [target] = [...(await getAnomalyOverview()).action, ...(await getAnomalyOverview()).context];
+    await setAnomalyResolved({ ruleId: target.ruleId, resolved: true });
+
+    await startAnomalyScan();
+    await waitForScan();
+
+    const after = [...(await getAnomalyOverview()).action, ...(await getAnomalyOverview()).context].find(
+      (g) => g.ruleId === target.ruleId,
+    );
+    expect(after?.resolvedCount).toBe(after?.transactionCount);
+  });
+
+  it("survives the statements being re-imported with fresh ids", async () => {
+    const rows = history(alice.id, "a");
+    await db.insert(transactions).values(rows);
+    await startAnomalyScan();
+    await waitForScan();
+
+    const overview = await getAnomalyOverview();
+    const target = [...overview.action, ...overview.context][0];
+    await setAnomalyResolved({ ruleId: target.ruleId, resolved: true });
+
+    /*
+     * What `npm run seed` does on every boot: delete-then-insert, so every
+     * transaction comes back with a new id. A resolution matched on
+     * `transaction_id` would be lost here; matched on the statement line's own
+     * natural key it is not.
+     */
+    await db.delete(transactions).where(eq(transactions.userId, alice.id));
+    await db.insert(transactions).values(rows);
+
+    const reissued = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.externalId, "a-spike"));
+    const stale = await db
+      .select()
+      .from(anomalies)
+      .where(eq(anomalies.userId, alice.id));
+    expect(stale.every((row) => row.transactionId !== reissued[0].id)).toBe(true);
+
+    await startAnomalyScan();
+    await waitForScan();
+
+    const after = [
+      ...(await getAnomalyOverview()).action,
+      ...(await getAnomalyOverview()).context,
+    ].find((g) => g.ruleId === target.ruleId);
+    expect(after).toBeDefined();
+    expect(after?.resolvedCount).toBe(after?.transactionCount);
+  });
+
+  it("leaves an untouched rule unresolved after a re-scan", async () => {
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+
+    await startAnomalyScan();
+    await waitForScan();
+
+    const overview = await getAnomalyOverview();
+    expect(
+      [...overview.action, ...overview.context].every((g) => g.resolvedCount === 0),
+    ).toBe(true);
+  });
+});
+
+describe("findings across a re-import", () => {
+  /** What every importer does, and what `npm run start` does on every boot. */
+  async function reimport(userId: number, rows: NewTransaction[]) {
+    await db.delete(transactions).where(eq(transactions.userId, userId));
+    await db.insert(transactions).values(rows);
+    rebindAnomalies(db, userId);
+  }
+
+  it("survives a re-seed of the same statements, resolutions and all", async () => {
+    /*
+     * The bug this whole change exists for. `transactions.id` is AUTOINCREMENT
+     * and the seed delete-then-inserts, so re-seeding the identical CSVs used
+     * to leave every finding pointing at an id that no longer existed — a scan
+     * was voided by every deploy.
+     */
+    const rows = history(alice.id, "a");
+    await db.insert(transactions).values(rows);
+    await startAnomalyScan();
+    await waitForScan();
+
+    const before = await db.select().from(anomalies).where(eq(anomalies.userId, alice.id));
+    expect(before.length).toBeGreaterThan(0);
+
+    const overview = await getAnomalyOverview();
+    const target = [...overview.action, ...overview.context][0];
+    await setAnomalyResolved({ ruleId: target.ruleId, resolved: true });
+
+    await reimport(alice.id, rows);
+
+    const after = await db.select().from(anomalies).where(eq(anomalies.userId, alice.id));
+    expect(after).toHaveLength(before.length);
+
+    // Every finding now points at a transaction that actually exists.
+    const live = new Set(
+      (
+        await db
+          .select({ id: transactions.id })
+          .from(transactions)
+          .where(eq(transactions.userId, alice.id))
+      ).map((row) => row.id),
+    );
+    expect(after.every((row) => live.has(row.transactionId))).toBe(true);
+
+    // And the account is not asked to re-run, nor has it lost the tick-offs.
+    const state = await getAnomalyScanState();
+    expect(state.outdated).toBe(false);
+    const regrouped = await getAnomalyOverview();
+    const same = [...regrouped.action, ...regrouped.context].find(
+      (g) => g.ruleId === target.ruleId,
+    );
+    expect(same?.transactionCount).toBe(target.transactionCount);
+    expect(same?.resolvedCount).toBe(target.transactionCount);
+  });
+
+  it("re-points a finding at the row carrying its natural key", async () => {
+    const rows = history(alice.id, "a");
+    await db.insert(transactions).values(rows);
+    const [spike] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.externalId, "a-spike"));
+
+    await db.insert(anomalies).values({
+      userId: alice.id,
+      transactionId: spike.id,
+      transactionExternalId: spike.externalId,
+      ruleId: "REPEAT_CHARGE",
+      severity: "medium",
+      kind: "warning",
+      title: "Repeat charge",
+      description: "d",
+      icon: "lucide:copy",
+    });
+
+    await reimport(alice.id, rows);
+
+    const [reissued] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.externalId, "a-spike"));
+    expect(reissued.id).not.toBe(spike.id);
+
+    const [finding] = await db.select().from(anomalies).where(eq(anomalies.userId, alice.id));
+    expect(finding.transactionId).toBe(reissued.id);
+  });
+
+  it("drops findings whose statement line is gone, and reports the account outdated", async () => {
+    // What regenerating the demo data does: different external ids entirely, so
+    // nothing matches and the old findings describe statements that no longer
+    // exist.
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+    expect((await db.select().from(anomalies)).length).toBeGreaterThan(0);
+
+    await reimport(alice.id, history(alice.id, "different"));
+
+    expect(await db.select().from(anomalies)).toEqual([]);
+    expect((await getAnomalyScanState()).outdated).toBe(true);
+  });
+
+  it("never touches another account's findings", async () => {
+    const mine = history(alice.id, "a");
+    await db.insert(transactions).values(mine);
+    await db.insert(transactions).values(history(bob.id, "b"));
+
+    const [theirRow] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.externalId, "b-spike"));
+    await db.insert(anomalies).values({
+      userId: bob.id,
+      transactionId: theirRow.id,
+      transactionExternalId: theirRow.externalId,
+      ruleId: "REPEAT_CHARGE",
+      severity: "medium",
+      kind: "warning",
+      title: "t",
+      description: "d",
+      icon: "lucide:copy",
+    });
+
+    // Alice re-imports. Bob's finding points at a row Alice's import never saw,
+    // and must come through untouched rather than being read as an orphan.
+    await reimport(alice.id, mine);
+
+    const theirs = await db.select().from(anomalies).where(eq(anomalies.userId, bob.id));
+    expect(theirs).toHaveLength(1);
+    expect(theirs[0].transactionId).toBe(theirRow.id);
+  });
+});
+
+describe("fingerprintOf", () => {
+  it("ignores the order the ids arrive in", () => {
+    // Load-bearing: the read has no ORDER BY, so SQLite may hand them back in
+    // any order and an order-sensitive hash would change at random.
+    expect(fingerprintOf(["b", "a", "c"])).toBe(fingerprintOf(["c", "b", "a"]));
+  });
+
+  it("separates ids so a regrouping cannot collide", () => {
+    expect(fingerprintOf(["ab", "c"])).not.toBe(fingerprintOf(["a", "bc"]));
+  });
+
+  it("changes when the set does", () => {
+    expect(fingerprintOf(["a", "b"])).not.toBe(fingerprintOf(["a", "b", "c"]));
+    expect(fingerprintOf([])).not.toBe(fingerprintOf(["a"]));
   });
 });

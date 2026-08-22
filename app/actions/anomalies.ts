@@ -1,7 +1,9 @@
 "use server";
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { getLocale } from "next-intl/server";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import { getLocale, getTranslations } from "next-intl/server";
+import { z } from "zod";
 
 import { db } from "@/db";
 import {
@@ -26,6 +28,7 @@ import {
 } from "@/lib/llm/analyze-insights";
 import { getCurrentUser } from "@/lib/auth";
 import { getAnomalyText, type TranslatableFinding } from "@/lib/anomaly-text";
+import { fingerprintOf } from "@/lib/anomaly-sync";
 import { defaultLocale, isAppLocale, type AppLocale } from "@/i18n/routing";
 
 /**
@@ -96,6 +99,69 @@ function yieldToEventLoop(): Promise<void> {
 }
 
 /**
+ * The key a resolution is remembered by, across a scan and across a re-import.
+ *
+ * Not the transaction id. `scripts/seed.ts` and `lib/demo-loader.ts` both
+ * delete-then-insert, and `npm run start` runs the seed on every boot, so ids
+ * are reissued on every deploy. `transactions.externalId` is the statement
+ * line's own natural key and survives that.
+ */
+function resolutionKey(ruleId: string, externalId: string): string {
+  return `${ruleId}|${externalId}`;
+}
+
+/**
+ * The resolutions to lift over the wholesale delete, keyed by
+ * `resolutionKey`.
+ *
+ * A scan replaces its predecessor's findings entirely — that is what makes
+ * re-running idempotent — but the work someone did ticking findings off is not
+ * the scan's to throw away. Read before the delete, re-stamped on the way back
+ * in.
+ *
+ * `idToExternal` covers rows written before `transactionExternalId` existed:
+ * their key is recovered from the current transactions table, which is right
+ * up until the next re-import and no worse than nothing after it.
+ */
+async function priorResolutions(
+  userId: number,
+  idToExternal: Map<number, string>,
+): Promise<Map<string, Date>> {
+  const prior = await db
+    .select({
+      ruleId: anomalies.ruleId,
+      transactionId: anomalies.transactionId,
+      transactionExternalId: anomalies.transactionExternalId,
+      resolvedAt: anomalies.resolvedAt,
+    })
+    .from(anomalies)
+    .where(and(eq(anomalies.userId, userId), isNotNull(anomalies.resolvedAt)));
+
+  const carried = new Map<string, Date>();
+  for (const row of prior) {
+    const externalId =
+      row.transactionExternalId ?? idToExternal.get(row.transactionId);
+    // Neither stored nor recoverable: the transaction is gone and there is
+    // nothing left to match the next scan's finding against.
+    if (!externalId || !row.resolvedAt) continue;
+    carried.set(resolutionKey(row.ruleId, externalId), row.resolvedAt);
+  }
+  return carried;
+}
+
+/** The carried timestamp for one finding, or `null` if it was never ticked off. */
+function resolvedAtFor(
+  carried: Map<string, Date>,
+  idToExternal: Map<number, string>,
+  ruleId: string,
+  transactionId: number,
+): Date | null {
+  const externalId = idToExternal.get(transactionId);
+  if (!externalId) return null;
+  return carried.get(resolutionKey(ruleId, externalId)) ?? null;
+}
+
+/**
  * The scan carries the reader's locale only for the narrative layer's sake:
  * the deterministic findings are stored as rule plus values and translated
  * when they are read, but the model writes prose, and prose has to be written
@@ -114,10 +180,23 @@ async function runScan(runId: number, userId: number, locale: AppLocale): Promis
     const total = rows.length;
     await setProgress(runId, { total, phase: "Analysing transactions" });
 
+    // Read before anything is deleted, and before the analysis — the delete
+    // below is wholesale, so this is the only moment the previous scan's
+    // resolutions still exist.
+    const idToExternal = new Map(rows.map((row) => [row.id, row.externalId]));
+    const carried = await priorResolutions(userId, idToExternal);
+
     if (total === 0) {
       await db
         .update(anomalyRuns)
-        .set({ status: "done", phase: "No transactions to scan", finishedAt: new Date() })
+        .set({
+          status: "done",
+          phase: "No transactions to scan",
+          // Stamped here too, or an account with nothing in it would read as
+          // permanently out of date.
+          transactionFingerprint: fingerprintOf([]),
+          finishedAt: new Date(),
+        })
         .where(eq(anomalyRuns.id, runId));
       return;
     }
@@ -192,6 +271,12 @@ async function runScan(runId: number, userId: number, locale: AppLocale): Promis
           baseRuleId: insight.base_rule_id ?? insight.rule_id,
           params: insight.params ? JSON.stringify(insight.params) : null,
           narrativeLocale: insight.narrative_locale ?? null,
+          transactionExternalId: idToExternal.get(transactionId) ?? null,
+          /*
+           * The original timestamp, not `new Date()`: the scan did not resolve
+           * anything, it only carried a resolution across its own delete.
+           */
+          resolvedAt: resolvedAtFor(carried, idToExternal, insight.rule_id, transactionId),
         });
       }
     }
@@ -216,6 +301,13 @@ async function runScan(runId: number, userId: number, locale: AppLocale): Promis
         status: "done",
         phase: "Finished",
         processed: total,
+        /*
+         * What this scan actually covered. Computed from the rows already in
+         * memory, so it costs no extra query, and it is what
+         * `getAnomalyScanState` later compares against to decide whether the
+         * statements have moved on.
+         */
+        transactionFingerprint: fingerprintOf(rows.map((row) => row.externalId)),
         finishedAt: new Date(),
       })
       .where(eq(anomalyRuns.id, runId));
@@ -278,32 +370,41 @@ export async function startAnomalyScan(): Promise<
 
 /**
  * Whether this account has ever completed a scan, whether one is running right
- * now, and whether the last one's findings still describe the transactions.
+ * now, and whether the last one still describes the current statements.
  *
  * The dashboard needs this to tell three very different states apart: "no
- * findings because nobody has scanned yet" — worth prompting about — "no
+ * findings because nobody has scanned yet" -- worth prompting about -- "no
  * findings because a scan ran and the account is clean", which is a result and
- * not a gap, and a completed scan whose findings all point at transactions that
- * no longer exist. Counting rows in `anomalies` alone cannot distinguish any of
- * them, and would nag people whose books are simply in order.
+ * not a gap, and a completed scan the statements have since moved past.
  *
- * Staleness is two existence probes rather than a count: whether the account
- * has any findings at all, and whether any of them still lands on a live
- * transaction. `anomalies.transactionId` is deliberately not a foreign key — a
- * scan is a snapshot, and a re-import reissues transaction ids — so the rows
- * outlive what they describe and the intersection is the only honest test. It
- * is the same question `getAnomalyOverview` answers from the rows it has
- * already loaded; here there are no rows to load, so it asks SQLite.
+ * **`outdated` is a content comparison, not a timestamp one.** Every importer
+ * delete-then-inserts and `npm run start` re-seeds on every boot, so
+ * `transactions.createdAt` and the transaction ids are both reset constantly;
+ * anything derived from them reported a scan as out of date on every single
+ * deploy, which is what trained people to re-run the detection by reflex. The
+ * fingerprint is over the natural keys, so re-importing identical statements
+ * changes nothing.
+ *
+ * This replaced a pair of existence probes asking whether any finding still
+ * landed on a live transaction. That question is now answered at import time by
+ * `rebindAnomalies`, which re-points the findings instead of letting them
+ * orphan, so it can no longer be true for the reason it used to be.
+ *
+ * The cost is one column scan of the account's transactions per call, where it
+ * used to be two indexed `limit 1` probes. At this size that is well inside the
+ * house rule -- `getDashboard` already loads every row of the account. Past
+ * ~50k rows per account, compare `anomalyRuns.total` against a `count(*)` first
+ * and only hash when the counts agree.
  */
 export async function getAnomalyScanState(): Promise<{
   hasCompletedScan: boolean;
   running: boolean;
-  stale: boolean;
+  outdated: boolean;
 }> {
   const user = await getCurrentUser();
-  if (!user) return { hasCompletedScan: false, running: false, stale: false };
+  if (!user) return { hasCompletedScan: false, running: false, outdated: false };
 
-  const [runs, anyFinding, anyLiveFinding] = await Promise.all([
+  const [runs, lastDone, live] = await Promise.all([
     db
       .select({ status: anomalyRuns.status })
       .from(anomalyRuns)
@@ -311,24 +412,31 @@ export async function getAnomalyScanState(): Promise<{
       .orderBy(desc(anomalyRuns.id))
       .limit(20),
     db
-      .select({ id: anomalies.id })
-      .from(anomalies)
-      .where(eq(anomalies.userId, user.id))
+      .select({ transactionFingerprint: anomalyRuns.transactionFingerprint })
+      .from(anomalyRuns)
+      .where(and(eq(anomalyRuns.userId, user.id), eq(anomalyRuns.status, "done")))
+      .orderBy(desc(anomalyRuns.id))
       .limit(1),
     db
-      .select({ id: anomalies.id })
-      .from(anomalies)
-      .innerJoin(transactions, eq(anomalies.transactionId, transactions.id))
-      .where(
-        and(eq(anomalies.userId, user.id), eq(transactions.userId, user.id)),
-      )
-      .limit(1),
+      .select({ externalId: transactions.externalId })
+      .from(transactions)
+      .where(eq(transactions.userId, user.id)),
   ]);
+
+  const scanned = lastDone[0]?.transactionFingerprint ?? null;
 
   return {
     hasCompletedScan: runs.some((r) => r.status === "done"),
     running: runs.some((r) => r.status === "running"),
-    stale: anyFinding.length > 0 && anyLiveFinding.length === 0,
+    /*
+     * A NULL fingerprint is "unknown", not "outdated". Scans that predate the
+     * column should not start nagging just because it shipped -- they are one
+     * re-scan away from being knowable, and until then silence is the better
+     * wrong answer than a permanent prompt.
+     */
+    outdated:
+      scanned !== null &&
+      scanned !== fingerprintOf(live.map((row) => row.externalId)),
   };
 }
 
@@ -465,6 +573,12 @@ export type AnomalyGroup = {
   description: string;
   /** Distinct transactions, and only ones that still exist. */
   transactionCount: number;
+  /**
+   * How many of those have been ticked off. A transaction counts as resolved
+   * only when *every* finding of this rule pointing at it is — one rule can
+   * flag the same transaction twice, and a half-resolved row is not done.
+   */
+  resolvedCount: number;
   latestOn: string | null;
 };
 
@@ -474,13 +588,25 @@ export type AnomalyOverview = {
   hasCompletedScan: boolean;
   running: boolean;
   /**
-   * Findings exist, but every one of them points at a transaction that is gone
-   * — the statements were re-imported after the last scan, and ids are reissued
-   * on the way in. Without this the page would report "nothing looks off",
-   * which is the one wrong answer: nothing was checked, and the state is one
-   * re-scan away from being right.
+   * The statements have changed since the last completed scan, so its findings
+   * no longer describe them. Without this the page would report "nothing looks
+   * off" for an account nobody has looked at in its current shape, which is the
+   * one wrong answer.
+   *
+   * Passed straight through from `getAnomalyScanState`. It used to be
+   * recomputed here as "findings exist but none land on a live transaction" —
+   * that condition is gone now that `rebindAnomalies` re-points findings at
+   * import time instead of letting them orphan, and recomputing it here would
+   * report a clean re-import as a problem.
    */
-  stale: boolean;
+  outdated: boolean;
+  /**
+   * How many kinds of finding are fully worked through — counted before
+   * `hideResolved` takes them out, which is what lets the page tell "you have
+   * resolved everything" apart from "the scan found nothing". Only the second
+   * is a statement about the statements.
+   */
+  resolvedGroupCount: number;
 };
 
 const SEVERITY_ORDER: Record<AnomalySeverity, number> = { high: 3, medium: 2, low: 1 };
@@ -509,7 +635,9 @@ const SEVERITY_ORDER: Record<AnomalySeverity, number> = { high: 3, medium: 2, lo
  *    so without a total sort — tie-broken on `ruleId` — the page would
  *    reshuffle itself between renders.
  */
-export async function getAnomalyOverview(): Promise<AnomalyOverview> {
+export async function getAnomalyOverview(
+  hideResolved = false,
+): Promise<AnomalyOverview> {
   const user = await getCurrentUser();
   if (!user) {
     return {
@@ -517,7 +645,8 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
       context: [],
       hasCompletedScan: false,
       running: false,
-      stale: false,
+      outdated: false,
+      resolvedGroupCount: 0,
     };
   }
 
@@ -542,6 +671,8 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
   type Bucket = {
     group: AnomalyGroup;
     ids: Set<number>;
+    /** Transactions with at least one finding of this rule still open. */
+    openIds: Set<number>;
     /** Tracks which description belongs to `latestOn`. */
     latestSeen: string | null;
   };
@@ -564,15 +695,18 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
           severity: row.severity,
           description: text.description,
           transactionCount: 0,
+          resolvedCount: 0,
           latestOn: null,
         },
         ids: new Set(),
+        openIds: new Set(),
         latestSeen: null,
       };
       buckets.set(row.ruleId, bucket);
     }
 
     bucket.ids.add(row.transactionId);
+    if (row.resolvedAt === null) bucket.openIds.add(row.transactionId);
     if (SEVERITY_ORDER[row.severity] > SEVERITY_ORDER[bucket.group.severity]) {
       bucket.group.severity = row.severity;
     }
@@ -590,6 +724,7 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
   const groups: AnomalyGroup[] = [];
   for (const bucket of buckets.values()) {
     bucket.group.transactionCount = bucket.ids.size;
+    bucket.group.resolvedCount = bucket.ids.size - bucket.openIds.size;
     groups.push(bucket.group);
   }
 
@@ -598,11 +733,20 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
     b.transactionCount - a.transactionCount ||
     a.ruleId.localeCompare(b.ruleId);
 
+  /*
+   * A rule with nothing left open is done, so it leaves the list entirely.
+   * Partly-worked rules stay — with their ring drawn empty, because what the
+   * ring reports is what the list is showing.
+   */
+  const visible = hideResolved
+    ? groups.filter((g) => g.resolvedCount < g.transactionCount)
+    : groups;
+
   return {
     // Severity leads here because it is the engine's own claim about urgency,
     // and it is the order the ledger badges already use. It is close to a
     // per-rule constant though, so recency is the real discriminator.
-    action: groups
+    action: visible
       .filter((g) => attentionFor(g.ruleId) === "action")
       .sort(
         (a, b) =>
@@ -610,12 +754,11 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
       ),
     // Severity is a dead key in this column — nearly everything here is "low" —
     // so it reads as a feed of what is new.
-    context: groups.filter((g) => attentionFor(g.ruleId) === "context").sort(byLatest),
+    context: visible.filter((g) => attentionFor(g.ruleId) === "context").sort(byLatest),
+    resolvedGroupCount: groups.filter(
+      (g) => g.transactionCount > 0 && g.resolvedCount === g.transactionCount,
+    ).length,
     ...scan,
-    // Deliberately overrides the `stale` the scan state carries: that one asks
-    // SQLite the same question, this one answers it from the very rows the page
-    // is about to render, so the flag and the empty list can never disagree.
-    stale: rows.length > 0 && groups.length === 0,
   };
 }
 
@@ -636,6 +779,12 @@ export type AnomalyRuleDetail = {
   /** Everything else this rule flagged, newest first. */
   others: Transaction[];
   transactionCount: number;
+  /**
+   * The live transactions fully ticked off under this rule — every finding of
+   * it pointing at them is resolved. An array rather than a `Set` because it
+   * crosses into a server component's props.
+   */
+  resolvedIds: number[];
 };
 
 /**
@@ -674,6 +823,7 @@ export async function getAnomalyRuleDetail(
       params: anomalies.params,
       baseRuleId: anomalies.baseRuleId,
       narrativeLocale: anomalies.narrativeLocale,
+      resolvedAt: anomalies.resolvedAt,
     })
     .from(anomalies)
     .where(and(eq(anomalies.userId, user.id), eq(anomalies.ruleId, ruleId)));
@@ -743,6 +893,14 @@ export async function getAnomalyRuleDetail(
           },
     others,
     transactionCount: live.length,
+    /*
+     * Resolved means every finding of this rule on that transaction is — one
+     * rule can flag the same row twice, and half of it being ticked off is not
+     * the same as being done with it.
+     */
+    resolvedIds: [...liveIds].filter((id) =>
+      usable.every((f) => f.transactionId !== id || f.resolvedAt !== null),
+    ),
   };
 }
 
@@ -784,4 +942,125 @@ export async function getAnomalyKindByTransaction(): Promise<
   }
 
   return worst;
+}
+
+export type ResolveResult = { ok: true; changed: number } | { ok: false; error: string };
+
+/**
+ * Errors are phrased here, not in the component — the client raises whatever
+ * string it gets straight into a toast, so it has to arrive translated. Same
+ * shape `app/actions/budget.ts` uses.
+ */
+async function resolveError(key: string): Promise<ResolveResult> {
+  const t = await getTranslations("AnomalyErrors");
+  return { ok: false, error: t(key) };
+}
+
+const resolveInputSchema = z.object({
+  ruleId: z.string().regex(RULE_ID_PATTERN),
+  /** Omitted means every finding of this rule — the subpage's "resolve all". */
+  transactionIds: z.array(z.number().int().finite()).max(5000).optional(),
+  resolved: z.boolean(),
+});
+
+/**
+ * Tick a set of findings off, or put them back.
+ *
+ * The account is resolved from the session, never from an argument — every
+ * export of a `"use server"` module is an endpoint the browser can call with
+ * arguments of its choosing. `ruleId` and `transactionIds` are safe parameters
+ * where `userId` never could be: they only narrow a set already scoped to the
+ * session, so the worst a caller can do by choosing them is change their own
+ * data.
+ *
+ * `resolved` rather than a toggle computed here: the caller already knows what
+ * it is looking at, and a server-side flip would race two clicks into a no-op.
+ *
+ * The `{ ok }` envelope is the mutation contract; the reads above return their
+ * data directly.
+ */
+export async function setAnomalyResolved(input: {
+  ruleId: string;
+  transactionIds?: number[];
+  resolved: boolean;
+}): Promise<ResolveResult> {
+  const user = await getCurrentUser();
+  if (!user) return resolveError("notSignedIn");
+
+  // Checked before the query, so a hand-edited rule id is a rejection rather
+  // than a scan.
+  const parsed = resolveInputSchema.safeParse(input);
+  if (!parsed.success) return resolveError("unknownRule");
+  const { ruleId, transactionIds, resolved } = parsed.data;
+  if (transactionIds?.length === 0) return { ok: true, changed: 0 };
+
+  const scope = and(
+    eq(anomalies.userId, user.id),
+    eq(anomalies.ruleId, ruleId),
+    ...(transactionIds ? [inArray(anomalies.transactionId, transactionIds)] : []),
+  );
+
+  try {
+    /*
+     * Backfilling the natural key is what makes a resolution stick. Rows
+     * written before `transaction_external_id` existed carry none, and without
+     * it the next re-import — which every `npm run start` performs — would
+     * leave this resolution with nothing to match against. Done in the same
+     * transaction as the update, so a row is never resolved without its key.
+     */
+    const changed = db.transaction((tx) => {
+      const targets = tx
+        .select({
+          id: anomalies.id,
+          transactionId: anomalies.transactionId,
+          transactionExternalId: anomalies.transactionExternalId,
+        })
+        .from(anomalies)
+        .where(scope)
+        .all();
+
+      if (targets.length === 0) return 0;
+
+      const missing = targets.filter((row) => row.transactionExternalId === null);
+      if (missing.length > 0) {
+        const live = tx
+          .select({ id: transactions.id, externalId: transactions.externalId })
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.userId, user.id),
+              inArray(
+                transactions.id,
+                missing.map((row) => row.transactionId),
+              ),
+            ),
+          )
+          .all();
+        const idToExternal = new Map(live.map((row) => [row.id, row.externalId]));
+        for (const row of missing) {
+          const externalId = idToExternal.get(row.transactionId);
+          if (!externalId) continue;
+          tx
+            .update(anomalies)
+            .set({ transactionExternalId: externalId })
+            .where(eq(anomalies.id, row.id))
+            .run();
+        }
+      }
+
+      tx
+        .update(anomalies)
+        .set({ resolvedAt: resolved ? new Date() : null })
+        .where(scope)
+        .run();
+
+      return targets.length;
+    });
+
+    revalidatePath("/[locale]/anomalies", "page");
+    revalidatePath("/[locale]/anomalies/[ruleId]", "page");
+    return { ok: true, changed };
+  } catch {
+    return resolveError("saveFailed");
+  }
 }

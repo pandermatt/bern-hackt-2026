@@ -356,10 +356,10 @@
     "doneBody": "Bringing in the findings — they will show up against the transactions below in a moment.",
     "title": "Spot the odd ones out",
     "body": "Nothing has been analysed yet. Analyse with AI to flag duplicate charges, unusual amounts and missed recurring payments across your {count} transactions.",
-    "staleTitle": "These findings are out of date",
-    "staleBody": "Your statements have been re-imported since the last analysis, so its findings no longer line up with your transactions — which is why nothing is flagged against the transactions below. Run it again.",
+    "outdatedTitle": "These findings are out of date",
+    "outdatedBody": "Your transactions have changed since the last analysis, so anything new is not covered by it yet. Run it again to bring the findings up to date.",
     "cta": "Analyse with AI",
-    "staleCta": "Analyse again",
+    "outdatedCta": "Analyse again",
     "retry": "Try again"
   },
   "AnomalyScan": {
@@ -377,7 +377,8 @@
     "unknownError": "unknown error",
     "noScan": "No scan has run yet — the dashboard will not show any anomalies until you run one.",
     "error_sessionExpired": "Your session expired. Sign in again.",
-    "error_alreadyRunning": "A scan is already running."
+    "error_alreadyRunning": "A scan is already running.",
+    "outdated": "Your transactions have changed since this scan ran, so it does not cover all of them yet."
   },
   "ScanPhases": {
     "Loading transactions": "Loading transactions",
@@ -403,13 +404,31 @@
     "neverScannedBody": "Run a scan to flag duplicate charges, unusual amounts and missed recurring payments.",
     "runningBody": "A scan is running now. Findings will appear here as soon as it finishes.",
     "runScan": "Run a scan",
-    "staleTitle": "These findings are out of date",
-    "staleBody": "Your statements have been re-imported since the last scan, so its findings no longer line up with your transactions. Run it again.",
+    "outdatedTitle": "These findings are out of date",
+    "outdatedBody": "Your transactions have changed since the last scan, so these findings do not cover all of them. Run it again to bring them up to date.",
     "seeAll": "See all of this kind",
     "seeInLedger": "Show these in the ledger",
     "thisFinding": "This finding",
     "otherOfThisKind": "Others of this kind",
-    "allOfThisKind": "All of this kind"
+    "allOfThisKind": "All of this kind",
+    "resolvedOf": "{resolved} of {total} resolved",
+    "hideResolved": "Hide resolved",
+    "showResolved": "Show resolved",
+    "resolveAll": "Resolve everything of this kind",
+    "unresolveAll": "Reopen everything of this kind",
+    "resolveGroup": "Resolve {merchant} on {day}",
+    "unresolveGroup": "Reopen {merchant} on {day}",
+    "resolveOne": "Resolve {amount} — {line}",
+    "unresolveOne": "Reopen {amount} — {line}",
+    "stateResolved": "Resolved",
+    "stateOpen": "Not resolved",
+    "allResolvedTitle": "You're all caught up",
+    "allResolvedBody": "{count, plural, one {# kind of finding is} other {# kinds of finding are}} resolved and hidden. Show them again to look back over what you ticked off."
+  },
+  "AnomalyErrors": {
+    "notSignedIn": "Sign in to resolve a finding.",
+    "unknownRule": "That finding could not be identified.",
+    "saveFailed": "Could not save that. Try again."
   },
   "AnomalyRules": {
     "AMOUNT_SPIKE": "Much larger than what this merchant usually charges you. Sometimes a bulk purchase, sometimes a mistyped amount.",

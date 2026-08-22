@@ -157,7 +157,7 @@ export type Dashboard = {
    * an un-scanned one, or a re-imported one for either — see
    * getAnomalyScanState.
    */
-  anomalyScan: { hasCompletedScan: boolean; running: boolean; stale: boolean };
+  anomalyScan: { hasCompletedScan: boolean; running: boolean; outdated: boolean };
   anomalies: AnomalyInsight[];
   /**
    * What the active `?anomaly=` filter is called, for the chip in the filter

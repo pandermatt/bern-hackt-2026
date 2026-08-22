@@ -146,11 +146,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   the budget page is checked against the months that exist and falls back to
   the default rather than rendering an empty page.
 - **Mutations use the `{ ok }` envelope; reads return data directly.**
-  `saveBudgets` and the three actions in `app/actions/savings.ts` are the app's
-  only mutations — that envelope is what the client raises a `sonner` toast
-  off. Each runs its deletes and upserts inside one `db.transaction`, so a
-  half-saved budget or a half-allocated month is not a state the page can land
-  in.
+  `saveBudgets`, the three actions in `app/actions/savings.ts` and
+  `setAnomalyResolved` are the app's only mutations — that envelope is what the
+  client raises a `sonner` toast off. Each runs its deletes and upserts inside
+  one `db.transaction`, so a half-saved budget, a half-allocated month or a
+  finding resolved without its natural key is not a state the page can land in.
+  **That callback is synchronous** — better-sqlite3 is a sync driver, so the
+  statements inside end in `.run()` / `.all()` and an `async` callback silently
+  breaks the transaction.
 - **`allocateSurplus` recomputes the month's surplus server-side.** It is the
   one number that bounds the whole operation, and a client that posts its own
   ceiling has no ceiling. The action also intersects the posted goal ids with
@@ -509,8 +512,49 @@ Unchanged from the template this app grew out of, and still exactly true.
 - Results are **replaced wholesale** per account on each scan, so re-running is
   idempotent. `anomalies.transactionId` is deliberately **not** a foreign key —
   a scan is a snapshot, and a cascade would silently empty the table when
-  statements are re-imported rather than leaving a stale result the user can see
-  and re-run.
+  statements are re-imported.
+- **Anything that delete-then-inserts transactions must call
+  `rebindAnomalies`** (`lib/anomaly-sync.ts`) straight afterwards, inside the
+  same write transaction. `transactions.id` is `AUTOINCREMENT`, so a re-import
+  hands every statement line a new id and leaves every stored finding pointing
+  at nothing — and `npm run start` is `db:push && seed && next start`, so this
+  used to void a scan on **every single deploy**. That is why people kept being
+  asked to re-run the detection. The three callers are `scripts/seed.ts`,
+  `lib/demo-loader.ts` and `lib/synthetic-generator.ts`. Re-binding is by
+  `external_id`; a finding whose key no longer resolves is deleted, because it
+  describes a line that no longer exists and would otherwise keep the account
+  looking permanently out of date.
+- **`lib/anomaly-sync.ts` has no `server-only` and no `@/db` import, and its
+  schema import is relative.** `scripts/seed.ts` runs under plain tsx outside
+  Next's resolver — the same constraint `lib/password.ts` documents. It takes
+  the caller's handle rather than reaching for one.
+- **"Outdated" is a content comparison, never a timestamp one.** `runScan`
+  stamps `anomaly_runs.transactionFingerprint` — a sorted hash of the account's
+  `external_id`s — and `getAnomalyScanState` compares it against the current
+  set. Timestamps cannot work here: the importers reset `transactions.createdAt`
+  and the ids on every re-seed, so anything derived from them reported a
+  perfectly good scan as stale on every boot. A NULL fingerprint reads as
+  *unknown*, not outdated, so scans predating the column do not start nagging.
+  The sort inside `fingerprintOf` is load-bearing — the read has no `ORDER BY`.
+- **`resolved_at` is the one thing a scan carries across its own delete.** The
+  findings are the scan's to replace; the work someone did ticking them off is
+  not. `runScan` reads the resolutions before the delete and re-stamps them on
+  the way back in — see `priorResolutions`.
+- **A resolution is keyed on `(rule_id, external_id)`, never on
+  `transaction_id`.** `scripts/seed.ts` and `lib/demo-loader.ts` both
+  delete-then-insert, and `npm run start` runs the seed on every boot, so ids
+  are reissued on every deploy; matching on them would quietly wipe the user's
+  progress each time. That is what
+  `anomalies.transactionExternalId` is for, and why `setAnomalyResolved`
+  backfills it for rows that predate the column. `tests/anomalies.test.ts`
+  re-imports the statements mid-test and asserts the resolutions still land.
+- **Resolution is per (finding, transaction) — the grain of the table.**
+  Ticking a row off under one rule leaves another rule's finding on the same row
+  open, because they are different claims. A transaction therefore counts as
+  resolved for a rule only when *every* row of that rule pointing at it is; both
+  `getAnomalyOverview` and `getAnomalyRuleDetail` compute it that way, and a
+  cheaper "any row resolved" would let a heading claim more than the rows under
+  it.
 - **The engine is performance-sensitive and easy to regress.** Two things keep
   it near-linear, and both look like harmless cleanups:
   - `parseTransactionDate` memoises on the transaction object. Several rules

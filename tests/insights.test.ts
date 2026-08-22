@@ -9,6 +9,7 @@ import {
   facetsOf,
   formatDay,
   formatMoney,
+  groupByDayMerchant,
   monthParts,
   monthlySeries,
   budgetRows,
@@ -1225,5 +1226,54 @@ describe("calendarMonths", () => {
   it("leaves a day unflagged when the scan found nothing on it", () => {
     const [month] = calendarMonths([row()], slots, new Map());
     expect(month.days[0].kind).toBeNull();
+  });
+});
+
+describe("groupByDayMerchant", () => {
+  it("folds a day at a merchant into one group and sums it unsigned", () => {
+    const groups = groupByDayMerchant([
+      row({ bookedOn: "2025-03-01", merchant: "Coop", amountMinor: -2500 }),
+      row({ bookedOn: "2025-03-01", merchant: "Coop", amountMinor: -1500 }),
+      row({ bookedOn: "2025-03-01", merchant: "SBB", amountMinor: -9900 }),
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].merchant).toBe("Coop");
+    expect(groups[0].rows).toHaveLength(2);
+    // Unsigned: the heading answers "how much is in this group", and a group of
+    // expenses summing to a negative would render with two minus signs.
+    expect(groups[0].totalMinor).toBe(4000);
+    expect(groups[1].merchant).toBe("SBB");
+  });
+
+  it("keeps the same merchant on different days apart", () => {
+    const groups = groupByDayMerchant([
+      row({ bookedOn: "2025-03-02", merchant: "Coop" }),
+      row({ bookedOn: "2025-03-01", merchant: "Coop" }),
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => g.bookedOn)).toEqual(["2025-03-02", "2025-03-01"]);
+  });
+
+  it("rejoins a merchant split by another within the same day", () => {
+    /*
+     * The caller's ordering is `desc(bookedOn), asc(id)`, which keeps a day
+     * contiguous but not a merchant inside it. A single forward pass the way
+     * `groupByMonth` works would emit Coop twice here.
+     */
+    const groups = groupByDayMerchant([
+      row({ bookedOn: "2025-03-01", merchant: "Coop" }),
+      row({ bookedOn: "2025-03-01", merchant: "SBB" }),
+      row({ bookedOn: "2025-03-01", merchant: "Coop" }),
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].merchant).toBe("Coop");
+    expect(groups[0].rows).toHaveLength(2);
+  });
+
+  it("has nothing to say about no rows", () => {
+    expect(groupByDayMerchant([])).toEqual([]);
   });
 });

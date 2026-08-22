@@ -95,12 +95,12 @@ export default async function Dashboard({
               no longer exist. The anomalies page says so in words; without this
               the dashboard just quietly stopped showing badges. */}
           {(!dashboard.anomalyScan.hasCompletedScan ||
-            dashboard.anomalyScan.stale) &&
+            dashboard.anomalyScan.outdated) &&
             dashboard.totalCount > 0 && (
               <div className="pt-6">
                 <AnomalySuggestion
                   running={dashboard.anomalyScan.running}
-                  stale={dashboard.anomalyScan.stale}
+                  outdated={dashboard.anomalyScan.outdated}
                   transactionCount={dashboard.totalCount}
                 />
               </div>

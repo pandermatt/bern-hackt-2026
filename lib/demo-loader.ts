@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { transactions, type NewTransaction } from "@/db/schema";
+import { rebindAnomalies } from "@/lib/anomaly-sync";
 import { toRecords } from "@/scripts/lib/csv";
 import {
   classify,
@@ -83,6 +84,15 @@ export async function loadDemoCsvForUser(userId: number): Promise<{ count: numbe
   for (let i = 0; i < rows.length; i += 100) {
     db.insert(transactions).values(rows.slice(i, i + 100)).run();
   }
+
+  /*
+   * The ids just changed, so every stored finding now points at nothing.
+   * Re-point the ones whose statement line came back and drop the rest --
+   * without this a scan is voided by every import. Different data here means
+   * nothing matches and everything is dropped, which is the honest outcome:
+   * those findings describe statements that no longer exist.
+   */
+  rebindAnomalies(db, userId);
 
   return { count: rows.length };
 }

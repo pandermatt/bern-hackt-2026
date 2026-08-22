@@ -190,6 +190,31 @@ export const anomalies = sqliteTable(
     baseRuleId: text("base_rule_id"),
     params: text("params"),
     narrativeLocale: text("narrative_locale"),
+    /**
+     * When someone ticked this finding off, or NULL while it still wants a
+     * look. A timestamp rather than a boolean, for two reasons: nullable is
+     * what `drizzle-kit push` can add to a populated table without `--force`,
+     * and once "whether" is stored "when" costs nothing.
+     *
+     * Resolution is per (finding, transaction) — the grain of this table — so
+     * ticking a transaction off under one rule leaves another rule's finding
+     * on the same transaction open. They are different claims.
+     */
+    resolvedAt: integer("resolved_at", { mode: "timestamp" }),
+    /**
+     * `transactions.externalId` for `transactionId`, copied in at scan time.
+     *
+     * This is what lets a resolution outlive the row it points at. Both
+     * `scripts/seed.ts` and `lib/demo-loader.ts` delete-then-insert, so every
+     * `npm run start` reissues transaction ids; a resolution matched on
+     * `transaction_id` alone would be silently lost on every deploy. The
+     * natural key survives a re-import, so `(rule_id, this)` is what the
+     * carry-over in `runScan` matches on.
+     *
+     * Nullable: rows written before this column existed carry none, and those
+     * fall back to an id lookup — correct until the next re-import.
+     */
+    transactionExternalId: text("transaction_external_id"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -198,6 +223,9 @@ export const anomalies = sqliteTable(
     index("anomalies_user_id_idx").on(table.userId),
     // The dashboard's only query: the findings for the ids on this page.
     index("anomalies_user_transaction_idx").on(table.userId, table.transactionId),
+    // `/anomalies/[ruleId]` reads one rule's findings, and the carry-over in
+    // `runScan` reads them by rule too.
+    index("anomalies_user_rule_idx").on(table.userId, table.ruleId),
   ],
 );
 
@@ -224,6 +252,22 @@ export const anomalyRuns = sqliteTable(
     processed: integer("processed").notNull().default(0),
     total: integer("total").notNull().default(0),
     insightCount: integer("insight_count").notNull().default(0),
+    /**
+     * The fingerprint of the transaction set this scan ran over, so a later
+     * read can tell "the statements changed" from "the ids were reissued".
+     *
+     * It cannot be a timestamp. Every importer delete-then-inserts and
+     * `npm run start` re-seeds on every boot, so `transactions.createdAt` is
+     * reset constantly and a scan would look out of date on every deploy even
+     * when the statements are byte-identical. See `fingerprintOf` in
+     * `lib/anomaly-sync.ts`.
+     *
+     * Nullable, and a NULL reads as "unknown" rather than "outdated": runs
+     * that predate this column should not start nagging just because it
+     * shipped, and a nullable column is what `drizzle-kit push` can add to a
+     * populated table without `--force`.
+     */
+    transactionFingerprint: text("transaction_fingerprint"),
     error: text("error"),
     startedAt: integer("started_at", { mode: "timestamp" })
       .notNull()

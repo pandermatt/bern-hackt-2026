@@ -58,7 +58,7 @@ export default async function HomePage({
     // Only findings the engine classed as needing a next step. A stale scan
     // describes transactions that no longer exist, so it is worse than
     // nothing here — the dashboard already offers the re-scan.
-    anomalies: anomalies.stale ? [] : anomalies.action,
+    anomalies: anomalies.outdated ? [] : anomalies.action,
     savings: {
       month: savings.month,
       monthEnded: savings.monthEnded,

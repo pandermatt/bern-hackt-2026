@@ -356,10 +356,10 @@
     "doneBody": "Die Befunde werden geladen — sie erscheinen gleich bei den Transaktionen unten.",
     "title": "Die Ausreisser erkennen",
     "body": "Es wurde noch nichts analysiert. Analysieren Sie mit KI, um doppelte Belastungen, ungewöhnliche Beträge und ausgebliebene Daueraufträge in Ihren {count} Transaktionen zu markieren.",
-    "staleTitle": "Diese Ergebnisse sind veraltet",
-    "staleBody": "Ihre Kontoauszüge wurden seit der letzten Analyse neu importiert, daher passen die Befunde nicht mehr zu Ihren Transaktionen — bei den Transaktionen unten erscheint deshalb keine Markierung mehr. Analysieren Sie erneut.",
+    "outdatedTitle": "Diese Ergebnisse sind veraltet",
+    "outdatedBody": "Ihre Transaktionen haben sich seit der letzten Analyse geändert, daher ist alles Neue noch nicht erfasst. Analysieren Sie erneut, um die Befunde zu aktualisieren.",
     "cta": "Mit KI analysieren",
-    "staleCta": "Erneut analysieren",
+    "outdatedCta": "Erneut analysieren",
     "retry": "Erneut versuchen"
   },
   "AnomalyScan": {
@@ -377,7 +377,8 @@
     "unknownError": "unbekannter Fehler",
     "noScan": "Es wurde noch keine Analyse ausgeführt — bis dahin zeigt das Dashboard keine Auffälligkeiten.",
     "error_sessionExpired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
-    "error_alreadyRunning": "Es läuft bereits eine Analyse."
+    "error_alreadyRunning": "Es läuft bereits eine Analyse.",
+    "outdated": "Deine Transaktionen haben sich seit diesem Scan geändert, daher deckt er noch nicht alle ab."
   },
   "ScanPhases": {
     "Loading transactions": "Transaktionen werden geladen",
@@ -403,13 +404,31 @@
     "neverScannedBody": "Starte einen Scan, um doppelte Belastungen, ungewöhnliche Beträge und ausgebliebene Zahlungen zu erkennen.",
     "runningBody": "Ein Scan läuft gerade. Die Ergebnisse erscheinen hier, sobald er fertig ist.",
     "runScan": "Scan starten",
-    "staleTitle": "Diese Ergebnisse sind veraltet",
-    "staleBody": "Deine Kontoauszüge wurden seit dem letzten Scan neu importiert, daher passen die Ergebnisse nicht mehr zu deinen Transaktionen. Starte den Scan erneut.",
+    "outdatedTitle": "Diese Ergebnisse sind veraltet",
+    "outdatedBody": "Deine Transaktionen haben sich seit dem letzten Scan geändert, daher decken diese Ergebnisse nicht alle ab. Starte den Scan erneut, um sie zu aktualisieren.",
     "seeAll": "Alle dieser Art ansehen",
     "seeInLedger": "Im Kontoauszug anzeigen",
     "thisFinding": "Diese Auffälligkeit",
     "otherOfThisKind": "Weitere dieser Art",
-    "allOfThisKind": "Alle dieser Art"
+    "allOfThisKind": "Alle dieser Art",
+    "resolvedOf": "{resolved} von {total} erledigt",
+    "hideResolved": "Erledigte ausblenden",
+    "showResolved": "Erledigte anzeigen",
+    "resolveAll": "Alles dieser Art erledigen",
+    "unresolveAll": "Alles dieser Art wieder öffnen",
+    "resolveGroup": "{merchant} am {day} erledigen",
+    "unresolveGroup": "{merchant} am {day} wieder öffnen",
+    "resolveOne": "{amount} — {line} erledigen",
+    "unresolveOne": "{amount} — {line} wieder öffnen",
+    "stateResolved": "Erledigt",
+    "stateOpen": "Nicht erledigt",
+    "allResolvedTitle": "Alles erledigt",
+    "allResolvedBody": "{count, plural, one {# Art von Auffälligkeit ist} other {# Arten von Auffälligkeiten sind}} erledigt und ausgeblendet. Blende sie wieder ein, um nachzusehen, was du abgehakt hast."
+  },
+  "AnomalyErrors": {
+    "notSignedIn": "Melde dich an, um eine Auffälligkeit zu erledigen.",
+    "unknownRule": "Diese Auffälligkeit konnte nicht zugeordnet werden.",
+    "saveFailed": "Konnte nicht gespeichert werden. Versuch es nochmal."
   },
   "AnomalyRules": {
     "AMOUNT_SPIKE": "Deutlich höher als das, was dieser Händler dir sonst verrechnet. Mal ein Grosseinkauf, mal ein vertippter Betrag.",
