@@ -1,6 +1,6 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
+import { ChartColumn, House, TriangleAlert, Wallet } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Link, usePathname } from "@/i18n/navigation";
@@ -20,18 +20,20 @@ import { Link, usePathname } from "@/i18n/navigation";
  * which is what lets the comparison below stay a match against these hrefs
  * rather than a prefix-stripping one.
  */
-const TABS = [
-  { href: "/", key: "dashboard", icon: null },
-  { href: "/budget", key: "budget", icon: null },
-  /* Anomalies used to be a pill over in the right-hand cluster, beside the
-     account and sign-out controls. It is a top-level page like the other two,
-     so it belongs in the same group as Budget rather than among the account
-     chrome — and being a tab is what lets it show as the current page.
+/* Anomalies used to be a pill over in the right-hand cluster, beside the
+   account and sign-out controls. It is a top-level page like the others, so it
+   belongs in this group rather than among the account chrome — and being a tab
+   is what lets it show as the current page.
 
-     It keeps the icon the pill wore, and the pill's habit of hiding its label
-     below `sm`: "Auffälligkeiten" is 14 characters, and three text tabs plus
-     the account cluster do not fit on a 375px phone. The other two have no
-     icon because their labels never leave. */
+   **Every tab now carries an icon, and every label hides below `sm`.** That
+   used to be Anomalies' private arrangement, because "Auffälligkeiten" is 14
+   characters and three text tabs plus the account cluster already overflowed a
+   375px phone. Adding Home as a fourth made it everyone's problem: four labels
+   do not fit at any phone width. Icons below `sm`, words from `sm` up. */
+const TABS = [
+  { href: "/home", key: "home", icon: House },
+  { href: "/", key: "dashboard", icon: ChartColumn },
+  { href: "/budget", key: "budget", icon: Wallet },
   { href: "/anomalies", key: "anomalies", icon: TriangleAlert },
 ] as const;
 
@@ -55,19 +57,17 @@ export function HeaderNav() {
             key={tab.href}
             href={tab.href}
             aria-current={active ? "page" : undefined}
-            /* The label is the accessible name at `sm` and up; below that it
-               is hidden and this is all a screen reader would have. */
-            aria-label={Icon ? t(tab.key) : undefined}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+            /* The visible label is the accessible name from `sm` up; below
+               that it is hidden, and this is all a screen reader would have. */
+            aria-label={t(tab.key)}
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[13px] font-semibold transition-colors sm:px-3 ${
               active
                 ? "bg-accent-soft text-accent"
                 : "text-text-muted hover:bg-surface-muted hover:text-text"
             }`}
           >
-            {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
-            <span className={Icon ? "hidden sm:inline" : undefined}>
-              {t(tab.key)}
-            </span>
+            <Icon className="size-3.5 shrink-0" aria-hidden />
+            <span className="hidden sm:inline">{t(tab.key)}</span>
           </Link>
         );
       })}
