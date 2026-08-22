@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  canEscalateToAlert,
   normalizeMerchant,
   strongestKind,
   type AnomalyInsight,
@@ -69,6 +70,13 @@ const llmInsightSchema = z.object({
   source_ids: z.array(z.string()).min(1),
   title: z.string().min(1),
   description: z.string().min(1),
+  /*
+   * The model's half of the alert gate, and the only classification it may
+   * touch. Optional because most answers should omit it, and unvalidated
+   * beyond the enum: `buildFinalInsight` decides what it is worth, and a
+   * proposal the engine will not co-sign costs nothing to ignore.
+   */
+  kind: z.enum(["info", "warning", "alert"]).optional(),
 });
 
 const llmResponseSchema = z.object({
@@ -149,6 +157,26 @@ function inheritedKind(sourceCandidates: AnomalyInsight[]): AnomalyKind {
   );
 }
 
+/**
+ * The second key of the alert gate.
+ *
+ * `canEscalateToAlert` is a pure function of metrics the rules already
+ * computed, and it takes the whole batch because some co-signatures are
+ * mutual — a large transfer and a first-time recipient only mean something
+ * about each other.
+ */
+function proposedKind(
+  llmInsight: LlmInsight,
+  sourceCandidates: AnomalyInsight[],
+  siblings: AnomalyInsight[],
+): AnomalyKind {
+  const inherited = inheritedKind(sourceCandidates);
+  if (llmInsight.kind !== "alert") return inherited;
+
+  const cosigned = sourceCandidates.some((c) => canEscalateToAlert(c, siblings));
+  return cosigned ? "alert" : inherited;
+}
+
 function buildFinalInsight(
   llmInsight: LlmInsight,
   byId: Map<string, AnomalyInsight>,
@@ -169,8 +197,13 @@ function buildFinalInsight(
     title: llmInsight.title,
     description: llmInsight.description,
 
-    // Decided by the engine, before the model ever saw these.
-    kind: inheritedKind(sourceCandidates),
+    /*
+     * Inherited from the engine unless the model asked for `alert` and one of
+     * the findings behind it carries the evidence to support that. Only ever
+     * upward: any other proposal is discarded rather than applied, so the model
+     * cannot talk a finding down to `info`.
+     */
+    kind: proposedKind(llmInsight, sourceCandidates, [...byId.values()]),
 
     // Everything below stays owned by the algorithmic layer.
     severity: getHighestSeverity(sourceCandidates),
@@ -230,6 +263,28 @@ function selectCrowdedFindings(candidates: AnomalyInsight[]): Set<AnomalyInsight
       ),
     ),
   );
+}
+
+/**
+ * The findings the model is actually asked about.
+ *
+ * Crowding is a cost rule: it asks the model only where a person cannot read
+ * the row unaided. `alert` is not a cost question. It can only be proposed by
+ * the model, so anything the crowding rule skips can never be escalated — and
+ * the motivating case, a large transfer to a first-time recipient, is exactly
+ * two findings on one row and would never qualify as crowded.
+ *
+ * So a finding whose own evidence already co-signs an escalation is sent
+ * regardless of how quiet its row is. `canEscalateToAlert` is the same
+ * predicate that has to co-sign the result, which keeps this from widening the
+ * request set beyond findings that could actually come back red.
+ */
+function selectForNarration(candidates: AnomalyInsight[]): Set<AnomalyInsight> {
+  const selected = selectCrowdedFindings(candidates);
+  for (const insight of candidates) {
+    if (canEscalateToAlert(insight, candidates)) selected.add(insight);
+  }
+  return selected;
 }
 
 /* =========================================================================
@@ -422,6 +477,17 @@ COVERAGE:
 Every finding you are given must appear in exactly one insight's source_ids.
 Do not drop a finding because it seems minor.
 
+CLASSIFICATION:
+
+Omit "kind" unless the evidence shows a charge the account holder may not have
+made themselves — a payment billed more than once, or a large transfer to a
+recipient seen for the first time. In that one case set "kind": "alert".
+
+A large purchase is not an alert. Unusual spending is not an alert. Spending
+more in a category than usual is not an alert. If you are weighing it up, omit
+the field: it is checked against the evidence afterwards and dropped when the
+numbers do not support it.
+
 WRITING STYLE:
 
 Titles:
@@ -495,6 +561,20 @@ Return ONLY this JSON structure:
       "source_ids": ["c0"],
       "title": "Short factual title",
       "description": "One or two factual sentences."
+    }
+  ]
+}
+
+"kind" is optional and almost always omitted. Include it only as described
+above:
+
+{
+  "insights": [
+    {
+      "source_ids": ["c0", "c1"],
+      "title": "Short factual title",
+      "description": "One or two factual sentences.",
+      "kind": "alert"
     }
   ]
 }
@@ -641,7 +721,7 @@ export async function analyzeTransactionInsights(
   const model = process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
   const { contextOf, onProgress } = options;
 
-  const crowded = selectCrowdedFindings(candidates);
+  const crowded = selectForNarration(candidates);
   if (crowded.size === 0) return candidates;
 
   const withIds: Candidate[] = candidates
@@ -691,4 +771,5 @@ export const __testing = {
   inheritedKind,
   project,
   selectCrowdedFindings,
+  selectForNarration,
 };

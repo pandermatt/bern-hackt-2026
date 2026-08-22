@@ -42,6 +42,14 @@ function mockLlm(...replies: LlmReply[]) {
   return fetchMock;
 }
 
+/*
+ * The narrative layer only spends a request on a row a person cannot read
+ * unaided — three findings on one transaction. Tests below are about the
+ * mapping rather than that selection, so their findings share one busy
+ * transaction to clear the bar, and assert on the ones they care about.
+ */
+const BUSY = 900;
+
 const mockCandidates: AnomalyInsight[] = [
   candidate({
     rule_id: "AMOUNT_SPIKE",
@@ -110,22 +118,30 @@ describe("analyzeTransactionInsights", () => {
    */
   it("keeps two findings from the same rule apart", async () => {
     const candidates = [
-      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [100] }),
-      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [200] }),
+      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [100, BUSY] }),
+      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [200, BUSY] }),
+      candidate({ rule_id: "NEW_MERCHANT", transaction_ids: [BUSY], severity: "low" }),
     ];
 
     mockLlm({
       insights: [
         { source_ids: ["c0"], title: "First spike", description: "One." },
         { source_ids: ["c1"], title: "Second spike", description: "Two." },
+        { source_ids: ["c2"], title: "The busy row", description: "Three." },
       ],
     });
 
     const result = await analyzeTransactionInsights(candidates);
 
-    expect(result).toHaveLength(2);
-    expect(result.map((r) => r.transaction_ids)).toEqual([[100], [200]]);
-    expect(result.map((r) => r.title)).toEqual(["First spike", "Second spike"]);
+    expect(result).toHaveLength(3);
+    expect(result.slice(0, 2).map((r) => r.transaction_ids)).toEqual([
+      [100, BUSY],
+      [200, BUSY],
+    ]);
+    expect(result.slice(0, 2).map((r) => r.title)).toEqual([
+      "First spike",
+      "Second spike",
+    ]);
   });
 
   /*
@@ -134,8 +150,13 @@ describe("analyzeTransactionInsights", () => {
    */
   it("keeps findings the model did not mention", async () => {
     const candidates = [
-      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [100] }),
-      candidate({ rule_id: "NEW_MERCHANT", transaction_ids: [200], severity: "low" }),
+      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [100, BUSY] }),
+      candidate({
+        rule_id: "NEW_MERCHANT",
+        transaction_ids: [200, BUSY],
+        severity: "low",
+      }),
+      candidate({ rule_id: "FREQUENCY_SPIKE", transaction_ids: [BUSY] }),
     ];
 
     mockLlm({
@@ -144,8 +165,9 @@ describe("analyzeTransactionInsights", () => {
 
     const result = await analyzeTransactionInsights(candidates);
 
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(3);
     expect(result.map((r) => r.title).sort()).toEqual([
+      "FREQUENCY_SPIKE",
       "NEW_MERCHANT",
       "Only one",
     ]);
@@ -164,7 +186,7 @@ describe("analyzeTransactionInsights", () => {
 
   it("splits large candidate sets across several requests", async () => {
     const candidates = Array.from({ length: 25 }, (_, i) =>
-      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [i] }),
+      candidate({ rule_id: "AMOUNT_SPIKE", transaction_ids: [i, BUSY] }),
     );
 
     const fetchMock = mockLlm();

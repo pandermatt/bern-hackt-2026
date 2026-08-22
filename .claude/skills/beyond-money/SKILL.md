@@ -296,6 +296,17 @@ Unchanged from the template this app grew out of, and still exactly true.
   `merchant_repeat_days <= 1` clause keeps the seed data's airline charges out of.
 - **Card testing is out of reach**, and copy must not claim it: `REPEAT_CHARGE`
   skips anything under CHF 20, which is precisely what a probe charge is.
+- **Only a crowded row is worth a request — unless an alert is possible.**
+  `selectCrowdedFindings` asks the model about a finding only when one of its
+  transactions carries three or more (`CROWDED_ROW`), which is where the row
+  starts hiding badges behind "+N more" and a person stops being able to read it
+  unaided. On a year of real statements that is a handful of rows rather than all
+  ~79. `selectForNarration` then adds back anything `canEscalateToAlert` already
+  co-signs: `alert` can only be *proposed* by the model, so a finding the cost
+  rule skips can never turn red — and the motivating case, a large transfer to a
+  first-time recipient, is two findings on one row and so never crowded. Keep the
+  two selections separate; folding the alert exemption into the crowding rule
+  makes a cost heuristic silently load-bearing for a safety one.
 - **The narrative layer batches, and the round trip is keyed on synthetic ids.**
   `lib/llm/analyze-insights.ts` sends ten findings per request, minified, and
   composes each batch's reply as a **union** — narratives plus every candidate no

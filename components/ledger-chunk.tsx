@@ -39,7 +39,7 @@ import type {
   AnomalyKind,
   AnomalySeverity,
 } from "@/lib/anomaly-engine";
-import { formatDay, formatMoney, type MonthTotal } from "@/lib/insights";
+import { formatMoney, type MonthTotal } from "@/lib/insights";
 
 /**
  * One chunk of the ledger: whole months of rows, each month a rounded panel
