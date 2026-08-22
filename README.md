@@ -1,5 +1,3 @@
-<img width="1200" height="702" alt="file-1843745a13bb821b30b75334dfc7eae5" src="https://github.com/user-attachments/assets/46ada97a-e7b6-4f5a-bf7d-5f9ac42d6920" /># Beyond Money
-
 A personal-finance dashboard built on bank statement exports: email/password
 accounts, and each account sees only its own transactions. A year of statements
 becomes income and spending per month, a category breakdown, a merchant
