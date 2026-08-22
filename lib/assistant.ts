@@ -1,7 +1,7 @@
 /**
  * Pure helpers for the chat assistant. No database, no `server-only`: the
  * server action hands a `Dashboard` in, and the client sidebar imports only
- * the types. Both imports below are type-only for the same reason
+ * the types. Every import below is type-only for the same reason
  * `lib/insights.ts` gives — a value import would drag drizzle into the client
  * bundle, and only `npm run build` would catch it.
  *
@@ -13,10 +13,27 @@
  * `<|tools_prefix|>[{"name": {…}}]` syntax in the content, so the parsing
  * lives here too.
  */
+import type { AnomalyGroup, AnomalyOverview } from "@/app/actions/anomalies";
+import type { SavingsOverview } from "@/app/actions/savings";
 import type { Dashboard } from "@/app/actions/transactions";
+import type { Transaction } from "@/db/schema";
 import type { Slice } from "@/lib/insights";
 
 export type ChatRole = "user" | "assistant";
+
+/**
+ * The `Chat` namespace keys of the four starter proposals — the one-tap chips
+ * the empty state shows. Shared, not duplicated: the panel renders them on
+ * start, and the action re-offers the same questions as follow-up chips on
+ * turns where the model proposed none, so both readers stay in lockstep when
+ * a proposal is reworded or added.
+ */
+export const SUGGESTION_KEYS = [
+  "suggestion1",
+  "suggestion2",
+  "suggestion3",
+  "suggestion4",
+] as const;
 
 export type ChatMessage = {
   role: ChatRole;
@@ -29,36 +46,26 @@ export type WireMessage = {
   content: string;
 };
 
-export type PieSlice = {
-  label: string;
-  amountMinor: number;
-  /** 0–100, of the chart's own total — recomputed after folding into "Other". */
-  share: number;
-};
-
-export type PieChartSpec = {
-  kind: "pie";
-  title: string;
-  totalMinor: number;
-  slices: PieSlice[];
-};
-
 /**
- * A chart the model composed itself: a full Apache ECharts option as pure
- * JSON, sanitized by `sanitizeEChartsOption` before it is ever stored. The
- * escape hatch for everything the pie tool cannot draw.
+ * A validated split of a month's free surplus, awaiting the user's Apply tap.
+ * Built by `buildAllocationProposal` from a propose_allocation call — never
+ * from model prose — so every figure the card shows already survived the
+ * server's clamping. The items are ADDS, not month totals: Apply posts them
+ * through `applyAllocationAdds`, which resolves each goal's current month
+ * total at apply time — a proposal frozen as absolute totals would silently
+ * revert any allocation made between propose and Apply.
  */
-export type EChartsChartSpec = {
-  kind: "echarts";
-  title?: string;
-  option: Record<string, unknown>;
+export type AllocationProposal = {
+  month: string;
+  /** The card's rows: each receiving goal and what would be added to it. */
+  items: { goalId: number; name: string; addMinor: number }[];
+  addTotalMinor: number;
 };
-
-export type ChartSpec = PieChartSpec | EChartsChartSpec;
 
 export type AssistantTurn = {
   reply: string;
-  chart?: ChartSpec;
+  /** A surplus split awaiting the user's Apply tap, rendered as a card. */
+  proposal?: AllocationProposal;
   /** Ready-to-send follow-up questions, shown as chips above the input. */
   followUps?: string[];
   error?: boolean;
@@ -73,10 +80,11 @@ export const SYSTEM_PROMPT = [
   'Every tool accepts an optional period argument for time-scoped questions, e.g. [{"get_spending_by_category": {"period": "ytd"}}]. Accepted values: ytd, a year like 2025, a month like 2025-03, a range like 2025-01-01..2025-03-31, last_month, or last_3_months. When you omit it the app scopes to the current year (year-to-date) by default; pass an explicit range, or the user must say "all time", for the full history.',
   "Be concise: 2–3 short sentences, plain text, no markdown, no lists.",
   "All amounts are Swiss francs. Write them exactly as the tools format them, e.g. CHF 1'234.55 — apostrophe as thousands separator, two decimals.",
-  'Default to showing a chart — the answer should almost always include one. For any question about spending, merchants, income, an overview, or how money is split, call display_chart with a source, e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie from the customer\'s real data and hands you the same figures for your caption, so display_chart alone answers most questions. Only skip the chart for a single specific number, a date, or a yes/no answer.',
-  "When a chart will be shown, your text is its caption: one or two sentences naming the biggest item and the takeaway. Never describe chart shapes and never list many figures the chart already shows.",
+  "Name only the figures that answer the question — the biggest item and the takeaway — rather than listing everything a tool returned.",
   "When the tools cannot answer — a specific transaction, a day of week, a count, a comparison they don't cover — call run_sql with one SQLite SELECT over the transactions table; the schema is in the tool description.",
-  "For a visual that is not a pie — bars over months, a line, a scatter — call display_echart with a complete Apache ECharts option as pure JSON, built only from figures you already fetched with the tools or run_sql. When the user names a chart type that is not a pie, display_echart is the only right tool.",
+  "Four tools carry the advice questions: get_savings_potential for where the customer could save (advise only on its flexible categories — fixed costs like housing, insurance and taxes cannot be cut); get_recent_anomalies for anything suspicious or unusual (stay calm — most findings are the customer's own legitimate spending); get_subscriptions for recurring subscriptions; get_savings_goals for the saving goals and a month's unallocated surplus.",
+  "To allocate a month's surplus: call get_savings_goals first, then propose_allocation with one amount per goal from the free amount. The app validates the split and shows it to the customer with an Apply button; caption the final split the tool returns and invite the tap. Only that tap moves money — never claim it already moved.",
+  "You cannot draw charts or graphs. When one is asked for, answer with the figures themselves and mention that the dashboard's own charts carry the visual.",
   "After your answer, propose 2 or 3 short follow-up questions the user could ask next, each on its own line starting with FOLLOWUP: — nothing else on those lines.",
 ].join("\n");
 
@@ -95,7 +103,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 export function systemPromptFor(locale: string): string {
   const language = LANGUAGE_NAMES[locale];
   if (!language) return SYSTEM_PROMPT;
-  return `${SYSTEM_PROMPT}\nAnswer in ${language}, including the FOLLOWUP lines. Keep the amounts formatted exactly as the tools return them.`;
+  return `${SYSTEM_PROMPT}\nAnswer in ${language}, including matching FOLLOWUP lines. The followups should be relevant to the user's question and from the user's perspective. They should be short and listed as array under FOLLOWUP. The followups should either be questions about the users financial data or match a toolcall available to you. If you don't have a matching followup leave it empty. Keep the amounts formatted exactly as the tools return them.`;
 }
 
 export const TOOL_NAMES = [
@@ -104,25 +112,15 @@ export const TOOL_NAMES = [
   "get_top_merchants",
   "get_income_breakdown",
   "get_monthly_series",
-  "display_chart",
+  "get_savings_potential",
+  "get_subscriptions",
+  "get_recent_anomalies",
+  "get_savings_goals",
+  "propose_allocation",
   "run_sql",
-  "display_echart",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
-
-export type ChartSource = "categories" | "merchants" | "income";
-
-/**
- * What the model may choose about a chart — all of it presentation, none of
- * it data. `source` and `period` are references the server resolves against
- * the real aggregates; the model never supplies a number.
- */
-export type ChartRequest = {
-  source?: ChartSource;
-  topN?: number;
-  title?: string;
-};
 
 /**
  * The one argument every tool shares. A single constrained string instead of
@@ -141,31 +139,11 @@ const PERIOD_PARAMETERS = {
   },
 };
 
-/**
- * The chart tool's own schema: the shared period plus presentation choices.
- * Enum-valued references only — the server assembles the slices.
- */
-const CHART_PARAMETERS = {
+/** For the tools that take nothing — anomalies and subscriptions read the
+ * account whole, so a period argument would only invite a mangled one. */
+const EMPTY_PARAMETERS = {
   type: "object" as const,
-  properties: {
-    source: {
-      type: "string" as const,
-      enum: ["categories", "merchants", "income"],
-      description:
-        "Which data the chart shows: spending by category, top merchants, or income (salary vs refunds).",
-    },
-    ...PERIOD_PARAMETERS.properties,
-    top_n: {
-      type: "integer" as const,
-      description:
-        "How many slices to show before the rest folds into 'Other'. Default 5, maximum 8.",
-    },
-    title: {
-      type: "string" as const,
-      description: "Optional chart title. Omit for a sensible default.",
-    },
-  },
-  required: ["source"],
+  properties: {},
 };
 
 /** OpenAI-style declarations. Enum-valued references, never free-form data —
@@ -174,25 +152,25 @@ export const TOOL_DEFINITIONS = [
   {
     name: "get_overview",
     description:
-      "Accounts, statement date range, and the year's totals: salary, refunds, total income, total spending, net saved. Figures only — prefer display_chart when the question allows a chart.",
+      "Accounts, statement date range, and the year's totals: salary, refunds, total income, total spending, net saved.",
     parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_spending_by_category",
     description:
-      "Spending broken down by category, largest first. Figures only — call display_chart to show it as a pie chart.",
+      "Spending broken down by category, largest first.",
     parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_top_merchants",
     description:
-      "The merchants the customer spent the most at. Figures only — call display_chart to show it as a pie chart.",
+      "The merchants the customer spent the most at.",
     parameters: PERIOD_PARAMETERS,
   },
   {
     name: "get_income_breakdown",
     description:
-      "Where the incoming money came from: salary versus merchant refunds. Figures only — call display_chart to show it as a pie chart.",
+      "Where the incoming money came from: salary versus merchant refunds.",
     parameters: PERIOD_PARAMETERS,
   },
   {
@@ -201,20 +179,69 @@ export const TOOL_DEFINITIONS = [
     parameters: PERIOD_PARAMETERS,
   },
   {
-    name: "display_chart",
+    name: "get_savings_potential",
     description:
-      "Show the user a pie chart assembled by the app from their real statements, and get the same figures back for your caption. The preferred way to answer questions about spending, merchants, or income. Pies only — when the user asks for a bar, line, or any other shape, use display_echart instead.",
-    parameters: CHART_PARAMETERS,
+      "Where the customer could realistically save. Returns the month's unassigned money (income minus spending minus what is already in savings goals — the same figure the app's Unallocated pot shows, negative when the month overspent) plus spending split into fixed costs (housing, insurance, taxes — not cuttable) and the flexible categories, ranked. The right tool for any 'where/how much could I save' question.",
+    parameters: PERIOD_PARAMETERS,
+  },
+  {
+    name: "get_subscriptions",
+    description:
+      "The customer's recurring subscriptions, detected across the whole statement history — same merchant, steady amount, regular weekly/monthly/quarterly/yearly rhythm — each with its cost per year. Contractual fixed costs (rent, insurance, taxes) are excluded.",
+    parameters: EMPTY_PARAMETERS,
+  },
+  {
+    name: "get_recent_anomalies",
+    description:
+      "The findings of the customer's latest anomaly scan — unusual charges, spikes, new counterparties — grouped by kind, with severity and how recent. The right tool for 'is anything shady or suspicious going on' questions.",
+    parameters: EMPTY_PARAMETERS,
+  },
+  {
+    name: "get_savings_goals",
+    description:
+      "The customer's saving goals (target, saved so far, still missing) plus a month's surplus and how much of it is still free to put into the goals. Defaults to the last completed month; pass a month period for another one.",
+    parameters: PERIOD_PARAMETERS,
+  },
+  {
+    name: "propose_allocation",
+    description:
+      "Propose splitting a month's free surplus across the saving goals. Call get_savings_goals first, then pass one amount per goal, in francs, summing to at most the free amount. The app validates the split, shows it to the customer with an Apply button, and returns the final registered split — caption from that. Only the customer's tap moves the money.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        allocations: {
+          type: "array" as const,
+          description: "One entry per goal that should receive money.",
+          items: {
+            type: "object" as const,
+            properties: {
+              goal: {
+                type: "string" as const,
+                description:
+                  "The goal's name, exactly as get_savings_goals returned it.",
+              },
+              amount_chf: {
+                type: "number" as const,
+                description: "Francs to add to this goal from the free surplus.",
+              },
+            },
+            required: ["goal", "amount_chf"],
+          },
+        },
+        ...PERIOD_PARAMETERS.properties,
+      },
+      required: ["allocations"],
+    },
   },
   {
     name: "run_sql",
     description: [
       "Escape hatch when the other tools cannot answer: run one read-only SQLite SELECT over the customer's transactions.",
       "Table: transactions(booked_on TEXT 'YYYY-MM-DD', kind TEXT in ('income','expense'), amount_chf REAL signed francs (income positive, spending negative), amount_minor INTEGER signed rappen, account TEXT, merchant TEXT, category TEXT, description TEXT, currency TEXT). Internal transfers between the customer's own accounts are already excluded, matching every other figure in the app.",
-      "The table holds only rows in the current period scope (year-to-date by default); if you pass a period argument the table is pre-filtered to it, and for a different window either pass a period or write a WHERE on booked_on.",
+      "The table holds ONLY rows inside the resolved period scope (year-to-date by default). A WHERE on booked_on can narrow further but can never reach outside that scope — to query a different or wider window, pass the period argument.",
       "One SELECT statement (no CTEs / WITH), no writes, reference the table at most twice. At most 40 result rows come back, so aggregate in SQL.",
       "Remember spending is negative: the largest expense is MIN(amount_chf) / ORDER BY amount_chf ASC, and filter kind='expense' for spending, kind='income' for income.",
-      'Example: {"run_sql": {"sql": "SELECT merchant, ROUND(SUM(-amount_chf), 2) AS spent FROM transactions WHERE kind=\'expense\' GROUP BY merchant ORDER BY spent DESC LIMIT 5"}}',
+      'Example: {"run_sql": {"sql": "SELECT merchant, ROUND(SUM(-amount_chf), 2) AS spent FROM transactions WHERE kind=\'expense\' GROUP BY merchant ORDER BY spent DESC LIMIT 5", "period": "2025"}}',
     ].join(" "),
     parameters: {
       type: "object" as const,
@@ -223,30 +250,9 @@ export const TOOL_DEFINITIONS = [
           type: "string" as const,
           description: "A single SQLite SELECT statement.",
         },
+        ...PERIOD_PARAMETERS.properties,
       },
       required: ["sql"],
-    },
-  },
-  {
-    name: "display_echart",
-    description: [
-      "Show any Apache ECharts chart (bar, line, scatter, heatmap, radar, …) by providing the full ECharts option as pure JSON — no functions.",
-      "Only for visuals display_chart's pies cannot express. Build every data array from figures you fetched with the other tools or run_sql — never invent numbers. Keep the option compact.",
-      'Example: {"display_echart": {"title": "Spending per month", "option": {"xAxis": {"type": "category", "data": ["Jan", "Feb"]}, "yAxis": {"type": "value"}, "series": [{"type": "bar", "data": [6250.30, 5890.10]}]}}}',
-    ].join(" "),
-    parameters: {
-      type: "object" as const,
-      properties: {
-        title: {
-          type: "string" as const,
-          description: "Short title shown above the chart.",
-        },
-        option: {
-          type: "object" as const,
-          description: "The complete ECharts option, as JSON only.",
-        },
-      },
-      required: ["option"],
     },
   },
 ].map(({ name, description, parameters }) => ({
@@ -267,27 +273,6 @@ function chf(minor: number): string {
   return `${minor < 0 ? "-" : ""}${grouped}.${cents}`;
 }
 
-/** Top slices plus an "Other" catch-all, shares recomputed over the total. */
-function toPie(title: string, slices: Slice[], max = 5): PieChartSpec | undefined {
-  const positive = slices.filter((s) => s.amount > 0);
-  if (positive.length === 0) return undefined;
-
-  const total = positive.reduce((sum, s) => sum + s.amount, 0);
-  const top = positive.slice(0, max);
-  const rest = positive.slice(max).reduce((sum, s) => sum + s.amount, 0);
-
-  const pie = top.map((s) => ({
-    label: s.key,
-    amountMinor: s.amount,
-    share: (s.amount / total) * 100,
-  }));
-  if (rest > 0) {
-    pie.push({ label: "Other", amountMinor: rest, share: (rest / total) * 100 });
-  }
-
-  return { kind: "pie", title, totalMinor: total, slices: pie };
-}
-
 function sliceRows(slices: Slice[]) {
   return slices.map((s) => ({
     name: s.key,
@@ -298,28 +283,32 @@ function sliceRows(slices: Slice[]) {
 }
 
 /**
+ * Categories where a "spend less" tip is noise: the amounts are contractual —
+ * rent, premiums, taxes — so the savings-potential tool reports them as one
+ * lump and ranks only the rest. Spelled as the importer assigns them;
+ * `scripts/lib/statement.ts` is the source of that spelling.
+ */
+export const FIXED_EXPENSE_CATEGORIES = new Set([
+  "Housing",
+  "Health & Insurance",
+  "Taxes & Fees",
+]);
+
+/**
  * Execute one tool against the pre-aggregated dashboard. When a period is in
  * play, the caller hands in a dashboard whose aggregates were already scoped
  * to that window (`getDashboard({from, to})`) — this function only slices the
  * monthly series itself, since that series is always computed unfiltered.
- * Returns the JSON the model gets to read, plus the chart the app shows when
- * this data is the kind a pie can carry — so every figure on screen is one
- * the model also saw.
+ * Returns the JSON the model gets to read — figures only; the assistant
+ * draws nothing.
  */
 export function runTool(
   name: ToolName,
   dashboard: Dashboard,
   period?: Period,
-  chartRequest?: ChartRequest,
-): { result: unknown; chart?: PieChartSpec } {
+): { result: unknown } {
   const { facets, totals, categories, merchants, monthly } = dashboard;
   const scope = period?.label ?? "all statements";
-  const titled = (title: string) =>
-    period ? `${title} — ${period.label}` : title;
-  const incomeSlices = (): Slice[] => [
-    { key: "Salary", amount: totals.salary, count: 0, share: 0 },
-    { key: "Refunds", amount: totals.refunds, count: 0, share: 0 },
-  ];
 
   switch (name) {
     case "get_overview":
@@ -344,12 +333,10 @@ export function runTool(
           total_spending_chf: chf(totals.expense),
           categories: sliceRows(categories),
         },
-        chart: toPie(titled("Spending by category"), categories),
       };
     case "get_top_merchants":
       return {
         result: { period: scope, merchants: sliceRows(merchants) },
-        chart: toPie(titled("Top merchants by spending"), merchants),
       };
     case "get_income_breakdown":
       return {
@@ -360,7 +347,6 @@ export function runTool(
           total_income_chf: chf(totals.income),
           note: "Refunds are merchant credits, not earnings.",
         },
-        chart: toPie(titled("Where the money came from"), incomeSlices()),
       };
     case "get_monthly_series": {
       // The monthly series is computed from the unfiltered rows by design,
@@ -384,45 +370,15 @@ export function runTool(
         },
       };
     }
-    case "display_chart": {
-      // The model chose presentation (source, size, title, window); every
-      // number still comes from the aggregates it points at.
-      const source = chartRequest?.source ?? "categories";
-      const slices =
-        source === "merchants"
-          ? merchants
-          : source === "income"
-            ? incomeSlices()
-            : categories;
-      const defaultTitle =
-        source === "merchants"
-          ? "Top merchants by spending"
-          : source === "income"
-            ? "Where the money came from"
-            : "Spending by category";
-      const title = chartRequest?.title?.slice(0, 60).trim() || titled(defaultTitle);
-      const topN = Math.min(8, Math.max(2, chartRequest?.topN ?? 5));
-      const chart = toPie(title, slices, topN);
-      return {
-        result: chart
-          ? {
-              displayed: chart.title,
-              period: scope,
-              total_chf: chf(chart.totalMinor),
-              slices: chart.slices.map((s) => ({
-                name: s.label,
-                amount_chf: chf(s.amountMinor),
-                share_pct: Number(s.share.toFixed(1)),
-              })),
-            }
-          : { error: `No ${source} data in this period — nothing to chart.` },
-        chart,
-      };
-    }
     case "run_sql":
-    case "display_echart":
-      // Both need what a pure helper cannot hold — the SQL sandbox and the
-      // parsed option — so the action loop handles them before calling here.
+    case "get_savings_potential":
+    case "get_subscriptions":
+    case "get_recent_anomalies":
+    case "get_savings_goals":
+    case "propose_allocation":
+      // All need what a pure helper cannot hold — the SQL sandbox, or a
+      // database read of their own — so the action loop handles them before
+      // calling here.
       return { result: { error: "Handled by the action loop." } };
   }
 }
@@ -510,180 +466,581 @@ export function extractSql(content: string): string | undefined {
 export function extractJsonAfter(content: string, marker: string): unknown {
   const at = content.indexOf(marker);
   if (at < 0) return undefined;
-  const start = content.indexOf("{", at + marker.length);
-  if (start < 0) return undefined;
+  // A handful of candidate regions, not one: prose pseudo-JSON ("{series:
+  // [1]}") or a format echo with a literal ellipsis often sits between the
+  // marker and the real arguments, and giving up on the first unparseable
+  // balanced region would throw the real call away with it.
+  let from = at + marker.length;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const start = content.indexOf("{", from);
+    if (start < 0) return undefined;
 
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < content.length; i++) {
-    const ch = content[i];
-    if (escaped) {
-      escaped = false;
-    } else if (inString) {
-      if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-    } else if (ch === '"') {
-      inString = true;
-    } else if (ch === "{") {
-      depth += 1;
-    } else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        try {
-          const parsed = JSON.parse(content.slice(start, i + 1));
-          // When the model narrates before the call ("I'll use display_echart
-          // …") the anchor lands on the prose mention, so the first balanced
-          // object is the wrapper `{ "<marker>": {…real args…} }`. Unwrap it:
-          // tool args never legitimately contain a key named after the tool.
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            const inner = (parsed as Record<string, unknown>)[marker];
-            if (inner && typeof inner === "object" && !Array.isArray(inner)) {
-              return inner;
-            }
-          }
-          return parsed;
-        } catch {
-          return undefined;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let end = -1;
+    for (let i = start; i < content.length; i++) {
+      const ch = content[i];
+      if (escaped) {
+        escaped = false;
+      } else if (inString) {
+        if (ch === "\\") escaped = true;
+        else if (ch === '"') inString = false;
+      } else if (ch === '"') {
+        inString = true;
+      } else if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
         }
       }
     }
-  }
-  return undefined;
-}
-
-/** Depth cap for `sanitizeEChartsOption` — a JSON bomb is not a chart. */
-const OPTION_MAX_DEPTH = 12;
-const OPTION_MAX_BYTES = 20_000;
-
-/**
- * A model-composed ECharts option, made safe to store and render: JSON only
- * (so no functions can exist), size- and depth-capped, and stripped of the
- * vectors that are not "a chart": `graphic` (free-form drawing, can embed
- * images), any `image` property (external fetches from the viewer's browser),
- * and `tooltip` (removed app-wide by design).
- */
-export function sanitizeEChartsOption(
-  raw: unknown,
-): Record<string, unknown> | undefined {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return undefined;
-  }
-  if (JSON.stringify(raw).length > OPTION_MAX_BYTES) return undefined;
-
-  const BANNED_KEYS = new Set(["graphic", "image", "tooltip", "toolbox"]);
-  const walk = (node: unknown, depth: number): unknown => {
-    if (depth > OPTION_MAX_DEPTH) return undefined;
-    if (Array.isArray(node)) return node.map((item) => walk(item, depth + 1));
-    if (typeof node === "object" && node !== null) {
-      const out: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(node)) {
-        if (BANNED_KEYS.has(key)) continue;
-        const cleaned = walk(value, depth + 1);
-        if (cleaned !== undefined) out[key] = cleaned;
+    // Unclosed (a stray prose brace swallowed the rest): step inside it —
+    // the next `{` may open a region that does balance.
+    if (end < 0) {
+      from = start + 1;
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(content.slice(start, end + 1));
+      // When the model narrates before the call ("I'll use propose_allocation
+      // …") the anchor lands on the prose mention, so the first balanced
+      // object is the wrapper `{ "<marker>": {…real args…} }`. Unwrap it:
+      // tool args never legitimately contain a key named after the tool.
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const inner = (parsed as Record<string, unknown>)[marker];
+        if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+          return inner;
+        }
       }
-      return out;
+      return parsed;
+    } catch {
+      from = start + 1;
     }
-    if (typeof node === "string") {
-      // ECharts loads `image://<url>` (and `path://`) symbols and rich-text
-      // resources by fetching them from the VIEWER's browser — an SSRF /
-      // tracking-beacon vector that the banned-keys pass alone misses, because
-      // the url is a string *value* (on `symbol`, per-datum symbols, markPoint
-      // symbols, …), not a banned key. Drop any such value.
-      if (/^\s*(image|path):\/\//i.test(node)) return undefined;
-      return node;
-    }
-    // JSON primitives only — anything else has no business in an option.
-    return typeof node === "number" || typeof node === "boolean" || node === null
-      ? node
-      : undefined;
-  };
-
-  const option = walk(raw, 0) as Record<string, unknown>;
-  return "series" in option ? option : undefined;
-}
-
-/**
- * The non-pie chart type a question explicitly asks for, if any. Requires an
- * actual chart word next to "bar"/"line" so "bottom line" and "coffee bar"
- * don't trigger, and yields to an explicit "pie".
- */
-export function wantsNonPieChart(question: string): "bar" | "line" | undefined {
-  const q = question.toLowerCase();
-  if (/\bpie\b/.test(q)) return undefined;
-  if (/\b(bar|column)s?[\s-]*(chart|graph|plot|diagram)/.test(q) || /\bas\s+(a\s+)?(bar|column)s?\b/.test(q)) {
-    return "bar";
-  }
-  if (/\bline[\s-]*(chart|graph|plot|diagram)/.test(q) || /\bas\s+(a\s+)?line\b/.test(q)) {
-    return "line";
   }
   return undefined;
 }
 
+/** One detected recurring charge. */
+export type Subscription = {
+  merchant: string;
+  category: string;
+  cadence: "weekly" | "monthly" | "quarterly" | "yearly";
+  payments: number;
+  /** The median charge, minor units. */
+  typicalMinor: number;
+  lastOn: string;
+  /** Median charge × cycles per year — what keeping it costs annually. */
+  yearlyMinor: number;
+};
+
+/** Day-gap windows a rhythm may drift inside and still count as one. */
+const CADENCES = [
+  { cadence: "weekly", min: 5, max: 9, perYear: 52 },
+  { cadence: "monthly", min: 24, max: 38, perYear: 12 },
+  { cadence: "quarterly", min: 76, max: 104, perYear: 4 },
+  { cadence: "yearly", min: 330, max: 400, perYear: 1 },
+] as const;
+
+/** "YYYY-MM-DD" → whole days since the epoch. Via `Date.UTC` on the parsed
+ * parts, so no timezone can shift the day the way `new Date(string)` might. */
+function dayNumber(date: string): number {
+  const [year, month, day] = date.split("-").map(Number);
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 /**
- * The guarantee behind display_echart: when the user names a bar or line
- * chart and the model never composed one, the server does — from the same
- * real aggregates everything else draws on. Subject follows the question:
- * merchants and categories become ranked bars, everything else becomes the
- * monthly in/out series.
+ * Recurring charges, straight from the rows: a merchant billing a steady
+ * amount on a steady rhythm. Both tests are two-thirds majority votes — gaps
+ * inside the cadence window, amounts within 25% of the median — so one skipped
+ * month or one price change does not hide a real subscription, while a grocery
+ * habit (weekly-ish, never the same amount) stays out. Wants the account's
+ * whole history: a year-to-date window would demote every yearly bill.
+ *
+ * The fixed-cost categories are excluded up front: rent and health premiums
+ * are the most regular charges an account has, and a "your subscriptions"
+ * list led by Rent answers a question nobody asked — those amounts already
+ * appear as the fixed lump in `get_savings_potential`.
  */
-export function composeEChart(
-  type: "bar" | "line",
-  question: string,
-  dashboard: Dashboard,
-  period?: Period,
-): EChartsChartSpec | undefined {
-  const q = question.toLowerCase();
-  const francs = (minor: number) => Number((minor / 100).toFixed(2));
-  const suffix = period ? ` — ${period.label}` : "";
+export function detectSubscriptions(rows: Transaction[]): Subscription[] {
+  const byMerchant = new Map<
+    string,
+    { days: number[]; amounts: number[]; lastOn: string; category: string }
+  >();
+  for (const row of rows) {
+    if (row.kind !== "expense") continue;
+    if (FIXED_EXPENSE_CATEGORIES.has(row.category)) continue;
+    let group = byMerchant.get(row.merchant);
+    if (!group) {
+      group = { days: [], amounts: [], lastOn: row.bookedOn, category: row.category };
+      byMerchant.set(row.merchant, group);
+    }
+    group.days.push(dayNumber(row.bookedOn));
+    group.amounts.push(Math.abs(row.amountMinor));
+    if (row.bookedOn > group.lastOn) group.lastOn = row.bookedOn;
+  }
 
-  const ranked = /\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)
-    ? { title: "Top merchants", slices: dashboard.merchants }
-    : /\bcategor(y|ies)\b/.test(q)
-      ? { title: "Spending by category", slices: dashboard.categories }
-      : undefined;
+  const found: Subscription[] = [];
+  for (const [merchant, group] of byMerchant) {
+    // Same-day pairs would put zero-length gaps under the median; the rhythm
+    // is read from one charge per day.
+    const days = [...new Set(group.days)].sort((a, b) => a - b);
+    if (days.length < 2) continue;
+    const gaps = days.slice(1).map((day, i) => day - days[i]);
+    const gap = median(gaps);
+    const match = CADENCES.find((c) => gap >= c.min && gap <= c.max);
+    if (!match) continue;
+    // Two charges a year apart are a real yearly signal; anything faster
+    // needs a third before "twice" reads as "regularly".
+    if (match.cadence !== "yearly" && days.length < 3) continue;
+    const regular = gaps.filter((g) => g >= match.min && g <= match.max).length;
+    if (regular < Math.ceil(gaps.length * (2 / 3))) continue;
+    const typical = median(group.amounts);
+    const stable = group.amounts.filter(
+      (amount) => Math.abs(amount - typical) <= typical * 0.25,
+    ).length;
+    if (stable < Math.ceil(group.amounts.length * (2 / 3))) continue;
+    found.push({
+      merchant,
+      category: group.category,
+      cadence: match.cadence,
+      payments: group.amounts.length,
+      typicalMinor: Math.round(typical),
+      lastOn: group.lastOn,
+      yearlyMinor: Math.round(typical * match.perYear),
+    });
+  }
+  return found.sort((a, b) => b.yearlyMinor - a.yearlyMinor).slice(0, 15);
+}
 
-  if (ranked) {
-    const top = ranked.slices.filter((s) => s.amount > 0).slice(0, 8);
-    if (top.length === 0) return undefined;
+/** The get_subscriptions payload the model reads. */
+export function subscriptionsToolResult(rows: Transaction[]): unknown {
+  const subscriptions = detectSubscriptions(rows);
+  if (subscriptions.length === 0) {
     return {
-      kind: "echarts",
-      title: `${ranked.title} (CHF)${suffix}`,
-      option: {
-        grid: { left: 8, right: 16, top: 8, bottom: 8, containLabel: true },
-        xAxis: { type: "value" },
-        yAxis: {
-          type: "category",
-          // Reversed so the biggest bar sits on top.
-          data: top.map((s) => s.key).reverse(),
-        },
-        series: [
-          { type: "bar", data: top.map((s) => francs(s.amount)).reverse() },
-        ],
+      subscriptions: [],
+      note: "No recurring charges found — no merchant bills a steady amount on a steady rhythm in these statements.",
+    };
+  }
+  return {
+    scope: "whole statement history",
+    note: "Contractual fixed costs (rent, insurance, taxes) are not listed here even when they recur.",
+    total_per_year_chf: chf(
+      subscriptions.reduce((sum, s) => sum + s.yearlyMinor, 0),
+    ),
+    subscriptions: subscriptions.map((s) => ({
+      merchant: s.merchant,
+      category: s.category,
+      billing: s.cadence,
+      typical_charge_chf: chf(s.typicalMinor),
+      charges: s.payments,
+      last_charged: s.lastOn,
+      cost_per_year_chf: chf(s.yearlyMinor),
+    })),
+  };
+}
+
+/**
+ * The get_savings_potential payload: two halves that answer "where could I
+ * save" together. The headline is the **unassigned money**, taken from the
+ * very read the Savings page's Unallocated pot uses (`getSavingsOverview`,
+ * income minus spending minus what is already in goals) — the same logic, so
+ * the assistant and the pot can never quote two different figures. Negative
+ * means the month overspent, and the tool says so instead of flooring it.
+ * The second half is the fixed/flexible category split over the asked
+ * window, which says where future spending could realistically be cut.
+ */
+export function savingsPotentialToolResult(
+  dashboard: Dashboard,
+  overview: SavingsOverview | null,
+  period?: Period,
+): unknown {
+  const { totals, categories } = dashboard;
+  const fixed = categories.filter((s) => FIXED_EXPENSE_CATEGORIES.has(s.key));
+  const flexible = categories.filter(
+    (s) => !FIXED_EXPENSE_CATEGORIES.has(s.key),
+  );
+  const fixedTotal = fixed.reduce((sum, s) => sum + s.amount, 0);
+  const flexibleTotal = flexible.reduce((sum, s) => sum + s.amount, 0);
+  const unassigned =
+    overview && overview.month !== null
+      ? {
+          unassigned_month: overview.month,
+          unassigned_chf: chf(overview.freeMinor),
+          month_over: overview.monthEnded,
+        }
+      : {};
+  return {
+    period: period?.label ?? "all statements",
+    ...unassigned,
+    net_saved_chf: chf(totals.net),
+    total_spending_chf: chf(totals.expense),
+    fixed_costs_chf: chf(fixedTotal),
+    fixed_categories: fixed.map((s) => s.key),
+    flexible_spending_chf: chf(flexibleTotal),
+    flexible_categories: sliceRows(flexible),
+    note: "unassigned_chf is what that month actually left over and has not been put into a goal — the same figure the app's Unallocated pot shows; negative means the month overspent. Lead with it, then advise cutting in the largest flexible categories. Fixed costs cannot realistically be cut.",
+  };
+}
+
+/**
+ * The get_recent_anomalies payload: the stored scan, never a fresh one — a
+ * scan is minutes of CPU and belongs to the Account page's explicit button.
+ * The three not-ok states are spelled out for the model so "no findings" and
+ * "never scanned" cannot blur into the same falsely reassuring answer.
+ */
+export function anomaliesToolResult(overview: AnomalyOverview): unknown {
+  if (overview.running) {
+    return {
+      status: "scan_running",
+      note: "An anomaly scan is running right now — the findings will be ready in a moment.",
+    };
+  }
+  if (!overview.hasCompletedScan) {
+    return {
+      status: "never_scanned",
+      note: "No anomaly scan has been run yet, so nothing has been checked. The customer can start one on the Account page.",
+    };
+  }
+  if (overview.outdated) {
+    return {
+      status: "outdated",
+      note: "The statements changed after the last scan, so its findings are outdated. A fresh scan can be started on the Account page.",
+    };
+  }
+  const compact = (group: AnomalyGroup) => ({
+    finding: group.title,
+    severity: group.severity,
+    transactions: group.transactionCount,
+    latest_on: group.latestOn,
+    summary: group.description,
+  });
+  return {
+    status: "ok",
+    needs_a_look: overview.action.slice(0, 8).map(compact),
+    ordinary_context: overview.context.slice(0, 5).map(compact),
+    note:
+      overview.action.length === 0
+        ? "Nothing needs attention — reassure the customer."
+        : "Summarize what needs a look without alarm — most findings are the customer's own legitimate spending. Details are on the Anomalies page.",
+  };
+}
+
+/**
+ * The get_savings_goals payload. The caller resolves which month the overview
+ * is about (the last completed one by default); `surplus_chf` is null while
+ * that month still runs, and the free figure is the ceiling a proposed split
+ * may distribute. The note names who moves the money, because the model must
+ * not promise an allocation it cannot perform.
+ */
+export function savingsGoalsToolResult(overview: SavingsOverview | null): unknown {
+  if (!overview || overview.month === null) {
+    return { note: "No statement months yet — there is nothing to allocate." };
+  }
+  const notes: string[] = [];
+  if (overview.pots.length === 0) {
+    notes.push(
+      "The customer has no saving goals yet — they can be created in the dashboard's Savings section.",
+    );
+  }
+  if (!overview.monthEnded) {
+    notes.push("This month is still running, so its surplus is not final yet.");
+  } else if (overview.freeMinor === 0) {
+    notes.push("Nothing is left to allocate from this month.");
+  } else if (overview.pots.length > 0) {
+    notes.push(
+      "To split the free amount across the goals call propose_allocation — follow each goal's monthly_plan_chf where set, otherwise favor the goals further from target; the customer gets an Apply button. You cannot move money yourself.",
+    );
+  }
+  return {
+    month: overview.month,
+    month_over: overview.monthEnded,
+    surplus_chf: overview.surplusMinor === null ? null : chf(overview.surplusMinor),
+    already_allocated_chf: chf(overview.allocatedMinor),
+    free_to_allocate_chf: chf(overview.freeMinor),
+    goals: overview.pots.map((pot) => ({
+      name: pot.name,
+      target_chf: chf(pot.targetMinor),
+      saved_chf: chf(pot.savedMinor),
+      still_missing_chf: chf(Math.max(0, pot.targetMinor - pot.savedMinor)),
+      allocated_this_month_chf: chf(pot.monthMinor),
+      // The holder's own standing intent — the strongest hint a proposed
+      // split can follow. Null when the goal has none.
+      monthly_plan_chf: pot.monthlyMinor === null ? null : chf(pot.monthlyMinor),
+      target_date: pot.targetOn,
+    })),
+    note: notes.join(" "),
+  };
+}
+
+/** A goal-and-francs pair as the model wrote it, minor units, unvalidated. */
+export type RawAllocation = { goal: string; amountMinor: number };
+
+/** "600", "1'234.50", "CHF 89,90" → minor units; undefined when unparseable. */
+function francsToMinor(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.round(value * 100) : undefined;
+  }
+  if (typeof value !== "string") return undefined;
+  let cleaned = value.replace(/chf/i, "").replace(/[’'\s]/g, "").trim();
+  // A comma is the Swiss decimal only when it carries one or two trailing
+  // digits ("89,90"); anything else ("1,250") is a thousands group, and
+  // reading it as a decimal silently shrinks the amount a thousandfold.
+  const decimal = /,(\d{1,2})$/.exec(cleaned);
+  cleaned = decimal
+    ? `${cleaned.slice(0, decimal.index).replace(/,/g, "")}.${decimal[1]}`
+    : cleaned.replace(/,/g, "");
+  if (cleaned === "" || !/^\d+(\.\d+)?$/.test(cleaned)) return undefined;
+  return Math.round(Number(cleaned) * 100);
+}
+
+/**
+ * The goal/amount pairs out of a propose_allocation call. Two layers, like
+ * `extractSql`: the balanced-JSON extractor first, and when the surrounding
+ * array was mangled past parsing, a regex sweep for `"goal": …, "amount…": …`
+ * pairs — an 8B model truncates argument arrays often enough that the pairs
+ * deserve to survive their wrapper.
+ */
+export function parseAllocationArgs(content: string): RawAllocation[] {
+  const args = extractJsonAfter(content, "propose_allocation");
+  const list = Array.isArray(args)
+    ? args
+    : args && typeof args === "object"
+      ? (args as Record<string, unknown>).allocations ??
+        (args as Record<string, unknown>).split
+      : undefined;
+  if (Array.isArray(list)) {
+    const parsed: RawAllocation[] = [];
+    for (const item of list) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      const goal = record.goal ?? record.name ?? record.goal_name;
+      const amountMinor = francsToMinor(
+        record.amount_chf ?? record.amount ?? record.chf,
+      );
+      if (typeof goal === "string" && goal.trim() && amountMinor !== undefined) {
+        parsed.push({ goal: goal.trim(), amountMinor });
+      }
+    }
+    if (parsed.length > 0) return parsed;
+  }
+
+  const parsed: RawAllocation[] = [];
+  // The trailing delimiter is the guard: a pair cut off mid-amount ("…chf": 2⏎)
+  // may be a truncated 250, and a confidently wrong figure is worse than one
+  // dropped row the model can re-propose.
+  const pair =
+    /"(?:goal|name|goal_name)"\s*:\s*"([^"]+)"\s*,\s*"(?:amount_chf|amount|chf)"\s*:\s*"?([\d.,'’]+)"?\s*[,}\]]/g;
+  // The sweep is fenced to the argument region — from the tool name to the
+  // first `]` that could close its array. Goal/amount-shaped pairs elsewhere
+  // in the content (an echoed goals list, a quoted earlier proposal) must not
+  // turn into phantom allocations.
+  const at = content.indexOf("propose_allocation");
+  let region = at >= 0 ? content.slice(at) : content;
+  const close = region.indexOf("]");
+  if (close >= 0) region = region.slice(0, close + 1);
+  for (const match of region.matchAll(pair)) {
+    const amountMinor = francsToMinor(match[2]);
+    if (amountMinor !== undefined) {
+      parsed.push({ goal: match[1].trim(), amountMinor });
+    }
+  }
+  return parsed;
+}
+
+/**
+ * Validate a proposed split against the month's real state, yielding both the
+ * typed proposal the Apply card renders and the result the model captions.
+ * The model's numbers are requests, not figures: goals are matched against
+ * the pots by name (exact first, then unique substring), amounts are floored
+ * at zero, duplicates merge, and a sum beyond the free surplus is scaled down
+ * to whole francs to fit. Whatever survives is the split — both readers see
+ * the same one, which is what makes the caption trustworthy.
+ */
+export function buildAllocationProposal(
+  raw: RawAllocation[],
+  overview: SavingsOverview | null,
+): { proposal?: AllocationProposal; result: unknown } {
+  if (!overview || overview.month === null) {
+    return { result: { error: "No statement months yet — nothing to allocate." } };
+  }
+  const goalNames = overview.pots.map((pot) => pot.name);
+  if (overview.pots.length === 0) {
+    return {
+      result: {
+        error:
+          "There are no saving goals to allocate to. The customer can create some in the dashboard's Savings section.",
+      },
+    };
+  }
+  if (!overview.monthEnded) {
+    return {
+      result: {
+        error: `${overview.month} is still running and has no final surplus yet. Only a completed month can be allocated.`,
+      },
+    };
+  }
+  if (overview.freeMinor <= 0) {
+    return {
+      result: {
+        error: `Nothing is free to allocate from ${overview.month} — its surplus is already fully put away.`,
+        goals: goalNames,
+      },
+    };
+  }
+  if (raw.length === 0) {
+    return {
+      result: {
+        error:
+          'No allocations found — pass {"propose_allocation": {"allocations": [{"goal": "…", "amount_chf": 0}]}}.',
+        goals: goalNames,
+        free_to_allocate_chf: chf(overview.freeMinor),
       },
     };
   }
 
-  const fromMonth = period?.from.slice(0, 7);
-  const toMonth = period?.to.slice(0, 7);
-  const months = dashboard.monthly.filter(
-    (m) => (!fromMonth || m.month >= fromMonth) && (!toMonth || m.month <= toMonth),
-  );
-  if (months.length === 0) return undefined;
+  // Exact name first; a unique substring match second, so "Ferien" still
+  // finds "Ferien 2026" without letting an ambiguous fragment guess.
+  const matchPot = (goal: string) => {
+    const wanted = goal.toLowerCase();
+    const exact = overview.pots.find((pot) => pot.name.toLowerCase() === wanted);
+    if (exact) return exact;
+    const partial = overview.pots.filter(
+      (pot) =>
+        pot.name.toLowerCase().includes(wanted) ||
+        wanted.includes(pot.name.toLowerCase()),
+    );
+    return partial.length === 1 ? partial[0] : undefined;
+  };
+
+  const adds = new Map<number, number>();
+  const unmatched: string[] = [];
+  for (const item of raw) {
+    const pot = matchPot(item.goal);
+    if (!pot) {
+      unmatched.push(item.goal);
+      continue;
+    }
+    const add = Math.max(0, item.amountMinor);
+    if (add === 0) continue;
+    adds.set(pot.id, (adds.get(pot.id) ?? 0) + add);
+  }
+  if (adds.size === 0) {
+    return {
+      result: {
+        error: `None of the proposed goals exist. The goals are: ${goalNames.join(", ")}.`,
+        free_to_allocate_chf: chf(overview.freeMinor),
+      },
+    };
+  }
+
+  // Over the ceiling: scale everything down proportionally, to whole francs,
+  // so the split always fits what the month actually has left.
+  let addTotal = [...adds.values()].reduce((sum, add) => sum + add, 0);
+  const scaled = addTotal > overview.freeMinor;
+  if (scaled) {
+    for (const [goalId, add] of adds) {
+      const shrunk =
+        Math.floor((add * overview.freeMinor) / addTotal / 100) * 100;
+      if (shrunk === 0) adds.delete(goalId);
+      else adds.set(goalId, shrunk);
+    }
+    if (adds.size === 0) {
+      return {
+        result: {
+          error: `The free amount is only ${chf(overview.freeMinor)} CHF — propose smaller amounts.`,
+        },
+      };
+    }
+    addTotal = [...adds.values()].reduce((sum, add) => sum + add, 0);
+  }
+
+  // Card rows in the pots' own order. Adds only — what these mean against
+  // each goal's month total is resolved at apply time, not frozen here.
+  const receiving = overview.pots.filter((pot) => adds.has(pot.id));
+  const proposal: AllocationProposal = {
+    month: overview.month,
+    items: receiving.map((pot) => ({
+      goalId: pot.id,
+      name: pot.name,
+      addMinor: adds.get(pot.id) as number,
+    })),
+    addTotalMinor: addTotal,
+  };
   return {
-    kind: "echarts",
-    title: `Money in and out per month (CHF)${suffix}`,
-    option: {
-      legend: { bottom: 0 },
-      grid: { left: 8, right: 16, top: 12, bottom: 32, containLabel: true },
-      xAxis: { type: "category", data: months.map((m) => m.label) },
-      yAxis: { type: "value" },
-      series: [
-        { name: "Out", type, data: months.map((m) => francs(m.expense)) },
-        { name: "In", type, data: months.map((m) => francs(m.income)) },
-      ],
+    proposal,
+    result: {
+      shown_to_customer: true,
+      month: overview.month,
+      split: proposal.items.map((item) => ({
+        goal: item.name,
+        add_chf: chf(item.addMinor),
+      })),
+      total_chf: chf(addTotal),
+      ...(scaled
+        ? { note_scaled: "The amounts were scaled down to fit the free surplus." }
+        : {}),
+      ...(unmatched.length > 0
+        ? { ignored_unknown_goals: unmatched }
+        : {}),
+      note: "The split is now shown with an Apply button. Caption it briefly and invite the customer to tap Apply — the money has NOT moved yet.",
     },
   };
+}
+
+/**
+ * The deterministic split the proposal safety net offers when the customer
+ * asked to allocate and the model never made a valid propose_allocation call.
+ * Two sources, in order of how much they say about intent:
+ *
+ * 1. **The holder's own monthly plan.** A pot's `monthlyMinor` is the
+ *    Dauersparauftrag — literally "what the holder means to put in monthly, a
+ *    suggestion for splitting a surplus" — so when any pot declares one, the
+ *    proposal IS those amounts (the shared validator scales them down if the
+ *    month's free surplus cannot cover them; a surplus beyond the plan stays
+ *    free rather than being force-distributed).
+ * 2. Otherwise the free surplus is spread proportional to each goal's
+ *    remaining gap (equal parts when every goal is already full), floored to
+ *    whole francs.
+ *
+ * Expressed as RawAllocations so `buildAllocationProposal` stays the single
+ * validator for everything that becomes an Apply card.
+ */
+export function defaultAllocationSplit(
+  overview: SavingsOverview | null,
+): RawAllocation[] {
+  if (!overview || !overview.monthEnded || overview.freeMinor <= 0) return [];
+  const pots = overview.pots;
+  if (pots.length === 0) return [];
+
+  const planned = pots.filter((pot) => (pot.monthlyMinor ?? 0) > 0);
+  if (planned.length > 0) {
+    return planned.map((pot) => ({
+      goal: pot.name,
+      amountMinor: pot.monthlyMinor as number,
+    }));
+  }
+
+  const gaps = pots.map((pot) => Math.max(0, pot.targetMinor - pot.savedMinor));
+  const gapTotal = gaps.reduce((sum, gap) => sum + gap, 0);
+  const weights = gapTotal > 0 ? gaps : pots.map(() => 1);
+  const weightTotal = gapTotal > 0 ? gapTotal : pots.length;
+  return pots
+    .map((pot, i) => ({
+      goal: pot.name,
+      amountMinor:
+        Math.floor((overview.freeMinor * weights[i]) / weightTotal / 100) * 100,
+    }))
+    .filter((item) => item.amountMinor > 0);
 }
 
 /**
@@ -693,9 +1050,18 @@ export function composeEChart(
  * ("Let me call get_spending_by_category.") without any call syntax at all.
  * In a round where tools are on offer, naming one is asking for it — the
  * round cap keeps a chatty final answer from looping the conversation.
+ *
+ * FOLLOWUP lines are exempt from the scan: they are definitionally part of a
+ * finished answer, and the locale prompt actively invites tool names there
+ * ("match a toolcall available to you") — scanning them would turn a
+ * finished caption back into a tool round and discard the real answer.
  */
 export function parseToolCalls(content: string): ToolName[] {
-  return TOOL_NAMES.filter((name) => content.includes(name));
+  const scanned = content
+    .split("\n")
+    .filter((line) => !FOLLOWUP_MARKER.test(line))
+    .join("\n");
+  return TOOL_NAMES.filter((name) => scanned.includes(name));
 }
 
 /** A resolved, inclusive date window over the statements. */
@@ -713,41 +1079,6 @@ export type Period = {
 export function parsePeriod(content: string): string | undefined {
   const match = /["']?period["']?\s*[:=]\s*["']?([\w.-]+)["']?/i.exec(content);
   return match?.[1]?.toLowerCase();
-}
-
-/**
- * The presentation choices in a display_chart call, fished out one regex per
- * field so a mangled argument object still yields whatever it did contain.
- */
-export function parseChartRequest(content: string): ChartRequest {
-  const sourceMatch =
-    /["']?source["']?\s*[:=]\s*["']?(categor\w*|merchant\w*|income|spend\w*)/i.exec(content);
-  const raw = sourceMatch?.[1]?.toLowerCase();
-  const source: ChartSource | undefined =
-    raw?.startsWith("categor") || raw?.startsWith("spend")
-      ? "categories"
-      : raw?.startsWith("merchant")
-        ? "merchants"
-        : raw === "income"
-          ? "income"
-          : undefined;
-
-  const topMatch = /["']?top_?n["']?\s*[:=]\s*["']?(\d{1,2})/i.exec(content);
-  const titleMatch = /["']?title["']?\s*[:=]\s*["']([^"'\n]{1,80})["']/i.exec(content);
-
-  return {
-    source,
-    topN: topMatch ? Number(topMatch[1]) : undefined,
-    title: titleMatch?.[1]?.trim(),
-  };
-}
-
-/** Where a chart should come from when the model named no source. */
-export function defaultChartSource(question: string): ChartSource {
-  const q = question.toLowerCase();
-  if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) return "merchants";
-  if (/\b(income|earn(ed|ings)?|salary|refunds?)\b/.test(q)) return "income";
-  return "categories";
 }
 
 const MONTH_NUMBERS: Record<string, string> = {
@@ -816,14 +1147,29 @@ export function resolvePeriod(
   const anchorYear = lastStatement.slice(0, 4);
   const anchorMonth = lastStatement.slice(0, 7);
 
-  if (value === "ytd" || value === "year_to_date") {
+  // The off-enum spellings an 8B model actually emits, mapped rather than
+  // dropped — an unrecognized token would otherwise fall through to the
+  // caller's next fallback, or worse, silently widen the window.
+  if (
+    value === "ytd" ||
+    value === "year_to_date" ||
+    value === "this_year" ||
+    value === "current_year"
+  ) {
     return {
       from: `${anchorYear}-01-01`,
       to: lastStatement,
       label: `year to date (${anchorYear}-01-01 to ${lastStatement})`,
     };
   }
-  if (value === "last_month") {
+  if (value === "this_month" || value === "current_month") {
+    return { from: `${anchorMonth}-01`, to: lastStatement, label: anchorMonth };
+  }
+  if (value === "last_year" || value === "previous_year") {
+    const year = String(Number(anchorYear) - 1);
+    return { from: `${year}-01-01`, to: `${year}-12-31`, label: year };
+  }
+  if (value === "last_month" || value === "previous_month") {
     const month = monthsBack(anchorMonth, 1);
     return { from: `${month}-01`, to: `${month}-31`, label: month };
   }
@@ -882,6 +1228,34 @@ export function looksLikeStall(content: string): boolean {
  */
 export function routeTool(question: string): ToolName | undefined {
   const q = question.toLowerCase();
+  // The advice tools go first, and carry German keywords: the one-tap starter
+  // chips are localized, and a stalled model on a German question would
+  // otherwise fall through to the English-keyed branches below. They outrank
+  // the row-level check so "how many subscriptions" reads as a subscriptions
+  // question, not a COUNT(*). (No \b before umlaut-initial words — JS \b is
+  // ASCII-only and never matches before "ü".)
+  if (/\b(subscriptions?|abos?|abonnements?|recurring|wiederkehrend\w*)\b/.test(q)) {
+    return "get_subscriptions";
+  }
+  if (
+    /\b(anomal\w*|suspicious|shady|fraud\w*|scam\w*|unusual|auffällig\w*|verdächtig\w*|ungewöhnlich\w*)\b/.test(q)
+  ) {
+    return "get_recent_anomalies";
+  }
+  if (
+    /\b(goals?|pots?|allocat\w*|assign\w*|surplus|sparziel\w*|verteil\w*|zuweis\w*)\b/.test(q) ||
+    /überschuss/.test(q)
+  ) {
+    return "get_savings_goals";
+  }
+  // "save" alone stays with get_overview below ("how much did I save?"); it is
+  // the ability/where words beside it that make the question about potential.
+  if (
+    /\b(save|saving|savings|spar\w*)\b/.test(q) &&
+    /\b(more|less|cut|reduce|potential|possible|where|can|could|wo|kann|könnte|mehr|weniger)\b/.test(q)
+  ) {
+    return "get_savings_potential";
+  }
   // Row-level questions no aggregate tool can answer route to the SQL escape
   // hatch. "largest/biggest/smallest" only when NOT paired with a subject the
   // dedicated tools answer better (and with a chart) — "largest single
@@ -893,10 +1267,10 @@ export function routeTool(question: string): ToolName | undefined {
   if (rowLevel) {
     return "run_sql";
   }
-  // An explicit ask for a chart routes to the chart tool itself — the
-  // caller fills the source from `defaultChartSource`.
+  // The assistant no longer draws; an explicit chart ask is answered with
+  // the figures the chart would have shown.
   if (/\b(pie|charts?|graphs?|diagrams?|visuali[sz]e)\b/.test(q)) {
-    return "display_chart";
+    return "get_spending_by_category";
   }
   if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) {
     return "get_top_merchants";
@@ -908,7 +1282,7 @@ export function routeTool(question: string): ToolName | undefined {
     return "get_monthly_series";
   }
   // "total" and "overview" deliberately fall through to the category tool:
-  // those questions can be answered with a chart, and charts are preferred.
+  // the category split is the most useful single answer for them.
   if (/\b(save[d]?|savings|net|balance|how much money)\b/.test(q)) {
     return "get_overview";
   }
@@ -920,33 +1294,6 @@ export function routeTool(question: string): ToolName | undefined {
     return "get_spending_by_category";
   }
   return undefined;
-}
-
-/**
- * Whether a turn that produced no chart of its own should still get one. True
- * when the question is about the composition or size of money — the cases a
- * pie answers well — and false for the row-level, count, and month-series
- * questions that read better as a sentence or a different shape. Defers to
- * `routeTool` so this can never disagree with how the question is otherwise
- * classified.
- */
-export function shouldDefaultChart(question: string): boolean {
-  const routed = routeTool(question);
-  return (
-    routed === "display_chart" ||
-    routed === "get_spending_by_category" ||
-    routed === "get_top_merchants" ||
-    routed === "get_income_breakdown"
-  );
-}
-
-/** The pie-bearing tool for a default chart's source. */
-export function chartToolForSource(source: ChartSource): ToolName {
-  return source === "merchants"
-    ? "get_top_merchants"
-    : source === "income"
-      ? "get_income_breakdown"
-      : "get_spending_by_category";
 }
 
 /** Drop Apertus special tokens and any tool-call block from a visible reply. */
@@ -975,8 +1322,13 @@ export function formatSwissNumbers(text: string): string {
     });
 }
 
-/** Tolerates the JSON-flavoured spelling too: `[{"FOLLOWUP": "…"}]`. */
-const FOLLOWUP_MARKER = /[[{"']*\s*FOLLOW[\s-]?UPS?["']?\s*:/i;
+/**
+ * Tolerates the JSON-flavoured spelling too: `[{"FOLLOWUP": "…"}]`.
+ * Uppercase only, on purpose: the prompt asks for `FOLLOWUP:` verbatim, and a
+ * case-insensitive match amputated legitimate prose — "One follow-up: cancel
+ * Netflix…" lost everything after the colon to the chip row.
+ */
+const FOLLOWUP_MARKER = /[[{"']*\s*FOLLOW[\s-]?UPS?["']?\s*:/;
 
 /** Strip bullet/number/quote/JSON wrapping from a proposed question. */
 function cleanFollowUp(line: string): string {
@@ -987,12 +1339,42 @@ function cleanFollowUp(line: string): string {
 }
 
 /**
+ * One marker payload → individual questions. The locale prompt invites an
+ * inline array (`FOLLOWUP: ["q1", "q2"]`), which a single cleanFollowUp pass
+ * would mangle into one half-stripped chip — so an array is parsed (or, when
+ * its JSON is broken, split on the quote-comma-quote seams) first.
+ */
+function splitFollowUpPayload(part: string): string[] {
+  const trimmed = part.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((q): q is string => typeof q === "string")
+      ) {
+        return parsed;
+      }
+    } catch {
+      // fall through to the seam split
+    }
+  }
+  if (/["']\s*,\s*["']/.test(trimmed)) {
+    return trimmed.split(/["']\s*,\s*["']/);
+  }
+  return [trimmed];
+}
+
+/**
  * Pull the model's proposed follow-up questions out of its answer. The
  * system prompt asks for one `FOLLOWUP: …` line each, but a small model also
- * packs several onto one line ("…? FOLLOWUP: …?") or writes a bare
- * `FOLLOWUPS:` header with a list under it — so lines are split on the
- * marker, and after one, question-shaped lines are consumed too. Everything
- * matched is removed from the visible reply.
+ * packs several onto one line ("…? FOLLOWUP: …?"), writes a bare
+ * `FOLLOWUPS:` header with a list under it, or ships them as one inline
+ * array — so lines are split on the marker, each payload is split again, and
+ * after a marker, question-shaped lines are consumed too. Everything matched
+ * is removed from the visible reply, and repeats are dropped: a small model
+ * happily proposes the same question twice, and duplicate chips would also
+ * be duplicate React keys.
  */
 export function extractFollowUps(text: string): {
   text: string;
@@ -1008,15 +1390,19 @@ export function extractFollowUps(text: string): {
       collecting = true;
       if (parts[0].trim()) kept.push(parts[0].trimEnd());
       for (const part of parts.slice(1)) {
-        const question = cleanFollowUp(part);
-        if (question) followUps.push(question);
+        for (const piece of splitFollowUpPayload(part)) {
+          const question = cleanFollowUp(piece);
+          if (question) followUps.push(question);
+        }
       }
       continue;
     }
     if (collecting) {
-      const question = cleanFollowUp(line);
-      if (question && question.endsWith("?")) {
-        followUps.push(question);
+      const questions = splitFollowUpPayload(line)
+        .map(cleanFollowUp)
+        .filter((q) => q && q.endsWith("?"));
+      if (questions.length > 0) {
+        followUps.push(...questions);
         continue;
       }
       collecting = false;
@@ -1024,56 +1410,13 @@ export function extractFollowUps(text: string): {
     kept.push(line);
   }
 
-  return { text: kept.join("\n").trim(), followUps: followUps.slice(0, 3) };
-}
-
-/**
- * Follow-up inspiration for the chips above the input. Deterministic, like
- * the chart: candidates are phrased from the account's real aggregates
- * (top category, top merchant, priciest month), ordered so the ones that
- * change topic relative to the current question come first, and anything
- * already asked in this conversation is dropped.
- */
-export function suggestFollowUps(
-  question: string,
-  dashboard: Dashboard,
-  asked: string[],
-): string[] {
-  const q = question.toLowerCase();
-  const topCategory = dashboard.categories[0]?.key;
-  const topMerchant = dashboard.merchants[0]?.key;
-  const priciest = dashboard.monthly.reduce(
-    (max, month) => (max === null || month.expense > max.expense ? month : max),
-    null as Dashboard["monthly"][number] | null,
-  );
-
-  const candidates: string[] = [];
-  if (/\b(merchant|shop|store|retailer|vendor)s?\b/.test(q)) {
-    if (topMerchant) candidates.push(`How much did I spend at ${topMerchant}?`);
-    candidates.push("Where does my money go by category YTD?");
-  } else if (/\b(income|earn(ed|ings)?|salary|refunds?)\b/.test(q)) {
-    candidates.push("How much of my income did I spend?");
-    candidates.push("Where does my money go YTD?");
-  } else {
-    if (topCategory) candidates.push(`Why is ${topCategory} so high?`);
-    candidates.push("Who are my top merchants YTD?");
-  }
-  if (priciest && priciest.expense > 0) {
-    candidates.push(`What happened in ${priciest.label}?`);
-  }
-  candidates.push(
-    "How much did I save this year?",
-    "Which month was my cheapest?",
-  );
-
-  const seen = new Set(asked.concat(question).map((s) => s.toLowerCase()));
-  const fresh: string[] = [];
-  for (const candidate of candidates) {
-    const key = candidate.toLowerCase();
-    if (seen.has(key)) continue;
+  const seen = new Set<string>();
+  const unique = followUps.filter((q) => {
+    const key = q.toLowerCase();
+    if (seen.has(key)) return false;
     seen.add(key);
-    fresh.push(candidate);
-    if (fresh.length === 3) break;
-  }
-  return fresh;
+    return true;
+  });
+  return { text: kept.join("\n").trim(), followUps: unique.slice(0, 3) };
 }
+

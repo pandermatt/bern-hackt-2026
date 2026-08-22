@@ -1,8 +1,10 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Bug, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 
+import { ChatDebug } from "@/components/chat-debug";
 import { ChatPanel, useAssistantChat } from "@/components/chat-panel";
 
 /**
@@ -35,6 +37,7 @@ import { ChatPanel, useAssistantChat } from "@/components/chat-panel";
 export function HomeChat() {
   const t = useTranslations("Chat");
   const chat = useAssistantChat();
+  const [view, setView] = useState<"chat" | "debug">("chat");
 
   return (
     <div className="overflow-clip rounded-xl border border-line bg-surface shadow-sm">
@@ -42,15 +45,40 @@ export function HomeChat() {
         <span className="flex size-7 items-center justify-center rounded-md bg-brand">
           <Sparkles className="size-4 text-text" aria-hidden />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="text-[14px] leading-tight font-semibold text-text">
-            {t("title")}
+            {view === "debug" ? t("debugTitle") : t("title")}
           </h2>
-          <p className="text-[12px] text-text-muted">{t("subtitle")}</p>
+          <p className="text-[12px] text-text-muted">
+            {view === "debug" ? t("debugSubtitle") : t("subtitle")}
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setView(view === "debug" ? "chat" : "debug")}
+          aria-pressed={view === "debug"}
+          className={`cursor-pointer rounded-md p-1.5 transition-colors ${
+            view === "debug"
+              ? "bg-accent-soft text-accent"
+              : "text-text-muted hover:bg-surface-muted hover:text-text"
+          }`}
+          aria-label={t("toggleDebug")}
+          title={t("debugTitle")}
+        >
+          <Bug className="size-4" />
+        </button>
       </div>
 
-      <ChatPanel chat={chat} scrollClassName="h-[30svh] lg:h-[60svh]" />
-    </div>
+      {view === "debug" ? (
+        /* The debug list brings its own scroll; this wrapper only gives it the
+           same height cap the transcript gets, so the card cannot grow without
+           bound on a long log. */
+        <div className="flex max-h-[45svh] flex-col">
+          <ChatDebug />
+        </div>
+      ) : (
+         <ChatPanel chat={chat} scrollClassName="max-h-[30svh] lg:max-h-[60svh]" />
+      )}
+         </div>
   );
 }
