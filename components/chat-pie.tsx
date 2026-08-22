@@ -106,24 +106,26 @@ export function ChatPie({ chart }: { chart: PieChartSpec }) {
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page.
           The aria-label names the table without rendering anything. */}
-      <table className="sr-only" aria-label={chart.title}>
-        <thead>
-          <tr>
-            <th scope="col">{t("pieSlice")}</th>
-            <th scope="col">{t("pieAmount")}</th>
-            <th scope="col">{t("pieShare")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {chart.slices.map((slice) => (
-            <tr key={slice.label}>
-              <th scope="row">{slice.label}</th>
-              <td>{formatMoney(slice.amountMinor)}</td>
-              <td>{slice.share.toFixed(1)}%</td>
+      <div className="sr-only">
+        <table aria-label={chart.title}>
+          <thead>
+            <tr>
+              <th scope="col">{t("pieSlice")}</th>
+              <th scope="col">{t("pieAmount")}</th>
+              <th scope="col">{t("pieShare")}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {chart.slices.map((slice) => (
+              <tr key={slice.label}>
+                <th scope="row">{slice.label}</th>
+                <td>{formatMoney(slice.amountMinor)}</td>
+                <td>{slice.share.toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

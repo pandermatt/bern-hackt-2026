@@ -19,7 +19,20 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   getCurrentUser: async () => signedIn.user,
 }));
 
+/* A scan reads the locale to tell the narrative layer which language to write
+ * in, and the findings are rendered against the catalogs on the way out —
+ * outside a request there is neither a locale to resolve nor a catalog loaded,
+ * so both are supplied here from `messages/en.json`. */
+vi.mock("next-intl/server", async () => {
+  const { translator } = await import("./stubs/i18n");
+  return {
+    getLocale: async () => "en",
+    getTranslations: async (namespace: string) => translator(namespace),
+  };
+});
+
 const {
+  getAnomalyKindByTransaction,
   getAnomalyOverview,
   getAnomalyRuleDetail,
   getAnomalyScanState,
@@ -159,6 +172,34 @@ describe("running a scan", () => {
     }
   });
 
+  /*
+   * A finding is read back in whichever language its reader is in, so what has
+   * to survive the round trip is not the sentence but the rule that produced it
+   * and the values that rule needs. Without them a stored finding can only be
+   * shown in the language the scan happened to run in.
+   */
+  it("stores what a finding needs to be rendered in either language", async () => {
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await startAnomalyScan();
+    await waitForScan();
+
+    const stored = await db.select().from(anomalies);
+    for (const row of stored) {
+      expect(row.baseRuleId).toBe(row.ruleId);
+      expect(JSON.parse(row.params ?? "null")).toBeTruthy();
+      // Nothing here came from the model, so nothing is pinned to a language.
+      expect(row.narrativeLocale).toBeNull();
+    }
+
+    const [spike] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.externalId, "a-spike"));
+    const [found] = await getStoredAnomaliesForPage([spike.id]);
+    expect(found.base_rule_id).toBe(found.rule_id);
+    expect(found.params).toBeTruthy();
+  });
+
   it("replaces the previous scan's results rather than appending", async () => {
     await db.insert(transactions).values(history(alice.id, "a"));
 
@@ -181,7 +222,7 @@ describe("running a scan", () => {
 
     expect(await startAnomalyScan()).toEqual({
       ok: false,
-      error: "A scan is already running.",
+      error: "alreadyRunning",
     });
   });
 
@@ -196,10 +237,26 @@ describe("running a scan", () => {
 });
 
 describe("scan state (drives the dashboard prompt)", () => {
+  /** A finding pointing at an id no transaction has — what a re-import leaves. */
+  function leftover(userId: number) {
+    return {
+      userId,
+      transactionId: 999_999,
+      ruleId: "REPEAT_CHARGE",
+      severity: "medium" as const,
+      title: "REPEAT_CHARGE title",
+      description: "REPEAT_CHARGE description",
+      icon: "lucide:arrow-up",
+      emoji: "🔺",
+      metrics: "{}",
+    };
+  }
+
   it("reports no completed scan on a fresh account", async () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: false,
+      stale: false,
     });
   });
 
@@ -211,6 +268,7 @@ describe("scan state (drives the dashboard prompt)", () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: true,
+      stale: false,
     });
   });
 
@@ -225,6 +283,38 @@ describe("scan state (drives the dashboard prompt)", () => {
     const state = await getAnomalyScanState();
     expect(state.hasCompletedScan).toBe(true);
     expect(state.running).toBe(false);
+    // Nothing was left behind, so this is a clean result and not a stale one.
+    expect(state.stale).toBe(false);
+  });
+
+  it("keeps a completed scan un-stale while any finding still has its row", async () => {
+    await db.insert(transactions).values(history(alice.id, "a"));
+    const [live] = await db.select({ id: transactions.id }).from(transactions).limit(1);
+    await db.insert(anomalies).values([
+      { ...leftover(alice.id), transactionId: live.id },
+      // A re-import reissues ids, so some findings can be orphaned while others
+      // survive. One survivor is enough for the results to still be about these
+      // transactions.
+      leftover(alice.id),
+    ]);
+
+    expect((await getAnomalyScanState()).stale).toBe(false);
+  });
+
+  it("reports findings left behind by a re-import as stale", async () => {
+    // What a re-seed leaves: every finding points at a transaction id that no
+    // longer exists, so the ledger shows no badges at all. Without this the
+    // dashboard would silently look like a clean account.
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await db.insert(anomalies).values(leftover(alice.id));
+
+    expect((await getAnomalyScanState()).stale).toBe(true);
+  });
+
+  it("does not call another account's leftovers stale", async () => {
+    await db.insert(anomalies).values(leftover(bob.id));
+
+    expect((await getAnomalyScanState()).stale).toBe(false);
   });
 
   it("reports nothing for a signed-out visitor", async () => {
@@ -232,6 +322,7 @@ describe("scan state (drives the dashboard prompt)", () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: false,
+      stale: false,
     });
   });
 });
@@ -505,6 +596,7 @@ describe("ownership", () => {
     expect(await getAnomalyScanStatus()).toBeNull();
     expect(await getStoredAnomaliesForPage([1, 2, 3])).toEqual([]);
     expect(await getAnomalyRuleDetail("REPEAT_CHARGE")).toBeNull();
+    expect(await getAnomalyKindByTransaction()).toEqual(new Map());
     expect(await getAnomalyOverview()).toEqual({
       action: [],
       context: [],
@@ -514,7 +606,49 @@ describe("ownership", () => {
     });
     expect(await startAnomalyScan()).toEqual({
       ok: false,
-      error: "Your session expired. Sign in again.",
+      error: "sessionExpired",
     });
+  });
+});
+
+/** The calendar's read: which days to tint, and how loudly. */
+describe("getAnomalyKindByTransaction", () => {
+  /** A finding on `transactionId`, written straight in — the classification is
+   * what is under test here, not the engine that produced it. */
+  async function finding(userId: number, transactionId: number, kind: "info" | "warning" | "alert") {
+    await db.insert(anomalies).values({
+      userId,
+      transactionId,
+      ruleId: "TEST",
+      severity: "medium",
+      kind,
+      title: "Test",
+      description: `A ${kind}`,
+      icon: "lucide:store",
+    });
+  }
+
+  it("keeps the most concerning kind when a row carries several findings", async () => {
+    await finding(alice.id, 42, "info");
+    await finding(alice.id, 42, "alert");
+    await finding(alice.id, 42, "warning");
+
+    expect(await getAnomalyKindByTransaction()).toEqual(new Map([[42, "alert"]]));
+  });
+
+  it("is insensitive to the order the rows come back in", async () => {
+    await finding(alice.id, 7, "alert");
+    await finding(alice.id, 7, "info");
+
+    expect((await getAnomalyKindByTransaction()).get(7)).toBe("alert");
+  });
+
+  it("never reaches another account's findings", async () => {
+    await finding(bob.id, 99, "alert");
+    await finding(alice.id, 1, "info");
+
+    const mine = await getAnomalyKindByTransaction();
+    expect(mine.has(99)).toBe(false);
+    expect(mine.get(1)).toBe("info");
   });
 });

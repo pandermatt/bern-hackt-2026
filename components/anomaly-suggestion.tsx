@@ -17,9 +17,12 @@ import {
  *
  * Findings are precomputed rather than derived at render time, so a fresh
  * account shows no anomaly badges at all — which looks identical to an account
- * with nothing wrong. This is what tells those apart, and it only appears when
- * no scan has ever completed. Once one has, silence is a real answer and the
- * prompt stays gone even if the scan found nothing.
+ * with nothing wrong. This is what tells those apart, and it appears in exactly
+ * the two cases where an empty ledger is not an answer: no scan has ever
+ * completed, or `stale` — the statements were re-imported since the last one,
+ * so its findings point at transactions that no longer exist and every badge
+ * silently vanished. In between, silence is a real answer and the prompt stays
+ * gone even if the scan found nothing.
  *
  * It used to be a server component that linked to `/account`, where the scan
  * and its progress bar lived. That made the shortest path to a first result
@@ -35,9 +38,12 @@ const POLL_MS = 600;
 
 export function AnomalySuggestion({
   running: runningOnLoad,
+  stale,
   transactionCount,
 }: {
   running: boolean;
+  /** The last scan's findings no longer describe these transactions. */
+  stale: boolean;
   transactionCount: number;
 }) {
   const t = useTranslations("AnomalySuggestion");
@@ -95,7 +101,8 @@ export function AnomalySuggestion({
     startTransition(async () => {
       const result = await startAnomalyScan();
       if (!result.ok) {
-        toast.error(result.error);
+        // The action answers with a code, not a sentence — see its note.
+        toast.error(tScan(`error_${result.error}`));
         return;
       }
       setStatus(null);
@@ -139,17 +146,27 @@ export function AnomalySuggestion({
           />
           <div>
             <p className="text-[14px] font-semibold text-text">
-              {done ? t("doneTitle") : busy ? t("runningTitle") : t("title")}
+              {done
+                ? t("doneTitle")
+                : busy
+                  ? t("runningTitle")
+                  : stale
+                    ? t("staleTitle")
+                    : t("title")}
             </p>
             <p className="mt-0.5 max-w-[64ch] text-[13px] text-text-muted">
               {done
                 ? t("doneBody")
                 : busy
                   ? t("runningBody")
-                  : /* One message, not three fragments: German puts the verb at
-                       the end, so a sentence spliced around a number in English
-                       word order cannot be translated into it. */
-                    t("body", { count: transactionCount.toLocaleString("de-CH") })}
+                  : stale
+                    ? /* The same words the anomalies page uses for this state,
+                         so the two places do not each invent an explanation. */
+                      t("staleBody")
+                    : /* One message, not three fragments: German puts the verb
+                         at the end, so a sentence spliced around a number in
+                         English word order cannot be translated into it. */
+                      t("body", { count: transactionCount.toLocaleString("de-CH") })}
             </p>
           </div>
         </div>
@@ -161,7 +178,7 @@ export function AnomalySuggestion({
             className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-text px-3.5 text-[13px] font-medium text-bg transition-opacity hover:opacity-85 max-sm:w-full sm:h-9"
           >
             <Sparkles aria-hidden="true" className="size-[15px]" />
-            {failed ? t("retry") : t("cta")}
+            {failed ? t("retry") : stale ? t("staleCta") : t("cta")}
           </button>
         )}
       </div>

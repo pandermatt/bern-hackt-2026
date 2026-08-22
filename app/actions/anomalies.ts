@@ -1,6 +1,7 @@
 "use server";
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { getLocale } from "next-intl/server";
 
 import { db } from "@/db";
 import {
@@ -14,7 +15,9 @@ import {
 import {
   analyzeTransactionAnomalies,
   attentionFor,
+  strongestKind,
   type AnomalyInsight,
+  type AnomalyKind,
   type AnomalySeverity,
 } from "@/lib/anomaly-engine";
 import {
@@ -22,6 +25,8 @@ import {
   type TransactionContext,
 } from "@/lib/llm/analyze-insights";
 import { getCurrentUser } from "@/lib/auth";
+import { getAnomalyText, type TranslatableFinding } from "@/lib/anomaly-text";
+import { defaultLocale, isAppLocale, type AppLocale } from "@/i18n/routing";
 
 /**
  * Anomaly detection used to run on every dashboard render, over the account's
@@ -90,7 +95,14 @@ function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-async function runScan(runId: number, userId: number): Promise<void> {
+/**
+ * The scan carries the reader's locale only for the narrative layer's sake:
+ * the deterministic findings are stored as rule plus values and translated
+ * when they are read, but the model writes prose, and prose has to be written
+ * in some language at the moment it is written. Findings scanned in German and
+ * read in English fall back to the rule messages — see `lib/anomaly-text.ts`.
+ */
+async function runScan(runId: number, userId: number, locale: AppLocale): Promise<void> {
   try {
     await setProgress(runId, { phase: "Loading transactions" });
 
@@ -138,6 +150,11 @@ async function runScan(runId: number, userId: number): Promise<void> {
       insights = await analyzeTransactionInsights(insights, {
         contextOf: (id) => context.get(id),
 
+        // The model writes prose, and prose has to be written in some language
+        // at the moment it is written — the deterministic findings around it
+        // are translated when they are read instead.
+        locale,
+
         /*
          * Real progress, one step per batch. This used to be a timer walking
          * the bar forward on no information at all, which reached its clamp in
@@ -172,6 +189,9 @@ async function runScan(runId: number, userId: number): Promise<void> {
           icon: insight.icon,
           emoji: insight.emoji ?? "",
           metrics: JSON.stringify(insight.supporting_metrics ?? {}),
+          baseRuleId: insight.base_rule_id ?? insight.rule_id,
+          params: insight.params ? JSON.stringify(insight.params) : null,
+          narrativeLocale: insight.narrative_locale ?? null,
         });
       }
     }
@@ -212,15 +232,21 @@ async function runScan(runId: number, userId: number): Promise<void> {
   }
 }
 
+export type ScanError = "sessionExpired" | "alreadyRunning";
+
 /**
  * Starts a scan and returns immediately — the caller polls
  * `getAnomalyScanStatus` to follow it.
+ *
+ * The failure is a code rather than a sentence: a server action has no reader
+ * to write for, and the toast that shows it is rendered in whichever language
+ * the page is in. `AnomalyScan.error*` holds the words.
  */
 export async function startAnomalyScan(): Promise<
-  { ok: true } | { ok: false; error: string }
+  { ok: true } | { ok: false; error: ScanError }
 > {
   const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "Your session expired. Sign in again." };
+  if (!user) return { ok: false, error: "sessionExpired" };
 
   const [existing] = await db
     .select()
@@ -228,49 +254,81 @@ export async function startAnomalyScan(): Promise<
     .where(and(eq(anomalyRuns.userId, user.id), eq(anomalyRuns.status, "running")))
     .limit(1);
 
-  if (existing) return { ok: false, error: "A scan is already running." };
+  if (existing) return { ok: false, error: "alreadyRunning" };
 
   const [run] = await db
     .insert(anomalyRuns)
     .values({ userId: user.id, status: "running", startedAt: new Date() })
     .returning();
 
+  // The locale is resolved here rather than inside the scan: `getLocale()`
+  // reads the request, and by the time the background work runs there is no
+  // request left to read.
+  const requested = await getLocale();
+  const locale = isAppLocale(requested) ? requested : defaultLocale;
+
   // Deliberately not awaited: this action returns as soon as the run row
   // exists, and the work continues in the background. `void` documents that
   // the floating promise is intentional, and runScan catches its own errors so
   // nothing can reject unhandled.
-  void runScan(run.id, user.id);
+  void runScan(run.id, user.id, locale);
 
   return { ok: true };
 }
 
 /**
- * Whether this account has ever completed a scan, and whether one is running
- * right now.
+ * Whether this account has ever completed a scan, whether one is running right
+ * now, and whether the last one's findings still describe the transactions.
  *
- * The dashboard needs this to tell two very different states apart: "no
- * findings because nobody has scanned yet" — worth prompting about — and "no
- * findings because a scan ran and the account is clean", which is a result, not
- * a gap. Counting rows in `anomalies` alone cannot distinguish them, and would
- * nag people whose books are simply in order.
+ * The dashboard needs this to tell three very different states apart: "no
+ * findings because nobody has scanned yet" — worth prompting about — "no
+ * findings because a scan ran and the account is clean", which is a result and
+ * not a gap, and a completed scan whose findings all point at transactions that
+ * no longer exist. Counting rows in `anomalies` alone cannot distinguish any of
+ * them, and would nag people whose books are simply in order.
+ *
+ * Staleness is two existence probes rather than a count: whether the account
+ * has any findings at all, and whether any of them still lands on a live
+ * transaction. `anomalies.transactionId` is deliberately not a foreign key — a
+ * scan is a snapshot, and a re-import reissues transaction ids — so the rows
+ * outlive what they describe and the intersection is the only honest test. It
+ * is the same question `getAnomalyOverview` answers from the rows it has
+ * already loaded; here there are no rows to load, so it asks SQLite.
  */
 export async function getAnomalyScanState(): Promise<{
   hasCompletedScan: boolean;
   running: boolean;
+  stale: boolean;
 }> {
   const user = await getCurrentUser();
-  if (!user) return { hasCompletedScan: false, running: false };
+  if (!user) return { hasCompletedScan: false, running: false, stale: false };
 
-  const runs = await db
-    .select({ status: anomalyRuns.status })
-    .from(anomalyRuns)
-    .where(eq(anomalyRuns.userId, user.id))
-    .orderBy(desc(anomalyRuns.id))
-    .limit(20);
+  const [runs, anyFinding, anyLiveFinding] = await Promise.all([
+    db
+      .select({ status: anomalyRuns.status })
+      .from(anomalyRuns)
+      .where(eq(anomalyRuns.userId, user.id))
+      .orderBy(desc(anomalyRuns.id))
+      .limit(20),
+    db
+      .select({ id: anomalies.id })
+      .from(anomalies)
+      .where(eq(anomalies.userId, user.id))
+      .limit(1),
+    db
+      .select({ id: anomalies.id })
+      .from(anomalies)
+      .innerJoin(transactions, eq(anomalies.transactionId, transactions.id))
+      .where(
+        and(eq(anomalies.userId, user.id), eq(transactions.userId, user.id)),
+      )
+      .limit(1),
+  ]);
 
   return {
     hasCompletedScan: runs.some((r) => r.status === "done"),
     running: runs.some((r) => r.status === "running"),
+    stale: anyFinding.length > 0 && anyLiveFinding.length === 0,
   };
 }
 
@@ -338,10 +396,14 @@ export async function getStoredAnomaliesForPage(
       // A malformed metrics blob must not take down the dashboard; the finding
       // itself is still worth showing.
     }
+    const params = parseParams(row.params) ?? undefined;
     byInsight.set(key, {
       rule_id: row.ruleId,
       title: row.title,
       description: row.description,
+      params,
+      base_rule_id: row.baseRuleId ?? row.ruleId,
+      narrative_locale: row.narrativeLocale ?? undefined,
       severity: row.severity,
       kind: row.kind,
       transaction_ids: [row.transactionId],
@@ -352,6 +414,44 @@ export async function getStoredAnomaliesForPage(
   }
 
   return [...byInsight.values()];
+}
+
+/**
+ * The stored values a finding is re-rendered from, or `null` when the blob is
+ * unreadable — which costs the translation, never the finding itself.
+ */
+function parseParams(params: string | null): TranslatableFinding["params"] {
+  if (!params) return null;
+  try {
+    return JSON.parse(params);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A stored row as the text resolver wants it.
+ *
+ * The columns are the same three everywhere: the rule whose message renders
+ * this finding, the values that message needs, and the language the stored
+ * sentence is in when a model wrote it. See `lib/anomaly-text.ts`.
+ */
+function findingOf(row: {
+  ruleId: string;
+  title: string;
+  description: string;
+  params: string | null;
+  baseRuleId: string | null;
+  narrativeLocale: string | null;
+}): TranslatableFinding {
+  return {
+    rule_id: row.ruleId,
+    title: row.title,
+    description: row.description,
+    params: parseParams(row.params),
+    base_rule_id: row.baseRuleId,
+    narrative_locale: row.narrativeLocale,
+  };
 }
 
 /** One kind of finding, and how much of it there is. */
@@ -423,6 +523,9 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
 
   const scan = await getAnomalyScanState();
 
+  // The stored sentence is the scan's; what this page shows is the reader's.
+  const anomalyText = await getAnomalyText();
+
   const [rows, live] = await Promise.all([
     db
       .select()
@@ -449,15 +552,17 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
     // A finding whose transaction is gone — a re-import since the last scan.
     if (day === undefined) continue;
 
+    const text = anomalyText(findingOf(row));
+
     let bucket = buckets.get(row.ruleId);
     if (!bucket) {
       bucket = {
         group: {
           ruleId: row.ruleId,
-          title: row.title,
+          title: text.title,
           icon: row.icon,
           severity: row.severity,
-          description: row.description,
+          description: text.description,
           transactionCount: 0,
           latestOn: null,
         },
@@ -478,7 +583,7 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
     if (bucket.latestSeen === null || day > bucket.latestSeen) {
       bucket.latestSeen = day;
       bucket.group.latestOn = day;
-      bucket.group.description = row.description;
+      bucket.group.description = text.description;
     }
   }
 
@@ -507,6 +612,9 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
     // so it reads as a feed of what is new.
     context: groups.filter((g) => attentionFor(g.ruleId) === "context").sort(byLatest),
     ...scan,
+    // Deliberately overrides the `stale` the scan state carries: that one asks
+    // SQLite the same question, this one answers it from the very rows the page
+    // is about to render, so the flag and the empty list can never disagree.
     stale: rows.length > 0 && groups.length === 0,
   };
 }
@@ -558,10 +666,14 @@ export async function getAnomalyRuleDetail(
   const found = await db
     .select({
       transactionId: anomalies.transactionId,
+      ruleId: anomalies.ruleId,
       description: anomalies.description,
       title: anomalies.title,
       icon: anomalies.icon,
       severity: anomalies.severity,
+      params: anomalies.params,
+      baseRuleId: anomalies.baseRuleId,
+      narrativeLocale: anomalies.narrativeLocale,
     })
     .from(anomalies)
     .where(and(eq(anomalies.userId, user.id), eq(anomalies.ruleId, ruleId)));
@@ -603,9 +715,17 @@ export async function getAnomalyRuleDetail(
   const focusRows = live.filter((t) => focusIds.has(t.id));
   const others = live.filter((t) => !focusIds.has(t.id));
 
+  /*
+   * Translated after the grouping, not before: a finding's identity is its
+   * stored description (see the note above), and re-keying that on translated
+   * prose would make which rows belong together depend on the reader.
+   */
+  const anomalyText = await getAnomalyText();
+  const focusFinding = usable.find((f) => f.description === focusDescription);
+
   return {
     ruleId,
-    title: usable[0]?.title ?? ruleId,
+    title: usable[0] ? anomalyText(findingOf(usable[0])).title : ruleId,
     icon: usable[0]?.icon ?? "",
     severity: usable.reduce<AnomalySeverity>(
       (worst, f) => (SEVERITY_ORDER[f.severity] > SEVERITY_ORDER[worst] ? f.severity : worst),
@@ -615,11 +735,53 @@ export async function getAnomalyRuleDetail(
       focusDescription === null || focusRows.length === 0
         ? null
         : {
-            description: focusDescription,
+            description: focusFinding
+              ? anomalyText(findingOf(focusFinding)).description
+              : focusDescription,
             rows: focusRows,
             totalMinor: focusRows.reduce((sum, t) => sum + Math.abs(t.amountMinor), 0),
           },
     others,
     transactionCount: live.length,
   };
+}
+
+/**
+ * The worst kind flagged against each transaction, for the whole account.
+ *
+ * The calendar's read. Unlike `getStoredAnomaliesForPage` this is not bounded
+ * by a page of ids — a month grid is a summary of every day in it, so there is
+ * no page to bound it by — which is why it selects two columns rather than the
+ * row: one covering scan of `anomalies_user_id_idx`, no metrics blobs parsed,
+ * and nothing but a classification crossing back.
+ *
+ * `kind`, not `severity`. Severity is how far from baseline a number sits; kind
+ * is how much a person should worry, and it is what the ledger's rows and
+ * badges are already coloured by. A day tinted on one axis above a row tinted
+ * on the other would be two classifications of the same event.
+ *
+ * The account is resolved from the session, never from an argument — same
+ * contract as every other export here.
+ */
+export async function getAnomalyKindByTransaction(): Promise<
+  Map<number, AnomalyKind>
+> {
+  const user = await getCurrentUser();
+  if (!user) return new Map();
+
+  const rows = await db
+    .select({
+      transactionId: anomalies.transactionId,
+      kind: anomalies.kind,
+    })
+    .from(anomalies)
+    .where(eq(anomalies.userId, user.id));
+
+  const worst = new Map<number, AnomalyKind>();
+  for (const row of rows) {
+    const seen = worst.get(row.transactionId);
+    worst.set(row.transactionId, seen ? strongestKind(seen, row.kind) : row.kind);
+  }
+
+  return worst;
 }

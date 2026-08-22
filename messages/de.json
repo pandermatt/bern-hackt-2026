@@ -4,7 +4,10 @@
     "signOut": "Abmelden",
     "signIn": "Anmelden",
     "getStarted": "Loslegen",
-    "anomalies": "Auffälligkeiten"
+    "anomalies": "Auffälligkeiten",
+    "dashboard": "Dashboard",
+    "budget": "Budget",
+    "mainNav": "Hauptnavigation"
   },
   "AppFooter": {
     "tagline": "Private Einblicke in Ihre Ausgaben — aus Ihren eigenen Kontoauszügen.",
@@ -188,7 +191,10 @@
     "all": "Alle Transaktionen",
     "credits": "Gutschriften (Geld ein)",
     "debits": "Belastungen (Geld aus)",
-    "clear": "Zurücksetzen"
+    "clear": "Zurücksetzen",
+    "view": "Ansicht",
+    "viewList": "Liste",
+    "viewCalendar": "Kalender"
   },
   "Ledger": {
     "sectionLabel": "Transaktionen",
@@ -201,6 +207,103 @@
     "emptyTitle": "Nichts entspricht diesen Filtern",
     "emptyBody": "In der aktuellen Auswahl liegen keine Transaktionen. Setzen Sie einen Filter zurück, um die Ansicht zu erweitern."
   },
+  "Budget": {
+    "title": "Budget",
+    "subtitle": "Legen Sie pro Kategorie ein Monatslimit fest und verfolgen Sie {month} dagegen.",
+    "subtitleEmpty": "Noch keine Kontoauszüge importiert.",
+    "month": "Monat",
+    "emptyTitle": "Noch nichts zu budgetieren",
+    "emptyBody": "Importieren Sie einen Kontoauszug, und diese Seite schlägt aus Ihren eigenen Durchschnittswerten ein Monatslimit für jede Kategorie vor.",
+    "radarHeading": "Ausgaben gegen Budget",
+    "radarNoLimits": "Keine Limits gesetzt — der Ring ist Ihr eigener Monatsdurchschnitt",
+    "radarMeta": "{spent} von {limit} ausgegeben in {month}",
+    "limitsHeading": "Monatslimits",
+    "limitsNote": "Lassen Sie ein Feld leer für kein Limit.",
+    "useSuggestions": "Vorschläge übernehmen",
+    "suggested": "Vorschlag {amount} / Monat",
+    "spent": "ausgegeben",
+    "shareOfLimit": "{share}% des Limits",
+    "shareOfLimitOver": "{share}% des Limits · überschritten",
+    "limitFieldLabel": "Monatslimit für {category} in CHF",
+    "noLimitPlaceholder": "Kein Limit",
+    "unsavedChanges": "Nicht gespeicherte Änderungen",
+    "save": "Budget speichern",
+    "saved": "Budget gespeichert.",
+    "chartLabel": "Ausgaben gegen Budget für jede Kategorie in diesem Monat, in Schweizer Franken, mit dem Anteil des jeweiligen Limits neben der Kategorie. Die Tabelle darunter enthält dieselben Zahlen.",
+    "tableLabel": "Ausgaben gegen Budget, nach Kategorie",
+    "tableCategory": "Kategorie",
+    "tableSpent": "Ausgegeben",
+    "tableBudget": "Budget",
+    "tableShare": "Anteil des Budgets",
+    "tableSuggested": "Vorschlag",
+    "notSet": "Nicht gesetzt",
+    "seriesSpent": "Diesen Monat ausgegeben",
+    "seriesBudget": "Ihr Budget",
+    "tipNoLimit": "kein Limit",
+    "tipAgainstLimit": "{used} / {limit} · {share}%"
+  },
+  "BudgetErrors": {
+    "notSignedIn": "Melden Sie sich an, um ein Budget festzulegen.",
+    "malformed": "Dieses Budget sieht fehlerhaft aus.",
+    "notAnAmount": "„{amount}“ ist kein Betrag.",
+    "tooLarge": "Dieses Limit ist grösser, als diese App speichern kann.",
+    "saveFailed": "Budget konnte nicht gespeichert werden. Versuchen Sie es erneut."
+  },
+  "Savings": {
+    "heading": "Sparziele",
+    "subtitle": "Jeder Topf füllt sich, wenn Sie das übrige Geld eines Monats hineinlegen.",
+    "savedOfTarget": "{saved} von {target} gespart",
+    "empty": "Noch keine Ziele. Fügen Sie unten eines hinzu — Ferien, ein neues Auto — und es erscheint hier als Topf zum Füllen.",
+    "monthRunning": "{month} läuft noch. Was übrig bleibt, wird verteilbar, sobald der Monat vorbei ist.",
+    "monthSpentAll": "In {month} wurde alles Verdiente ausgegeben, es bleibt also nichts zum Zurücklegen.",
+    "monthLeftOver": "In {month} blieben {amount} übrig. Fügen Sie unten ein Ziel hinzu, um sie anzulegen.",
+    "potOfTarget": "von {target}",
+    "goalLabel": "Ziel",
+    "goalPlaceholder": "Ferien, neues Auto, …",
+    "targetLabel": "Zielbetrag (CHF)",
+    "addGoal": "Ziel hinzufügen",
+    "goalAdded": "„{name}“ hinzugefügt.",
+    "allocatorHeading": "In {month} blieb Geld übrig",
+    "allocatorLeftOver": "{amount} übrig",
+    "allocatorFieldLabel": "Aus {month} in {name} legen, in CHF",
+    "notAnAmount": "Das ist kein Betrag",
+    "over": "{amount} zu viel",
+    "unallocated": "{amount} noch nicht verteilt",
+    "splitEvenly": "Gleichmässig aufteilen",
+    "moveToPots": "In Töpfe verschieben",
+    "moved": "Geld in Ihre Töpfe verschoben.",
+    "adjustLabel": "{name} anpassen",
+    "editDescription": "{amount} liegen bereits in diesem Topf. Eine Änderung des Zielbetrags verschiebt davon nichts.",
+    "editHint": "Ein Zielbetrag über null.",
+    "editPreview": "Der Topf würde {percent}% anzeigen.",
+    "cancel": "Abbrechen",
+    "saveTarget": "Zielbetrag speichern",
+    "retargeted": "Zielbetrag von „{name}“ geändert.",
+    "deleteLabel": "{name} löschen",
+    "deleteTitle": "„{name}“ löschen?",
+    "deleteBodyFunded": "Die {amount} in diesem Topf gehen zurück an die Monate, aus denen sie stammen, und können erneut verteilt werden. Das kann nicht rückgängig gemacht werden.",
+    "deleteBodyEmpty": "Dieser Topf ist leer, es geht also nichts verloren. Das kann nicht rückgängig gemacht werden.",
+    "deleteConfirm": "Ziel löschen",
+    "removed": "„{name}“ entfernt."
+  },
+  "SavingsErrors": {
+    "notSignedInCreate": "Melden Sie sich an, um ein Sparziel hinzuzufügen.",
+    "notSignedInEdit": "Melden Sie sich an, um ein Sparziel zu ändern.",
+    "notSignedInDelete": "Melden Sie sich an, um Ihre Sparziele zu ändern.",
+    "notSignedInAllocate": "Melden Sie sich an, um Geld in einen Topf zu legen.",
+    "malformedGoal": "Geben Sie dem Ziel einen Namen und einen Zielbetrag.",
+    "malformedTarget": "Dieser Zielbetrag sieht fehlerhaft aus.",
+    "malformedAllocation": "Diese Verteilung sieht fehlerhaft aus.",
+    "targetAboveZero": "Ein Ziel braucht einen Zielbetrag über null.",
+    "duplicateName": "Sie haben bereits ein Ziel namens „{name}“.",
+    "goalGone": "Dieses Sparziel existiert nicht mehr.",
+    "notAMonth": "Das ist kein Monat.",
+    "monthRunning": "Dieser Monat läuft noch.",
+    "overSurplus": "Das ist mehr, als in diesem Monat übrig blieb.",
+    "notAnAmount": "„{amount}“ ist kein Betrag.",
+    "tooLarge": "Dieser Betrag ist grösser, als diese App speichern kann.",
+    "moveFailed": "Geld konnte nicht verschoben werden. Versuchen Sie es erneut."
+  },
   "AnomalySuggestion": {
     "runningTitle": "Ihre Transaktionen werden mit KI analysiert",
     "runningBody": "Alle Regeln laufen über Ihre Historie, danach werden die Befunde formuliert. Die Ergebnisse erscheinen bei den Transaktionen unten, sobald es fertig ist — Sie müssen die Seite nicht verlassen.",
@@ -208,7 +311,10 @@
     "doneBody": "Die Befunde werden geladen — sie erscheinen gleich bei den Transaktionen unten.",
     "title": "Die Ausreisser erkennen",
     "body": "Es wurde noch nichts analysiert. Analysieren Sie mit KI, um doppelte Belastungen, ungewöhnliche Beträge und ausgebliebene Daueraufträge in Ihren {count} Transaktionen zu markieren.",
+    "staleTitle": "Diese Ergebnisse sind veraltet",
+    "staleBody": "Ihre Kontoauszüge wurden seit der letzten Analyse neu importiert, daher passen die Befunde nicht mehr zu Ihren Transaktionen — bei den Transaktionen unten erscheint deshalb keine Markierung mehr. Analysieren Sie erneut.",
     "cta": "Mit KI analysieren",
+    "staleCta": "Erneut analysieren",
     "retry": "Erneut versuchen"
   },
   "AnomalyScan": {
@@ -224,7 +330,9 @@
     "never": "nie",
     "failed": "Letzte Analyse fehlgeschlagen: {error}",
     "unknownError": "unbekannter Fehler",
-    "noScan": "Es wurde noch keine Analyse ausgeführt — bis dahin zeigt das Dashboard keine Auffälligkeiten."
+    "noScan": "Es wurde noch keine Analyse ausgeführt — bis dahin zeigt das Dashboard keine Auffälligkeiten.",
+    "error_sessionExpired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+    "error_alreadyRunning": "Es läuft bereits eine Analyse."
   },
   "ScanPhases": {
     "Loading transactions": "Transaktionen werden geladen",
@@ -285,6 +393,119 @@
     "UNUSUALLY_LARGE_TRANSACTION": "Einer der grössten Abflüsse deiner gesamten Historie. Ein kurzer Blick zur Bestätigung lohnt sich.",
     "UNUSUAL_DAY": "Diesen Händler nutzt du sonst an anderen Wochentagen.",
     "UNUSUAL_FINANCIAL_IMPACT": "Eine einzelne Zahlung, die im Verhältnis zum Monatseinkommen ins Gewicht fällt, nicht nur zu deinen üblichen Ausgaben."
+  },
+  "AnomalyFindings": {
+    "weekday0": "Sonntag",
+    "weekday1": "Montag",
+    "weekday2": "Dienstag",
+    "weekday3": "Mittwoch",
+    "weekday4": "Donnerstag",
+    "weekday5": "Freitag",
+    "weekday6": "Samstag",
+    "AMOUNT_SPIKE": {
+      "title": "Ungewöhnlich hoher Betrag",
+      "description": "{amount} liegt um das {mad}-Fache der üblichen Streuung über dem Median dieses Händlers von {median}."
+    },
+    "UNUSUALLY_LARGE_TRANSACTION": {
+      "title": "Eine Ihrer grössten Buchungen",
+      "description": "{amount} gehört zu den grössten Einzelbuchungen Ihrer Historie."
+    },
+    "NEW_MERCHANT": {
+      "title": "Zum ersten Mal hier",
+      "description": "Erste Buchung bei {merchant} in {days} Tagen Historie."
+    },
+    "NEW_CATEGORY": {
+      "title": "Neue Kategorie",
+      "description": "Erste Buchung in {category} in {days} Tagen Historie."
+    },
+    "FREQUENCY_SPIKE": {
+      "title": "Häufiger als sonst",
+      "description": "{merchant} hat innerhalb von sieben Tagen {count, plural, one {# Mal} other {# Mal}} belastet — das {factor}-Fache Ihrer üblichen {baseline} pro Woche."
+    },
+    "CATEGORY_SPENDING_SPIKE": {
+      "title": "Mehr in dieser Kategorie",
+      "description": "{category} erreichte im {month} {amount} und liegt damit {growth}% über Ihrem üblichen Niveau."
+    },
+    "NEW_RECURRING_PAYMENT": {
+      "title": "Neue wiederkehrende Zahlung",
+      "description": "Neue regelmässige Zahlung an {merchant} von rund {amount} alle {days} Tage."
+    },
+    "RECURRING_PAYMENT_CHANGE": {
+      "title": "Wiederkehrende Zahlung geändert",
+      "description": "Die wiederkehrende Zahlung an {merchant} ging von {from} auf {to} ({change}%)."
+    },
+    "RECURRING_PAYMENT_DISAPPEARANCE": {
+      "title": "Wiederkehrende Zahlung fehlt",
+      "description": "Die wiederkehrende Zahlung an {merchant} ist überfällig — erwartet alle {interval} Tage, zuletzt vor {days} Tagen gesehen."
+    },
+    "UNUSUAL_DAY": {
+      "title": "Ungewöhnlicher Tag",
+      "description": "Das ist Ihr einziger von {visits} Besuchen bei {merchant} an einem {weekday}."
+    },
+    "REPEAT_CHARGE": {
+      "title": "Mehrfach belastet",
+      "description": "{merchant} hat am {day} {count, plural, one {# Mal} other {# Mal}} {amount} belastet, insgesamt {total}."
+    },
+    "NEW_COUNTERPARTY": {
+      "title": "Neue Empfängerin oder neuer Empfänger",
+      "description": "Übertrag an {counterparty} — dorthin haben Sie bisher nie gezahlt."
+    },
+    "LARGE_TRANSFER": {
+      "title": "Grosser Übertrag",
+      "description": "Ein Übertrag von {amount} liegt deutlich über Ihren üblichen Überträgen."
+    },
+    "INCOME_DEVIATION": {
+      "title": "Einkommen weicht ab",
+      "description": "Ein Eingang von {amount} weicht {deviation}% von Ihren üblichen {baseline} ab."
+    },
+    "MISSING_EXPECTED_INCOME": {
+      "title": "Einkommen verspätet",
+      "description": "Der erwartete Eingang von {merchant} ist {days} Tage überfällig."
+    },
+    "BALANCE_DROP": {
+      "title": "Ausgabenstarke Woche",
+      "description": "Ein Nettoabfluss von {amount} innerhalb von sieben Tagen."
+    },
+    "SAVINGS_RATE_CHANGE": {
+      "title": "Sparquote verschoben",
+      "description": "Ihre monatliche Sparquote ging von {from}% auf {to}% — eine Verschiebung um {shift} Prozentpunkte."
+    },
+    "CATEGORY_SHIFT": {
+      "title": "Anteil der Kategorie verschoben",
+      "description": "{category} machte im {month} {share}% der Ausgaben aus, üblich sind {baseline}%."
+    },
+    "MERCHANT_CONCENTRATION": {
+      "title": "Auf einen Händler konzentriert",
+      "description": "{merchant} machte {share}% der Ausgaben dieses Monats aus, {shift} Prozentpunkte mehr als sonst."
+    },
+    "ROUND_NUMBER_TRANSACTION": {
+      "title": "Grosser runder Betrag",
+      "description": "Runde {amount} bei {merchant}."
+    },
+    "REFUND_ANOMALY": {
+      "title": "Ungewöhnliche Rückerstattung",
+      "description": "Eine Rückerstattung von {amount} von {merchant} liegt um das {mad}-Fache der üblichen Streuung über Ihrer mittleren Rückerstattung."
+    },
+    "CASH_WITHDRAWAL_SPIKE": {
+      "title": "Grosser Bargeldbezug",
+      "description": "Ein Bargeldbezug von {amount} liegt deutlich über Ihren üblichen Bezügen."
+    },
+    "PAYMENT_METHOD_SHIFT": {
+      "title": "Zahlungsmittel verschoben",
+      "description": "{account} trug im {month} {share}% der Ausgaben, {shift} Prozentpunkte neben den üblichen {baseline}%."
+    },
+    "EXPENSE_GROWTH_TREND": {
+      "title": "Wächst Monat für Monat",
+      "description": "{category} ist vier Monate in Folge gewachsen, im Schnitt {growth}% pro Monat."
+    },
+    "SUBSCRIPTION_ACCUMULATION": {
+      "title": "Mehr Abonnemente",
+      "description": "{count, plural, one {# neuer wiederkehrender Dienst ist} other {# neue wiederkehrende Dienste sind}} kürzlich dazugekommen."
+    },
+    "UNUSUAL_FINANCIAL_IMPACT": {
+      "title": "Stark ins Gewicht fallend",
+      "description": "{amount} ist für dieses Konto ein extremer Betrag — {share}% eines typischen Monatseinkommens."
+    }
   },
   "DemoData": {
     "heading": "Demo- & synthetische Daten",
@@ -467,6 +688,39 @@
     "register": "Konto erstellen",
     "account": "Kontoeinstellungen",
     "offline": "Offline",
-    "anomalies": "Auffälligkeiten"
+    "anomalies": "Auffälligkeiten",
+    "budget": "Budget"
+  },
+  "Weekdays": {
+    "short1": "Mo",
+    "short2": "Di",
+    "short3": "Mi",
+    "short4": "Do",
+    "short5": "Fr",
+    "short6": "Sa",
+    "short7": "So",
+    "long1": "Montag",
+    "long2": "Dienstag",
+    "long3": "Mittwoch",
+    "long4": "Donnerstag",
+    "long5": "Freitag",
+    "long6": "Samstag",
+    "long7": "Sonntag"
+  },
+  "Calendar": {
+    "sectionLabel": "Transaktionen nach Tag",
+    "dayLabel": "{date}, {count, plural, one {# Transaktion} other {# Transaktionen}}, {moneyOut} aus, {moneyIn} ein. {finding}",
+    "kindNone": "Nichts auffällig",
+    "kindInfo": "Zur Kenntnis",
+    "kindWarning": "Achtung",
+    "kindAlert": "Alarm",
+    "legendOut": "Geld aus, nach Kategorie eingefärbt",
+    "legendIn": "Geld ein",
+    "tableCaption": "Alle Tage dieses Monats mit Transaktionen",
+    "colDate": "Datum",
+    "colCount": "Transaktionen",
+    "colIn": "Geld ein",
+    "colOut": "Geld aus",
+    "colFinding": "Befund"
   }
 }

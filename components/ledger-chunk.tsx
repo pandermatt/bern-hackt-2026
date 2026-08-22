@@ -3,6 +3,7 @@ import { Fragment, type ReactNode } from "react";
 
 import { AnomalyIcon } from "@/components/anomaly-icon";
 import { MerchantAvatar } from "@/components/merchant-avatar";
+import { MonthHeading } from "@/components/month-heading";
 import type { Transaction } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
 import type {
@@ -10,6 +11,7 @@ import type {
   AnomalyKind,
   AnomalySeverity,
 } from "@/lib/anomaly-engine";
+import { useAnomalyText } from "@/lib/anomaly-text";
 import { formatMoney, type MonthTotal } from "@/lib/insights";
 
 /**
@@ -122,6 +124,8 @@ function FindingPanel({
   transactionId: number;
 }) {
   const t = useTranslations("Anomalies");
+  const anomalyText = useAnomalyText();
+  const { title, description } = anomalyText(anomaly);
   // Keyed by rule id, so a finding left over from an older engine renders
   // without an explanation rather than throwing.
   const explain = useTranslations("AnomalyRules");
@@ -135,7 +139,7 @@ function FindingPanel({
             panel is open, and repeating it here only shouts. `mt-0.5` sits the
             icon on the title's cap line. */}
         <AnomalyIcon name={anomaly.icon} className="mt-0.5 size-4 shrink-0 text-text-muted" />
-        <span>{anomaly.title}</span>
+        <span>{title}</span>
       </p>
 
       {explanation && (
@@ -145,7 +149,7 @@ function FindingPanel({
       {/* The finding's own words, which carry the numbers — the reason the
           stored evidence blob is not rendered here as well. */}
       <p className="mt-2 border-t border-line pt-2 text-[12.5px] text-text-muted">
-        {anomaly.description}
+        {description}
       </p>
 
       <Link
@@ -204,6 +208,9 @@ function TransactionRow({
   const t = useTranslations("Ledger");
   const tCategories = useTranslations("Categories");
   const tMonths = useTranslations("Months");
+  // A finding is stored as the rule that found it and the values it needs, so
+  // its words are chosen here rather than at scan time — see lib/anomaly-text.ts.
+  const anomalyText = useAnomalyText();
 
   // Booked dates are `YYYY-MM-DD` text, never a `Date` — see the note on
   // `formatDay` in lib/insights.ts. The month name comes from the catalog and
@@ -233,11 +240,16 @@ function TransactionRow({
    * hidden list. The two orderings cannot contradict each other because kind is
    * only ever escalated, never lowered, away from what severity derived.
    */
-  const rankedAnomalies = [...anomalies].sort(
-    (a, b) =>
-      KIND_RANK[b.kind] - KIND_RANK[a.kind] ||
-      SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
-  );
+  const rankedAnomalies = [...anomalies]
+    .sort(
+      (a, b) =>
+        KIND_RANK[b.kind] - KIND_RANK[a.kind] ||
+        SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity],
+    )
+    // Paired with its words here rather than looked up at each of the three
+    // places that print them, so the badge, the panel and the sentence cannot
+    // end up quoting different sources.
+    .map((anomaly) => ({ anomaly, text: anomalyText(anomaly) }));
 
   /*
    * One kind drives the wash, the first badge and the sentence, so the three
@@ -246,7 +258,7 @@ function TransactionRow({
    * under a combined id — the teal row was, in practice, only reachable when
    * the LLM was switched off.
    */
-  const rowKind = rankedAnomalies[0]?.kind ?? "info";
+  const rowKind = rankedAnomalies[0]?.anomaly.kind ?? "info";
   const shownAnomalies = rankedAnomalies.slice(0, MAX_VISIBLE_BADGES);
   const hiddenAnomalies = rankedAnomalies.slice(MAX_VISIBLE_BADGES);
   const hiddenCount = hiddenAnomalies.length;
@@ -286,7 +298,7 @@ function TransactionRow({
             badge onto the same cramped line. */}
         {hasAnomaly && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {shownAnomalies.map((anomaly, index) => {
+            {shownAnomalies.map(({ anomaly, text }, index) => {
               /* Not keyed on `rule_id` alone: one transaction can carry two
                  findings from the same rule — an airline billing two different
                  amounts twice over on one day — and React then sees duplicate
@@ -313,7 +325,7 @@ function TransactionRow({
                     {/* The finding's own words. This used to print `rule_id`, so
                         the row read UNUSUAL_FINANCIAL_IMPACT in monospace at a
                         person who wanted to know what happened to their money. */}
-                    <span className="font-medium">{anomaly.title}</span>
+                    <span className="font-medium">{text.title}</span>
                   </button>
 
                   {/* The native title attribute this replaces was unreachable on
@@ -333,7 +345,7 @@ function TransactionRow({
                 </button>
                 <Panel id={`finding-${row.id}-more`}>
                   <ul className="divide-y divide-line">
-                    {hiddenAnomalies.map((anomaly, index) => (
+                    {hiddenAnomalies.map(({ anomaly, text }, index) => (
                       <li key={`${anomaly.rule_id}-${index}`} className="py-2.5 first:pt-0 last:pb-0">
                         <Link
                           href={{
@@ -347,10 +359,10 @@ function TransactionRow({
                               name={anomaly.icon}
                               className="mt-0.5 size-3.5 shrink-0 text-text-muted"
                             />
-                            {anomaly.title}
+                            {text.title}
                           </span>
                           <span className="mt-0.5 block text-[12px] text-text-muted">
-                            {anomaly.description}
+                            {text.description}
                           </span>
                         </Link>
                       </li>
@@ -372,7 +384,7 @@ function TransactionRow({
           >
             {/* `rankedAnomalies`, not `anomalies`: the sentence has to be the
                 same finding the wash and the first badge are showing. */}
-            {rankedAnomalies[0].description}
+            {rankedAnomalies[0].text.description}
           </p>
         )}
 
@@ -406,6 +418,70 @@ function TransactionRow({
 }
 
 /**
+ * Fans each finding out over the transactions it implicates.
+ *
+ * An insight can name several rows, and a row can collect several insights —
+ * this is the lookup both the ledger and the calendar's expanded day read.
+ */
+function byTransactionId(
+  anomalies: AnomalyInsight[],
+): Map<number, AnomalyInsight[]> {
+  const map = new Map<number, AnomalyInsight[]>();
+  for (const a of anomalies) {
+    for (const id of a.transaction_ids) {
+      const list = map.get(id) ?? [];
+      list.push(a);
+      map.set(id, list);
+    }
+  }
+  return map;
+}
+
+/**
+ * A panel of transaction rows.
+ *
+ * The ledger's month panels and the calendar's expanded day are the same list,
+ * so they are the same component — the anomaly wash, the kind-ranked badges and
+ * the "+N more" chip all come along free, and a change to a row lands in both
+ * views at once.
+ *
+ * `overflow-clip` rather than `overflow-hidden` is what lets the ledger's
+ * headings stay sticky above this; the radius has to live on the list itself
+ * because a radius on an ancestor would not clip this background.
+ */
+export function DayRows({
+  rows,
+  anomalies,
+  className = "divide-surface rounded-lg bg-surface-muted",
+}: {
+  rows: Transaction[];
+  anomalies: AnomalyInsight[];
+  /**
+   * Ground, corners **and the divider colour** — the three travel together. On
+   * the ledger's grey panel the dividers are `--surface` showing through, so
+   * they read as white lines rather than grey borders; inside the calendar the
+   * panel is itself `--surface`, where that same rule would draw white on
+   * white. The ledger also varies the radius at chunk seams, which is the other
+   * reason this is the caller's to decide.
+   */
+  className?: string;
+}) {
+  const anomaliesByTxId = byTransactionId(anomalies);
+
+  return (
+    <ul className={`divide-y overflow-clip ${className}`}>
+      {rows.map((row) => (
+        <TransactionRow
+          key={row.id}
+          row={row}
+          anomalies={anomaliesByTxId.get(row.id) ?? []}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/**
  * One month's rows, under a heading carrying that month's money in and out.
  *
  * The figures are the **whole month** under the current filter, not this page's
@@ -413,16 +489,12 @@ function TransactionRow({
  * subtotal that only counted the visible rows would report a different number
  * for the same month depending on where you happened to be. The wording says
  * "in" and "out" rather than "total" for the same reason.
- *
- * The heading sticks under the app header while you scroll its rows — which is
- * most of the point of having it. That only works because the card uses
- * `overflow-clip` rather than `overflow-hidden`; see the note there.
  */
 function MonthGroup({
   month,
   rows,
   totals,
-  anomaliesByTxId,
+  anomalies,
   showHeading,
   roundTop,
   roundBottom,
@@ -430,7 +502,7 @@ function MonthGroup({
   month: string;
   rows: Transaction[];
   totals: MonthTotal | undefined;
-  anomaliesByTxId: Map<number, AnomalyInsight[]>;
+  anomalies: AnomalyInsight[];
   /** False when a previous chunk already headed this month. */
   showHeading: boolean;
   /** False when this panel continues one the chunk before it opened. */
@@ -438,90 +510,19 @@ function MonthGroup({
   /** False when the next chunk carries the rest of this month. */
   roundBottom: boolean;
 }) {
-  const t = useTranslations("Ledger");
-  const tMonths = useTranslations("Months");
-  const headingId = `ledger-month-${month}`;
-
   return (
     <>
       {showHeading && (
-      <>
-      {/* `top-16` is the app header's own height; `z-10` keeps this under it
-          rather than over it (that header is `z-50`). `bg-bg` — the page's own
-          ground, not `--surface` — because there is no card behind this any
-          more; it still has to be opaque or the rows would show through it as
-          they scroll past.
-
-          **Every heading in the ledger is pinned at this same offset, all at
-          once.** They are siblings of one another and of the panels — a month
-          can span chunks, so no month can own a wrapper to be sticky within —
-          which means their shared containing block is the whole ledger
-          section. Nothing releases August when September arrives; September
-          simply paints over it, being later in the DOM, and the illusion holds
-          only for as long as every one of these boxes is exactly as tall as
-          the last.
-
-          That is what `flex-col` below `sm` is for. Wrapping made the height
-          depend on the month's *name*: "September 2025" pushed the figures
-          onto a second line where "August 2025" kept them beside the heading,
-          so the taller September box showed a sliver of itself below the
-          shorter August one that was supposed to be covering it. Two lines
-          always, on every month, and the boxes agree. From `sm` there is room
-          for one line and they agree that way instead. */}
-      <div className="sticky top-16 z-10 flex flex-col items-start gap-y-0.5 bg-bg pt-6 pb-2.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-3">
-        {/* The month is what you scan for; the year only disambiguates it, so
-            it rides along at the body size. `leading-none` keeps the big type
-            sitting on the same baseline as the figures opposite. */}
-        <h3
-          id={headingId}
-          className="text-[26px] leading-none font-semibold tracking-tight text-text sm:text-[30px]"
-        >
-          {tMonths(`long${Number(month.slice(5, 7))}`)}{" "}
-          <span className="text-[15px] font-medium text-text-muted">
-            {month.slice(0, 4)}
-          </span>
-        </h3>
-
-        {/* Unconditional, where this used to be `totals &&`. `monthTotals`
-            skips transfers, so a month whose only line is a credit-card
-            payment has no entry at all — and a heading that quietly drops its
-            second line is the height mismatch above, back again. Zero is also
-            the honest figure: these two exclude transfers by definition,
-            exactly as the trend chart's do. */}
-        <p className="flex items-baseline gap-3 font-mono text-[12px] tabular-nums">
-          <span className="text-positive">
-            {/* Named for anyone who cannot see the colour or the sign. */}
-            <span className="sr-only">{t("moneyIn")} </span>+{formatMoney(totals?.income ?? 0)}
-          </span>
-          <span className="text-text-muted">
-            <span className="sr-only">{t("moneyOut")} </span>−{formatMoney(totals?.expense ?? 0)}
-          </span>
-        </p>
-      </div>
-
-      </>
+        <MonthHeading month={month} totals={totals} id={`ledger-month-${month}`} />
       )}
 
-      {/* The month's rows as one panel: the grey ground and the top radius both
-          live here rather than on a wrapper, because a radius on an ancestor
-          would not clip this list's own background. `overflow-clip` is what
-          makes the corners actually cut the first and last rows — including the
-          `border-l` an anomaly row wears. Dividers are the card's surface
-          showing through, so they read as white lines rather than grey
-          borders. */}
-      <ul
-        className={`divide-y divide-surface overflow-clip bg-surface-muted ${
+      <DayRows
+        rows={rows}
+        anomalies={anomalies}
+        className={`divide-surface bg-surface-muted ${
           roundTop ? "rounded-t-lg" : ""
         } ${roundBottom ? "rounded-b-lg" : ""}`}
-      >
-        {rows.map((row) => (
-          <TransactionRow
-            key={row.id}
-            row={row}
-            anomalies={anomaliesByTxId.get(row.id) ?? []}
-          />
-        ))}
-      </ul>
+      />
     </>
   );
 }
@@ -565,15 +566,6 @@ export function LedgerChunk({
   /** This chunk closes mid-month; the next one carries the rest. */
   continuesInto?: boolean;
 }) {
-  const anomaliesByTxId = new Map<number, AnomalyInsight[]>();
-  for (const a of anomalies) {
-    for (const id of a.transaction_ids) {
-      const list = anomaliesByTxId.get(id) ?? [];
-      list.push(a);
-      anomaliesByTxId.set(id, list);
-    }
-  }
-
   const groups = groupByMonth(rows);
 
   return (
@@ -584,7 +576,7 @@ export function LedgerChunk({
           month={group.month}
           rows={group.rows}
           totals={monthTotals[group.month]}
-          anomaliesByTxId={anomaliesByTxId}
+          anomalies={anomalies}
           showHeading={index > 0 || !continuesFrom}
           roundTop={index > 0 || !continuesFrom}
           roundBottom={index < groups.length - 1 || !continuesInto}

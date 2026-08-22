@@ -376,7 +376,7 @@ Every other route requires a session.
   is one you might never see.
 - `app/api/health/route.ts` — `{ ok, version }`, touching the database. Point the
   host's healthcheck here.
-- `db/schema.ts` — `users`, `sessions`, and `transactions`.
+- `db/schema.ts` — `users`, `sessions`, `transactions`, and `budgets`.
 - `db/index.ts` — the **only** module that imports `better-sqlite3`. Marked
   `server-only`; creates `data/` before opening, enables WAL, and caches the
   connection on `globalThis` so dev HMR doesn't leak file handles.
@@ -400,6 +400,17 @@ Every other route requires a session.
   light/dark switch, on `next-themes`. The control lives on `/account` under
   Appearance rather than in the header; the provider still defaults to the
   system setting, so a first visit follows the OS until someone picks a side.
+- `app/budget/page.tsx` — per-category monthly limits, suggested from the
+  account's own averages, with a radar of the month against them. The rings are
+  francs; the limits are a dashed outline and what was spent is a translucent
+  fill, so anything poking outside the outline is over budget. Each category
+  name carries its share of that limit as a percentage. Below it, **Sparziele**:
+  savings goals drawn as pots that fill, funded by allocating what a finished
+  month had left over — a month still running has no final surplus to offer.
+- `lib/goal-icon.ts` — which Font Awesome glyph a savings goal wears, guessed
+  from its name in German and English. Deep imports, never the icon barrel.
+- `lib/clock.ts` — the only module that asks what today is. `lib/insights.ts`
+  never constructs a `Date`, so "is this month over" lives here.
 - `app/globals.css` — the design tokens, mapped onto shadcn's token names.
 
 Schema changes go through `npm run db:push`. There is no migrations folder and

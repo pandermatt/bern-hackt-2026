@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { createTranslator } from "next-intl";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -198,6 +199,13 @@ describe("anomaly engine over the shipped seed statements", () => {
       expect(Object.keys(messages.AnomalyRules ?? {}).sort(), locale).toEqual(ruleIds);
       for (const id of ruleIds) {
         expect(messages.AnomalyRules[id].length, `${locale}/${id}`).toBeGreaterThan(20);
+        // And the finding's own words, which is what the badge and the
+        // overview print — a rule missing these renders in whichever language
+        // the scan ran in, which is the bug this pair exists to prevent.
+        expect(messages.AnomalyFindings?.[id], `${locale}/${id}`).toMatchObject({
+          title: expect.any(String),
+          description: expect.any(String),
+        });
       }
     }
   });
@@ -267,5 +275,44 @@ describe("anomaly engine over the shipped seed statements", () => {
       .map((i) => i.rule_id);
 
     expect(escalatable).toEqual([]);
+  });
+
+  /*
+   * The copy above is the fallback; what a reader sees is the `AnomalyFindings`
+   * message for the rule, filled with `params`. A placeholder with nothing to
+   * fill it renders as its own name — `{merchant}` in the middle of a sentence
+   * — and nothing else in the app would catch that, because the engine and the
+   * catalogs are edited in different files.
+   */
+  it("can render every finding in both languages", () => {
+    const catalogs = {
+      en: JSON.parse(readFileSync(join(process.cwd(), "messages/en.json"), "utf8")),
+      de: JSON.parse(readFileSync(join(process.cwd(), "messages/de.json"), "utf8")),
+    };
+
+    for (const insight of insights) {
+      expect(insight.params, insight.rule_id).toBeDefined();
+
+      for (const [locale, messages] of Object.entries(catalogs)) {
+        const t = createTranslator({
+          locale,
+          messages,
+          namespace: "AnomalyFindings",
+          // Anything next-intl would otherwise swallow — a missing rule, a
+          // placeholder with no value, malformed ICU — has to fail the test.
+          onError: (error) => {
+            throw error;
+          },
+        });
+
+        const title = t(`${insight.rule_id}.title`);
+        const description = t(`${insight.rule_id}.description`, insight.params);
+
+        expect(title.length).toBeGreaterThan(0);
+        expect(description.length).toBeGreaterThan(0);
+        // A placeholder left unfilled renders as its own name.
+        expect(description, `${locale} ${insight.rule_id}`).not.toContain("{");
+      }
+    }
   });
 });

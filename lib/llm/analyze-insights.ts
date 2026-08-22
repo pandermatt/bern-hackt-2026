@@ -8,6 +8,7 @@ import {
   type AnomalyKind,
   type AnomalySeverity,
 } from "@/lib/anomaly-engine";
+import { defaultLocale, type AppLocale } from "@/i18n/routing";
 
 /*
  * The narrative layer.
@@ -30,6 +31,12 @@ import {
  * returns them untouched: the LLM is an enhancement, and a scan that cannot
  * reach it is still a useful scan.
  */
+
+/** What the model is told to write in. */
+const LANGUAGE_NAMES: Record<AppLocale, string> = {
+  de: "German (Swiss usage: never the letter ß, always ss)",
+  en: "English",
+};
 
 const APERTUS_URL =
   process.env.APERTUS_URL ??
@@ -129,6 +136,16 @@ export type AnalyzeOptions = {
    * clustering, which is why this reports rather than returns it.
    */
   onProgress?: (completedBatches: number, totalBatches: number) => void;
+
+  /**
+   * The language the narratives are written in.
+   *
+   * The findings around them are stored as a rule and its values and
+   * translated when they are read; a narrative cannot be, so it is written for
+   * one language and `narrative_locale` records which. Defaults to the app's
+   * default locale for a caller with no reader in mind.
+   */
+  locale?: AppLocale;
 };
 
 function getHighestSeverity(candidates: AnomalyInsight[]): AnomalySeverity {
@@ -180,6 +197,7 @@ function proposedKind(
 function buildFinalInsight(
   llmInsight: LlmInsight,
   byId: Map<string, AnomalyInsight>,
+  locale: AppLocale,
 ): AnomalyInsight | null {
   const sourceCandidates = llmInsight.source_ids
     .map((id) => byId.get(id))
@@ -196,6 +214,16 @@ function buildFinalInsight(
     // The two fields the model owns.
     title: llmInsight.title,
     description: llmInsight.description,
+
+    /*
+     * The model's words are in one language only, so the deterministic
+     * rendering has to survive alongside them: `base_rule_id` and `params` are
+     * what a reader in the *other* language sees instead. A merged insight has
+     * no message of its own, hence the primary candidate's rule.
+     */
+    narrative_locale: locale,
+    base_rule_id: primary.rule_id,
+    params: primary.params,
 
     /*
      * Inherited from the engine unless the model asked for `alert` and one of
@@ -413,7 +441,13 @@ function buildBatches(
    PROMPTS
    ========================================================================= */
 
-const SYSTEM_PROMPT = `You are the narrative layer of a personal finance application.
+/**
+ * A function of the locale rather than a constant, because the one thing the
+ * model produces is prose and prose has a language. Everything else it is told
+ * — ids, merchant names, the numbers — is data, and stays as it arrived.
+ */
+const systemPrompt = (locale: AppLocale) =>
+  `You are the narrative layer of a personal finance application.
 
 You receive several anomaly findings that ALL concern the same few transactions,
 detected by deterministic algorithms.
@@ -488,6 +522,12 @@ more in a category than usual is not an alert. If you are weighing it up, omit
 the field: it is checked against the evidence afterwards and dropped when the
 numbers do not support it.
 
+LANGUAGE:
+
+Write every title and description in ${LANGUAGE_NAMES[locale]}.
+
+Merchant names, category names and account names are data — copy them exactly as given, never translate them.
+
 WRITING STYLE:
 
 Titles:
@@ -521,7 +561,9 @@ BAD:
 
 "This could indicate financial stress."
 
-Return ONLY valid JSON matching the requested schema.`;
+Return ONLY valid JSON matching the requested schema.
+
+All prose you write must be in ${LANGUAGE_NAMES[locale]}.`;
 
 function buildUserPrompt(payload: string): string {
   return `The following findings were produced by our anomaly detection algorithms.
@@ -604,6 +646,7 @@ async function requestBatch(
   model: string,
   contextOf: AnalyzeOptions["contextOf"],
   deadline: AbortSignal,
+  locale: AppLocale,
 ): Promise<BatchResult | null> {
   const payload = JSON.stringify(batch.map((c) => project(c, contextOf)));
 
@@ -617,7 +660,7 @@ async function requestBatch(
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt(locale) },
           { role: "user", content: buildUserPrompt(payload) },
         ],
         response_format: { type: "json_object" },
@@ -687,7 +730,7 @@ async function requestBatch(
     const narratives: AnomalyInsight[] = [];
 
     for (const insight of usable) {
-      const built = buildFinalInsight(insight, byId);
+      const built = buildFinalInsight(insight, byId, locale);
       if (!built) continue;
       narratives.push(built);
       for (const id of insight.source_ids) consumed.add(id);
@@ -719,7 +762,7 @@ export async function analyzeTransactionInsights(
   }
 
   const model = process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
-  const { contextOf, onProgress } = options;
+  const { contextOf, onProgress, locale = defaultLocale } = options;
 
   const crowded = selectForNarration(candidates);
   if (crowded.size === 0) return candidates;
@@ -739,7 +782,7 @@ export async function analyzeTransactionInsights(
   for (const [index, batch] of batches.entries()) {
     const result = deadline.aborted
       ? null
-      : await requestBatch(batch, key, model, contextOf, deadline);
+      : await requestBatch(batch, key, model, contextOf, deadline, locale);
 
     if (result === null) {
       // This batch keeps its deterministic findings. The others are unaffected.

@@ -742,58 +742,62 @@ export function TopCategoryBars({
           Identical in both views: the figures do not change with the shape. */}
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
-      <table className="sr-only" aria-label={t("tableCategories", { span })}>
-        <thead>
-          <tr>
-            <th scope="col">{t("category")}</th>
-            <th scope="col">{t(periodKey === "month" ? "periodMonth" : "periodYtd")}</th>
-            <th scope="col">
-              {periodKey === "month"
-                ? t("medianMonthCol")
-                : t("medianPaceCol", { n: period.monthCount })}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((category) => {
-            const dash = dashValue(category, period.monthCount);
-            return (
-              <tr key={category.key}>
-                <th scope="row">{text.categoryName(category.key)}</th>
-                <td>{formatMoney(category.total)}</td>
-                <td>
-                  {dash !== null
-                    ? formatMoney(dash)
-                    : category.key === OTHER_CATEGORY
-                      ? t("noMedianOther")
-                      : t("noEarlierMonths")}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="sr-only">
+        <table aria-label={t("tableCategories", { span })}>
+          <thead>
+            <tr>
+              <th scope="col">{t("category")}</th>
+              <th scope="col">{t(periodKey === "month" ? "periodMonth" : "periodYtd")}</th>
+              <th scope="col">
+                {periodKey === "month"
+                  ? t("medianMonthCol")
+                  : t("medianPaceCol", { n: period.monthCount })}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((category) => {
+              const dash = dashValue(category, period.monthCount);
+              return (
+                <tr key={category.key}>
+                  <th scope="row">{text.categoryName(category.key)}</th>
+                  <td>{formatMoney(category.total)}</td>
+                  <td>
+                    {dash !== null
+                      ? formatMoney(dash)
+                      : category.key === OTHER_CATEGORY
+                        ? t("noMedianOther")
+                        : t("noEarlierMonths")}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-      <table className="sr-only" aria-label={t("tableMerchants", { span })}>
-        <thead>
-          <tr>
-            <th scope="col">{t("category")}</th>
-            <th scope="col">{t("merchant")}</th>
-            <th scope="col">{t("amount")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.flatMap((category) =>
-            category.merchants.map((merchant) => (
-              <tr key={`${category.key}-${merchant.merchant}`}>
-                <th scope="row">{text.categoryName(category.key)}</th>
-                <td>{text.merchantName(merchant.merchant)}</td>
-                <td>{formatMoney(merchant.amount)}</td>
-              </tr>
-            )),
-          )}
-        </tbody>
-      </table>
+      <div className="sr-only">
+        <table aria-label={t("tableMerchants", { span })}>
+          <thead>
+            <tr>
+              <th scope="col">{t("category")}</th>
+              <th scope="col">{t("merchant")}</th>
+              <th scope="col">{t("amount")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.flatMap((category) =>
+              category.merchants.map((merchant) => (
+                <tr key={`${category.key}-${merchant.merchant}`}>
+                  <th scope="row">{text.categoryName(category.key)}</th>
+                  <td>{text.merchantName(merchant.merchant)}</td>
+                  <td>{formatMoney(merchant.amount)}</td>
+                </tr>
+              )),
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <p className="mt-3 font-mono text-[11.5px] text-text-subtle">
         {view === "bars"

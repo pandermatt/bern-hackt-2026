@@ -22,7 +22,7 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   getCurrentUser: async () => signedIn.user,
 }));
 
-const { getDashboard, getLedgerChunk, listTransactions } = await import(
+const { getDashboard, getDayRows, getLedgerChunk, listTransactions } = await import(
   "@/app/actions/transactions"
 );
 
@@ -272,6 +272,40 @@ describe("filters", () => {
     it("survives a junk offset", async () => {
       const chunk = await getLedgerChunk(Number.NaN, {});
       expect(chunk?.rows).toHaveLength(2);
+    });
+  });
+
+  describe("getDayRows", () => {
+    it("returns exactly the rows booked on that day", async () => {
+      const day = await getDayRows("2025-01-23", {});
+
+      expect(day?.rows.map((r) => r.externalId)).toEqual(["a-salary"]);
+    });
+
+    it("applies the same filters the calendar was drawn under", async () => {
+      // The transfer shares the day with the salary and is hidden by default,
+      // exactly as it is in the grid above it.
+      expect((await getDayRows("2025-01-23", {}))?.rows).toHaveLength(1);
+      expect(
+        (await getDayRows("2025-01-23", { includeTransfers: "true" }))?.rows,
+      ).toHaveLength(2);
+      expect(await getDayRows("2025-01-23", { kind: "expense" })).toBeNull();
+    });
+
+    it("scopes to the session account, not to any argument", async () => {
+      const day = await getDayRows("2025-03-14", {});
+      // Bob's line is booked that day; Alice must not see it.
+      expect(day).toBeNull();
+    });
+
+    it("refuses anything that is not a booking date", async () => {
+      for (const date of ["", "2025-1-23", "2025-01-23T00:00", "%", "' or 1=1"]) {
+        expect(await getDayRows(date, {})).toBeNull();
+      }
+    });
+
+    it("returns nothing for a day the filter leaves empty", async () => {
+      expect(await getDayRows("2025-01-02", {})).toBeNull();
     });
   });
 });

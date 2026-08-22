@@ -1,5 +1,7 @@
-import { LogIn, LogOut, TriangleAlert, User as UserIcon, ArrowRight } from "lucide-react";
+import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
 import { useTranslations } from "next-intl";
+
+import { HeaderNav } from "@/components/header-nav";
 
 import { logout } from "@/app/actions/auth";
 import { Logo } from "@/components/logo";
@@ -27,20 +29,17 @@ export function AppHeader({ user }: { user: User | null }) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
-        <Logo />
+        <div className="flex min-w-0 items-center gap-5">
+          <Logo />
+          {/* Only signed-in visitors have anything to navigate between. */}
+          {user && <HeaderNav />}
+        </div>
 
         {user ? (
+          /* Account chrome only. Anomalies used to sit at the head of this
+             cluster; it is a page rather than an account control, so it moved
+             into `HeaderNav` beside Budget. */
           <div className="flex items-center gap-2.5">
-            {/* Label hidden below `sm` like the account pill's: at 375px this
-                row is already logo, account and sign-out. */}
-            <Link
-              href="/anomalies"
-              aria-label={t('anomalies')}
-              className={`flex min-h-10 shrink-0 items-center gap-2 sm:min-h-0 ${CONTROL}`}
-            >
-              <TriangleAlert className="size-3.5 text-text-subtle" />
-              <span className="hidden sm:inline">{t('anomalies')}</span>
-            </Link>
             <Link
               href="/account"
               aria-label={t('accountSettings')}

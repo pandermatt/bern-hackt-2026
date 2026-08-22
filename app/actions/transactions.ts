@@ -19,6 +19,7 @@ import { db } from "@/db";
 import { anomalies, transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import {
+  getAnomalyKindByTransaction,
   getAnomalyScanState,
   getStoredAnomaliesForPage,
 } from "@/app/actions/anomalies";
@@ -27,14 +28,17 @@ import {
   accountTotals,
   applyFilters,
   byCategory,
+  calendarMonths,
   facetsOf,
   ledgerChunk,
   monthlySeries,
   monthTotals,
   categorySpendPeriods,
+  slotsOf,
   stackByCategory,
   summarize,
   topMerchants,
+  type CalendarMonth,
   type CategoryPeriods,
   type CategoryStack,
   type Facets,
@@ -85,8 +89,32 @@ const filterSchema = z.object({
     .transform((value) => value === true || value === "true"),
 });
 
+/**
+ * Which face of the transactions to render. Deliberately **not** part of
+ * `filterSchema`: that one feeds `applyFilters`, and a field that changes no
+ * row has no business in it. It still lives in the URL for the same reason the
+ * filters do — a view should be shareable, bookmarkable and survive a reload.
+ */
+const viewSchema = z.object({
+  view: z.enum(["list", "calendar"]).optional(),
+});
+
+export type TransactionView = "list" | "calendar";
+
+function parseView(raw: unknown): TransactionView {
+  return viewSchema.safeParse(raw).data?.view ?? "list";
+}
+
 export type Dashboard = {
   filters: Filters;
+  /** Ledger or calendar. `list` is the default, so it carries no URL param.
+   * Not `view` — that name is already taken here by the filtered facets. */
+  transactionView: TransactionView;
+  /**
+   * Per-day aggregates for the calendar, newest month first — `null` in list
+   * view, which must not pay for the account-wide anomaly read it needs.
+   */
+  calendar: CalendarMonth[] | null;
   facets: Facets;
   /** Net movement per account, transfers included — the figure beside each
    * account in the filter dropdown. */
@@ -122,10 +150,11 @@ export type Dashboard = {
   merchants: Slice[];
   transactions: Transaction[];
   /**
-   * Lets the dashboard prompt for a first scan without mistaking a clean
-   * account for an un-scanned one — see getAnomalyScanState.
+   * Lets the dashboard prompt for a scan without mistaking a clean account for
+   * an un-scanned one, or a re-imported one for either — see
+   * getAnomalyScanState.
    */
-  anomalyScan: { hasCompletedScan: boolean; running: boolean };
+  anomalyScan: { hasCompletedScan: boolean; running: boolean; stale: boolean };
   anomalies: AnomalyInsight[];
   /**
    * What the active `?anomaly=` filter is called, for the chip in the filter
@@ -261,6 +290,7 @@ async function ledgerView(raw: unknown): Promise<{
   if (!user) return null;
 
   const filters = parseFilters(raw);
+  const transactionView = parseView(raw);
 
   const rows = await ownedRows();
   if (!rows) return null;
@@ -288,6 +318,8 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
   const view = await ledgerView(raw);
   if (!view) return null;
   const { filters, rows, filtered, anomalyLabel } = view;
+  const transactionView = parseView(raw);
+  const stack = stackByCategory(rows);
 
   // The ledger's first chunk. This replaced a separate LIMIT/OFFSET query:
   // `filtered` is already the whole ordered result set (the facets, the trend
@@ -296,8 +328,24 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
   // `applyFilters` — with nothing checking that the two agreed.
   const chunk = ledgerChunk(filtered, 0);
 
+  /*
+   * Only in calendar view. `getAnomalyKindByTransaction` reads every finding
+   * the account has, not a page's worth, so the ledger must not be made to pay
+   * for a query it never renders.
+   *
+   * Slots come from the **unfiltered** stack, like the charts': a category's
+   * colour identifies the category, and a dot that changed hue when the view
+   * narrowed would be describing the filter instead.
+   */
+  const calendar =
+    transactionView === "calendar"
+      ? calendarMonths(filtered, slotsOf(stack), await getAnomalyKindByTransaction())
+      : null;
+
   return {
     filters,
+    transactionView,
+    calendar,
     // Facets and the trend come from the unfiltered set: the dropdowns must not
     // narrow themselves into a dead end, and the year's shape is the point of
     // the chart even when you are looking at one month.
@@ -308,7 +356,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     accountTotals: accountTotals(rows),
     view: facetsOf(filtered),
     monthly: monthlySeries(rows),
-    stack: stackByCategory(rows),
+    stack,
     topCategories: categorySpendPeriods(rows),
     totals: summarize(filtered),
     monthTotals: monthTotals(filtered),
@@ -359,6 +407,40 @@ export async function getLedgerChunk(offset: number, raw: unknown) {
     continuesInto: chunk.continuesInto,
     monthTotals: monthTotals(filtered),
     anomalies: await getStoredAnomaliesForPage(chunk.rows.map((r) => r.id)),
+  };
+}
+
+/** A booking date, and nothing that could be one by accident. */
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * One day's rows, for the calendar's expanded cell.
+ *
+ * The same shape `getLedgerChunk` has and for the same reasons: the account
+ * comes from the session, the filters go through `ledgerView` so the day shows
+ * exactly what the ledger would, and `app/actions/calendar.tsx` wraps this to
+ * return the *rendered* rows rather than the rows themselves.
+ *
+ * `date` is the one thing the caller decides, so it is validated rather than
+ * trusted — every export of a `"use server"` module is an endpoint the browser
+ * calls with arguments of its choosing. A junk date returns nothing; it cannot
+ * widen the set, because the comparison is an equality against text.
+ */
+export async function getDayRows(date: string, raw: unknown) {
+  if (typeof date !== "string" || !DAY_PATTERN.test(date)) return null;
+
+  // Through `ledgerView`, like `getLedgerChunk` — it is the one place the
+  // filters are applied, `?anomaly=` included, so the rows an opened day shows
+  // are exactly the ones the cell above it counted.
+  const view = await ledgerView(raw);
+  if (!view) return null;
+
+  const dayRows = view.filtered.filter((row) => row.bookedOn === date);
+  if (dayRows.length === 0) return null;
+
+  return {
+    rows: dayRows,
+    anomalies: await getStoredAnomaliesForPage(dayRows.map((r) => r.id)),
   };
 }
 

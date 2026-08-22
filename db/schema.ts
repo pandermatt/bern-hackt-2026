@@ -169,6 +169,27 @@ export const anomalies = sqliteTable(
     emoji: text("emoji").notNull().default(""),
     /** `supporting_metrics`, JSON-encoded — shape varies per rule. */
     metrics: text("metrics").notNull().default("{}"),
+    /**
+     * How this finding is rendered in the reader's language.
+     *
+     * `title` and `description` above are the text as the scan produced it —
+     * English from the engine, or the narrative layer's own words. Those
+     * cannot be re-read in another language, so the deterministic rule and its
+     * values are kept alongside: `base_rule_id` names the `AnomalyFindings`
+     * message (it differs from `rule_id` only when the narrative layer merged
+     * several findings into one) and `params` carries the values it needs.
+     * `narrative_locale` is set only when the stored text came from the model,
+     * and says which language it is in — read in the other one, the row falls
+     * back to the translated rule message rather than showing German to an
+     * English reader.
+     *
+     * All three are nullable: rows written before this existed still render
+     * from `title` / `description`, and a nullable column is what
+     * `drizzle-kit push` can add to a populated table without `--force`.
+     */
+    baseRuleId: text("base_rule_id"),
+    params: text("params"),
+    narrativeLocale: text("narrative_locale"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),
@@ -212,6 +233,114 @@ export const anomalyRuns = sqliteTable(
   (table) => [index("anomaly_runs_user_id_idx").on(table.userId)],
 );
 
+/**
+ * A per-category monthly spending limit, set by the account holder.
+ *
+ * `userId` is NOT NULL here, unlike `transactions.userId`. That column is
+ * nullable because it was added to a table that already had rows and
+ * `drizzle-kit push` runs without `--force` on deploy; this table is created
+ * empty, so the constraint costs nothing and ownership is enforced by the
+ * database rather than only by the query layer.
+ *
+ * Limits are minor units (rappen) like every other amount in the schema, and
+ * positive — a budget is a magnitude, not a signed movement. A category with
+ * no row simply has no limit; there is no "unlimited" sentinel to
+ * misinterpret.
+ */
+export const budgets = sqliteTable(
+  "budgets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Matches `transactions.category` — the rule-assigned name, not free text. */
+    category: text("category").notNull(),
+    /** Positive minor units per month. */
+    limitMinor: integer("limit_minor").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    // One limit per category per user, which is what makes saving an upsert
+    // rather than a delete-and-reinsert.
+    uniqueIndex("budgets_user_category_idx").on(table.userId, table.category),
+  ],
+);
+
+/**
+ * A savings goal — "Holiday, CHF 5'000" — and the pot the UI fills for it.
+ *
+ * Created empty like `budgets`, so `userId` is NOT NULL here too; see the note
+ * on `transactions.userId` for why that column is the exception rather than
+ * this one. The unique index on `(user_id, name)` is what stops an account
+ * ending up with two pots called "Holiday" that each hold half the money.
+ *
+ * `targetMinor` is positive minor units, like every other amount in the
+ * schema. A goal has no deadline column on purpose: nothing in the app can
+ * act on one, and a date that only ever renders is a field that goes stale.
+ */
+export const savingsGoals = sqliteTable(
+  "savings_goals",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Positive minor units — what the pot holds when it is full. */
+    targetMinor: integer("target_minor").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("savings_goals_user_id_idx").on(table.userId),
+    uniqueIndex("savings_goals_user_name_idx").on(table.userId, table.name),
+  ],
+);
+
+/**
+ * Money moved from one month's leftover into one pot.
+ *
+ * Keyed by month rather than appended as a log: the page's question is "how
+ * much of March have I already put away", and with a log that answer changes
+ * meaning the moment someone revises an allocation. One row per (goal, month)
+ * makes revising an upsert and keeps the month's remaining balance a
+ * subtraction rather than a reconciliation.
+ *
+ * Zero is not stored. Unlike a budget — where zero is a real limit of nothing
+ * and `null` means unset — an allocation of zero francs and no allocation are
+ * the same event, so clearing a field deletes the row.
+ */
+export const savingsAllocations = sqliteTable(
+  "savings_allocations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    goalId: integer("goal_id")
+      .notNull()
+      .references(() => savingsGoals.id, { onDelete: "cascade" }),
+    /** `YYYY-MM` — which month's surplus this came out of. */
+    month: text("month").notNull(),
+    /** Positive minor units. */
+    amountMinor: integer("amount_minor").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("savings_allocations_user_month_idx").on(table.userId, table.month),
+    uniqueIndex("savings_allocations_goal_month_idx").on(
+      table.goalId,
+      table.month,
+    ),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
@@ -219,3 +348,6 @@ export type NewTransaction = typeof transactions.$inferInsert;
 export type Anomaly = typeof anomalies.$inferSelect;
 export type NewAnomaly = typeof anomalies.$inferInsert;
 export type AnomalyRun = typeof anomalyRuns.$inferSelect;
+export type Budget = typeof budgets.$inferSelect;
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type SavingsAllocation = typeof savingsAllocations.$inferSelect;

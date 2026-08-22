@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Transaction } from "@/db/schema";
+import { goalIcon } from "@/lib/goal-icon";
 import {
   accountTotals,
   applyFilters,
@@ -10,17 +11,28 @@ import {
   formatMoney,
   monthParts,
   monthlySeries,
+  budgetRows,
+  defaultBudgetMonth,
   ledgerChunk,
+  monthSurplus,
   monthTotals,
+  potFill,
+  potPercent,
+  potSlot,
   slotsOf,
   stackByCategory,
   paginate,
   summarize,
   categorySpendPeriods,
   topMerchants,
+  BUDGET_AXES,
   CATEGORY_SLOTS,
   FOLDED_MERCHANTS,
   MERCHANT_SEGMENTS,
+  MAX_DAY_DOTS,
+  calendarMonths,
+  daysInMonth,
+  firstWeekdayOf,
   type Filters,
 } from "@/lib/insights";
 
@@ -322,6 +334,237 @@ describe("stackByCategory", () => {
       bands: [],
       total: 0,
     });
+  });
+});
+
+describe("budgetRows", () => {
+  const spend = (category: string, bookedOn: string, minor: number) =>
+    row({ category, bookedOn, amountMinor: -minor, kind: "expense" });
+
+  it("suggests the mean monthly spend over the whole range", () => {
+    // Two months in range, 3'000 of Housing across them.
+    const rows = [
+      spend("Housing", "2025-01-10", 200_000),
+      spend("Housing", "2025-02-10", 100_000),
+    ];
+
+    const [housing] = budgetRows(rows, "2025-02", new Map());
+
+    expect(housing.category).toBe("Housing");
+    expect(housing.suggestedMinor).toBe(150_000);
+    // Usage is the viewed month only, not the average.
+    expect(housing.usedMinor).toBe(100_000);
+  });
+
+  it("divides by every month in range, including the empty ones", () => {
+    // Jan and Mar have spending; Feb has none but is still a month you had.
+    const rows = [
+      spend("Housing", "2025-01-10", 300_000),
+      spend("Housing", "2025-03-10", 300_000),
+    ];
+
+    const [housing] = budgetRows(rows, "2025-03", new Map());
+
+    // 600'000 over three months, not two — a budget set from only the busy
+    // months is one you break in the quiet ones.
+    expect(housing.suggestedMinor).toBe(200_000);
+  });
+
+  it("reports a missing limit as null, never as zero", () => {
+    const rows = [spend("Housing", "2025-01-10", 1_000)];
+    const [housing] = budgetRows(rows, "2025-01", new Map());
+    // A limit of zero is a real budget of nothing; the two must not collapse.
+    expect(housing.limitMinor).toBeNull();
+
+    const [withZero] = budgetRows(rows, "2025-01", new Map([["Housing", 0]]));
+    expect(withZero.limitMinor).toBe(0);
+  });
+
+  it("carries the dashboard's colour slot, so a category matches across pages", () => {
+    const rows = [
+      spend("Housing", "2025-01-10", 9_000),
+      spend("Travel", "2025-01-10", 1_000),
+    ];
+
+    const stack = stackByCategory(rows);
+    const slots = slotsOf(stack);
+    const budget = budgetRows(rows, "2025-01", new Map());
+
+    for (const entry of budget) {
+      expect(entry.slot).toBe(slots.get(entry.category));
+    }
+  });
+
+  it("leaves the Other bucket out — it is not something anyone budgets for", () => {
+    const rows = [
+      spend("Housing", "2025-01-10", 5_000),
+      spend("Other", "2025-01-10", 9_000),
+    ];
+
+    const budget = budgetRows(rows, "2025-01", new Map());
+
+    expect(budget.map((entry) => entry.category)).toEqual(["Housing"]);
+  });
+
+  it("caps the axes, because a radar past eight spokes is unreadable", () => {
+    const rows = Array.from({ length: 12 }, (_, index) =>
+      spend(`Cat${index}`, "2025-01-10", (12 - index) * 1_000),
+    );
+
+    expect(budgetRows(rows, "2025-01", new Map())).toHaveLength(BUDGET_AXES);
+    expect(budgetRows(rows, "2025-01", new Map(), 3)).toHaveLength(3);
+  });
+
+  it("treats a month outside the range as nothing spent, not an error", () => {
+    const rows = [spend("Housing", "2025-01-10", 1_000)];
+    const [housing] = budgetRows(rows, "2030-06", new Map());
+    expect(housing.usedMinor).toBe(0);
+  });
+
+  it("returns nothing when there is nothing imported", () => {
+    expect(budgetRows([], "2025-01", new Map())).toEqual([]);
+  });
+});
+
+describe("defaultBudgetMonth", () => {
+  const months = ["2025-01", "2025-02", "2025-03"];
+
+  it("opens on the current month when the statements reach it", () => {
+    expect(defaultBudgetMonth(months, "2025-02")).toBe("2025-02");
+  });
+
+  it("falls back to the most recent month there is data for", () => {
+    // The demo statements stop in 2025; "today" is well past them.
+    expect(defaultBudgetMonth(months, "2026-08")).toBe("2025-03");
+  });
+
+  it("has nothing to open on when nothing is imported", () => {
+    expect(defaultBudgetMonth([], "2026-08")).toBeNull();
+  });
+});
+
+describe("monthSurplus", () => {
+  const series = () =>
+    monthlySeries([
+      row({ kind: "income", amountMinor: 500000, bookedOn: "2025-01-25" }),
+      row({ amountMinor: -120000, bookedOn: "2025-01-05" }),
+      row({ kind: "income", amountMinor: 300000, bookedOn: "2025-02-25" }),
+      row({ amountMinor: -450000, bookedOn: "2025-02-05" }),
+    ]);
+
+  it("is income the month did not spend", () => {
+    expect(monthSurplus(series(), "2025-01", true)).toBe(380000);
+  });
+
+  it("is zero for a month that spent more than it earned", () => {
+    // Not a negative surplus: there is no such thing as money left over to
+    // put away when the month came out behind.
+    expect(monthSurplus(series(), "2025-02", true)).toBe(0);
+  });
+
+  it("is null while the month is still running", () => {
+    // Distinct from zero. A surplus computed mid-month only ever shrinks, and
+    // offering it as money to put away invites allocating rent.
+    expect(monthSurplus(series(), "2025-01", false)).toBeNull();
+  });
+
+  it("is zero for a month the statements do not cover", () => {
+    expect(monthSurplus(series(), "2024-07", true)).toBe(0);
+  });
+});
+
+describe("potFill", () => {
+  it("is the share of the target that is saved", () => {
+    expect(potFill(250000, 500000)).toBe(0.5);
+  });
+
+  it("clamps an over-funded pot rather than drawing past the rim", () => {
+    // Over-funding is allowed — money does not bounce off a full pot — but a
+    // fill of 130% would paint outside the jar.
+    expect(potFill(650000, 500000)).toBe(1);
+  });
+
+  it("treats a zero target as full only once something is in it", () => {
+    expect(potFill(0, 0)).toBe(0);
+    expect(potFill(100, 0)).toBe(1);
+  });
+});
+
+describe("goalIcon", () => {
+  const name = (goal: string) => goalIcon(goal).iconName;
+
+  it("reads the goal's own language", () => {
+    // The app is Swiss; half the names people type will be German.
+    expect(name("Ferien")).toBe("umbrella-beach");
+    expect(name("Holiday")).toBe("umbrella-beach");
+    expect(name("Auto")).toBe("car");
+    expect(name("New car")).toBe("car");
+    expect(name("Computer")).toBe("laptop");
+    expect(name("Haus")).toBe("house");
+  });
+
+  it("matches inside a longer word", () => {
+    expect(name("Ferienkasse 2027")).toBe("umbrella-beach");
+  });
+
+  it("takes the more specific rule first", () => {
+    // "Motorrad" contains "rad", which is the bicycle keyword.
+    expect(name("Motorrad")).toBe("motorcycle");
+  });
+
+  it("does not let a two-letter keyword hunt through unrelated names", () => {
+    // "pc" is inside "Upcycling"; a plain substring test hands it a laptop.
+    expect(name("Upcycling")).toBe("piggy-bank");
+    expect(name("Neuer PC")).toBe("laptop");
+  });
+
+  it("knows what money looks like", () => {
+    expect(name("Investment")).toBe("coins");
+    expect(name("Investieren")).toBe("coins");
+    expect(name("ETF Sparplan")).toBe("coins");
+    expect(name("3. Säule")).toBe("coins");
+  });
+
+  it("falls back to a piggy bank rather than guessing", () => {
+    expect(name("Sparbüchse")).toBe("piggy-bank");
+    expect(name("")).toBe("piggy-bank");
+  });
+});
+
+describe("potPercent", () => {
+  it("is the plain share, rounded", () => {
+    expect(potPercent(25000, 50000)).toBe(50);
+    expect(potPercent(29000, 30000)).toBe(97);
+  });
+
+  it("does not clamp, unlike the drawing", () => {
+    // The jar has a rim and `potFill` respects it; the label must not, or a pot
+    // holding CHF 300 against a CHF 200 goal reads a flat, useless 100%.
+    expect(potFill(30000, 20000)).toBe(1);
+    expect(potPercent(30000, 20000)).toBe(150);
+  });
+
+  it("treats a zero target as done only once something is in it", () => {
+    expect(potPercent(0, 0)).toBe(0);
+    expect(potPercent(100, 0)).toBe(100);
+  });
+});
+
+describe("potSlot", () => {
+  it("is 1-based, so it lines up with --chart-N", () => {
+    expect(potSlot(1)).toBe(1);
+    expect(potSlot(10)).toBe(10);
+  });
+
+  it("wraps past the end of the ramp instead of inventing a hue", () => {
+    expect(potSlot(11)).toBe(1);
+  });
+
+  it("is keyed on the id, so deleting a pot does not repaint the others", () => {
+    const before = [4, 7, 9].map((id) => potSlot(id));
+    // Goal 7 is gone; the survivors keep their colours because the slot never
+    // depended on their position in the list.
+    expect([4, 9].map((id) => potSlot(id))).toEqual([before[0], before[2]]);
   });
 });
 
@@ -798,5 +1041,122 @@ describe("categorySpendPeriods", () => {
     expect(result.month.categories.map((c) => c.key)).toEqual([
       "G", "F", "E", "D", "C", "B", "A",
     ]);
+  });
+});
+
+describe("daysInMonth / firstWeekdayOf", () => {
+  /*
+   * These two exist so the calendar can lay out a month without constructing a
+   * `Date` — a booking date is a date, not an instant, and one `new Date()` in
+   * this file shifts the whole grid by a day for anyone west of UTC. `Date` is
+   * fine as the *oracle* in a test, where the timezone is pinned to UTC.
+   */
+  it("agrees with the platform calendar over a century", () => {
+    const wrong: string[] = [];
+
+    for (let year = 1999; year <= 2100; year += 1) {
+      for (let m = 1; m <= 12; m += 1) {
+        const month = `${year}-${String(m).padStart(2, "0")}`;
+        const expectedDays = new Date(Date.UTC(year, m, 0)).getUTCDate();
+        // Monday-indexed, the way a Swiss calendar prints a week.
+        const expectedWeekday = (new Date(Date.UTC(year, m - 1, 1)).getUTCDay() + 6) % 7;
+
+        if (daysInMonth(month) !== expectedDays) wrong.push(`${month} length`);
+        if (firstWeekdayOf(month) !== expectedWeekday) wrong.push(`${month} weekday`);
+      }
+    }
+
+    expect(wrong).toEqual([]);
+  });
+
+  it("knows the century leap rule, not just the four-year one", () => {
+    expect(daysInMonth("2000-02")).toBe(29);
+    expect(daysInMonth("1900-02")).toBe(28);
+    expect(daysInMonth("2100-02")).toBe(28);
+    expect(daysInMonth("2024-02")).toBe(29);
+  });
+});
+
+describe("calendarMonths", () => {
+  const slots = new Map([["Food & Drink", 3]]);
+
+  it("comes back newest month first with days ascending inside each", () => {
+    // The order the database hands over: desc(bookedOn), asc(id).
+    const months = calendarMonths(
+      [
+        row({ bookedOn: "2025-04-02" }),
+        row({ bookedOn: "2025-04-01" }),
+        row({ bookedOn: "2025-03-31" }),
+        row({ bookedOn: "2025-03-01" }),
+      ],
+      slots,
+      new Map(),
+    );
+
+    expect(months.map((m) => m.month)).toEqual(["2025-04", "2025-03"]);
+    expect(months[0].days.map((d) => d.date)).toEqual(["2025-04-01", "2025-04-02"]);
+    expect(months[1].days.map((d) => d.date)).toEqual(["2025-03-01", "2025-03-31"]);
+  });
+
+  it("skips transfers in the money but still gives them a dot", () => {
+    const [month] = calendarMonths(
+      [
+        row({ bookedOn: "2025-03-14", kind: "income", amountMinor: 5000 }),
+        row({ bookedOn: "2025-03-14", amountMinor: -1200 }),
+        row({ bookedOn: "2025-03-14", kind: "transfer", amountMinor: -9999 }),
+      ],
+      slots,
+      new Map(),
+    );
+
+    const [day] = month.days;
+    expect(day.income).toBe(5000);
+    expect(day.expense).toBe(1200);
+    expect(day.count).toBe(3);
+    expect(day.dots.map((d) => d.kind)).toEqual(["income", "expense", "transfer"]);
+  });
+
+  it("caps the dots and counts the rest", () => {
+    const rows = Array.from({ length: MAX_DAY_DOTS + 4 }, () =>
+      row({ bookedOn: "2025-03-14" }),
+    );
+
+    const [day] = calendarMonths(rows, slots, new Map())[0].days;
+    expect(day.dots).toHaveLength(MAX_DAY_DOTS);
+    expect(day.hiddenDots).toBe(4);
+    expect(day.count).toBe(MAX_DAY_DOTS + day.hiddenDots);
+  });
+
+  it("colours a dot by its category's slot, and the tail by the neutral", () => {
+    const [month] = calendarMonths(
+      [row({ category: "Food & Drink" }), row({ category: "Nowhere" })],
+      slots,
+      new Map(),
+    );
+
+    expect(month.days[0].dots.map((d) => d.slot)).toEqual([3, 0]);
+  });
+
+  it("takes the most concerning kind on the day, not the first or the last", () => {
+    const info = row({ bookedOn: "2025-03-14" });
+    const alert = row({ bookedOn: "2025-03-14" });
+    const warning = row({ bookedOn: "2025-03-14" });
+
+    const [month] = calendarMonths(
+      [info, alert, warning],
+      slots,
+      new Map([
+        [info.id, "info" as const],
+        [alert.id, "alert" as const],
+        [warning.id, "warning" as const],
+      ]),
+    );
+
+    expect(month.days[0].kind).toBe("alert");
+  });
+
+  it("leaves a day unflagged when the scan found nothing on it", () => {
+    const [month] = calendarMonths([row()], slots, new Map());
+    expect(month.days[0].kind).toBeNull();
   });
 });
