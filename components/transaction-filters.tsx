@@ -62,8 +62,8 @@ const DIRECTIONS = [
 /** The two faces of the same set of transactions. Query values are fixed in
  * code, like the directions above: the URL must not change with the language. */
 const VIEWS = [
-  { value: "list", key: "viewList", Icon: List },
   { value: "calendar", key: "viewCalendar", Icon: CalendarDays },
+  { value: "list", key: "viewList", Icon: List },
 ] as const;
 
 /**
@@ -126,12 +126,12 @@ export function TransactionFilters({
 
   // Counts filters set from anywhere, the breakdown links included — those have
   // no control here, so Clear is the only way back from one. `view` is excluded
-  // deliberately: it narrows nothing, so a calendar on an unfiltered account
+  // deliberately: it narrows nothing, so a ledger on an unfiltered account
   // would otherwise offer a Clear button with nothing to clear.
   const active = [...searchParams.keys()].some((key) => key !== "view");
 
   const view: TransactionView =
-    searchParams.get("view") === "calendar" ? "calendar" : "list";
+    searchParams.get("view") === "list" ? "list" : "calendar";
 
   /** "Privatkonto · CHF 12’450.30", with a real minus for a negative balance. */
   function accountLabel(account: string): string {
@@ -211,8 +211,8 @@ export function TransactionFilters({
               key={value}
               type="button"
               aria-pressed={view === value}
-              onClick={() => update("view", value === "list" ? "" : value)}
-              /* `list` writes an empty value, which `update` turns into a
+              onClick={() => update("view", value === "calendar" ? "" : value)}
+              /* `calendar` writes an empty value, which `update` turns into a
                  delete — the default view leaves no trace in the URL. */
               className={`flex h-full cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[14px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                 view === value
@@ -232,11 +232,14 @@ export function TransactionFilters({
           type="button"
           /* Clears the filters and keeps the view. Dropping back to a bare `/`
              would silently send a reader who cleared a merchant filter from the
-             calendar back to the ledger. */
+             ledger back to the calendar. */
           onClick={() =>
             startTransition(() =>
               router.replace(
-                { pathname: "/dashboard", query: view === "list" ? {} : { view } },
+                {
+                  pathname: "/dashboard",
+                  query: view === "calendar" ? {} : { view },
+                },
                 { scroll: false },
               ),
             )
