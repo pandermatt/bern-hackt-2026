@@ -367,12 +367,28 @@ Unchanged from the template this app grew out of, and still exactly true.
   clear of the glass. The two must stay equal to the body's `pb-30`, and all
   three follow the bar's own padding in `components/tab-bar.tsx`. Any future
   page with a background of its own needs the same pair.
-- **A Dauersparauftrag never moves money.** `savings_goals.monthly_minor` is a
-  plan, not a balance: nothing reads it to create an allocation. It seeds the
-  allocator's fields when a finished month has a surplus, and the reader still
-  presses save. A standing order that quietly filled pots would invent savings
-  out of months that never had the income — and `allocateSurplus` stays the
-  only thing that writes `savings_allocations`.
+- **`allocateSurplus` is the only thing that writes `savings_allocations`.**
+  The app briefly carried a Dauersparauftrag — `savings_goals.monthly_minor`, a
+  stated monthly intention that seeded the allocator's fields — and it was
+  removed: a pot took two numbers to explain, and the plan never moved money,
+  so it earned a control, a dialog, a column and nine strings per locale to
+  pre-fill one input. If it comes back, it comes back as a plan that still
+  writes nothing, because a standing order that quietly filled pots would
+  invent savings out of months that never had the income.
+- **`savings_goals.monthly_minor` is still declared, and deleting it from the
+  schema is what you must not do.** The Dauersparauftrag above left the column
+  behind on purpose. `drizzle-kit push` does *not* ignore a column the schema
+  stopped declaring — it plans a drop, and because the column holds values it
+  stops on `Found data-loss statements` and waits for a keypress, which in
+  `npm run start` is the error `Interactive prompts require a TTY terminal` and
+  a failed deploy. Same constraint that keeps `transactions.userId` nullable.
+  Retiring it for real means clearing the values first and pushing from a
+  terminal — a deliberate migration, not a side effect of deleting a feature.
+- **Probe a schema question against a *complete* copy of the database.** It
+  runs in WAL mode, so `cp data/app.db` alone hands you a stale snapshot that
+  can be missing whole columns, and a push against it will happily report
+  "No changes detected" for a change that in fact prompts. Copy `app.db`,
+  `app.db-wal` and `app.db-shm` together, or checkpoint first.
 - **`savings_goals.target_on` is `YYYY-MM-DD` text and nullable.** Text for the
   same reason `transactions.booked_on` is: a deadline is a calendar day, and as
   a timestamp 2026-07-01 renders as 30 June west of UTC. Nullable because
