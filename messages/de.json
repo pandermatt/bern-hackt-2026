@@ -592,6 +592,22 @@
     "light": "Hell",
     "dark": "Dunkel"
   },
+  "Install": {
+    "heading": "Installieren",
+    "title": "Zum Startbildschirm hinzufügen",
+    "note": "Installieren Sie Beyond Money als App. Sie öffnet sich in einem eigenen Fenster, ohne Browserleiste.",
+    "action": "Installieren",
+    "installed": "Installiert",
+    "installedNote": "Sie nutzen Beyond Money bereits als installierte App.",
+    "browserMenuNote": "Ihr Browser bietet das über sein eigenes Menü an — suchen Sie nach „App installieren“ oder „Zum Startbildschirm hinzufügen“.",
+    "iosNote": "Auf iPhone und iPad läuft das über das Teilen-Menü von Safari.",
+    "iosAction": "Anleitung anzeigen",
+    "iosTitle": "Zum Startbildschirm hinzufügen",
+    "iosIntro": "Safari installiert Apps über sein Teilen-Menü und nicht über die Seite selbst.",
+    "iosStep1": "Tippen Sie in der Safari-Symbolleiste auf „Teilen“.",
+    "iosStep2": "Scrollen Sie die Liste hinunter und wählen Sie „Zum Startbildschirm“.",
+    "iosStep3": "Tippen Sie auf „Hinzufügen“. Beyond Money erscheint auf Ihrem Startbildschirm."
+  },
   "DangerZone": {
     "trigger": "Konto löschen",
     "title": "Konto wirklich löschen?",
