@@ -8,7 +8,12 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { transactions, users, type NewTransaction } from "../db/schema";
 import { hashPassword } from "../lib/password";
 import { toRecords } from "./lib/csv";
-import { classify, naturalKey, toMinor } from "./lib/statement";
+import {
+  classify,
+  naturalKey,
+  openingBalanceRow,
+  toMinor,
+} from "./lib/statement";
 
 const DB_PATH = process.env.DATABASE_PATH ?? "./data/app.db";
 // Resolved against the working directory, like DATABASE_PATH above — npm always
@@ -146,6 +151,16 @@ async function main() {
         createdAt: new Date(),
       });
     }
+  }
+
+  // The opening balance, dated the day before the earliest statement line —
+  // see the note on `openingBalanceRow`.
+  if (rows.length > 0) {
+    const first = rows.reduce(
+      (min, row) => (row.bookedOn < min ? row.bookedOn : min),
+      rows[0].bookedOn,
+    );
+    rows.unshift(openingBalanceRow(target.id, first));
   }
 
   // Delete-then-insert, scoped to this account — what makes `npm run seed` safe

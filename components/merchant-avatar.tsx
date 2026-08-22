@@ -5,6 +5,7 @@ import {
   Globe,
   HeartPulse,
   House,
+  Landmark,
   Smartphone,
   type LucideIcon,
 } from "lucide-react";
@@ -28,6 +29,7 @@ export const ABSTRACT_GLYPHS: Record<string, LucideIcon> = {
   "Mobile Provider": Smartphone,
   "Employer AG": Banknote,
   "Credit card payment": CreditCard,
+  "Opening balance": Landmark,
   Taxi: Car,
   "Taxi Services": Car,
   "Unknown Digital Merchant UK": Globe,

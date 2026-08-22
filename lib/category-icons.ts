@@ -20,6 +20,7 @@ export const CATEGORY_ICONS: Record<string, string> = {
   "Home & Office": "🛋️",
   Housing: "🏠",
   Marketplace: "🛒",
+  "Opening balance": "🏦",
   Pets: "🐾",
   Refund: "↩️",
   Salary: "💼",

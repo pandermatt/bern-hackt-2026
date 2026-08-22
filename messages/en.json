@@ -544,6 +544,7 @@
     "day": "{day} {month} {year}"
   },
   "Categories": {
+    "Opening balance": "Opening balance",
     "Housing": "Housing",
     "Health & Insurance": "Health & Insurance",
     "Utilities & Telecom": "Utilities & Telecom",

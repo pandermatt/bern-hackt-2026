@@ -102,6 +102,7 @@ export const MERCHANT_BRANDS: Record<string, string | null> = {
   "Hügi Optik": null,
 
   // ── No mark: abstract lines with no merchant behind them ──────────────────
+  "Opening balance": null,
   Rent: null,
   Krankenkasse: null,
   "Mobile Provider": null,

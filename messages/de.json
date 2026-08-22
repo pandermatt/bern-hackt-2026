@@ -544,6 +544,7 @@
     "day": "{day}. {month} {year}"
   },
   "Categories": {
+    "Opening balance": "Anfangssaldo",
     "Housing": "Wohnen",
     "Health & Insurance": "Gesundheit & Versicherung",
     "Utilities & Telecom": "Nebenkosten & Telekom",

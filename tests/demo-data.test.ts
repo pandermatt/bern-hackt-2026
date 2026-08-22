@@ -187,20 +187,43 @@ describe("Demo CSV Loader", () => {
   it("loads and classifies statements from Account 1 and Account 3 CSVs", async () => {
     const { count } = await loadDemoCsvForUser(user1.id);
 
-    // Shipped CSVs have 513 unique transaction keys after deduplicating CC payments
-    expect(count).toBe(513);
+    // Shipped CSVs have 513 unique transaction keys after deduplicating CC
+    // payments, plus the prepended opening-balance row.
+    expect(count).toBe(514);
 
     const rows = await db
       .select()
       .from(transactions)
       .where(eq(transactions.userId, user1.id));
 
-    expect(rows.length).toBe(513);
+    expect(rows.length).toBe(514);
 
     const categories = new Set(rows.map((r) => r.category));
     expect(categories.has("Food & Drink")).toBe(true);
     expect(categories.has("Housing")).toBe(true);
     expect(categories.has("Salary")).toBe(true);
     expect(categories.has("Transport")).toBe(true);
+  });
+
+  it("starts the history with a CHF 10'000 opening balance", async () => {
+    await loadDemoCsvForUser(user1.id);
+
+    const rows = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.userId, user1.id));
+
+    const opening = rows.filter((r) => r.category === "Opening balance");
+    expect(opening).toHaveLength(1);
+    expect(opening[0].amountMinor).toBe(1_000_000);
+    expect(opening[0].kind).toBe("income");
+
+    // Booked before every statement line, so the balance starts at the figure
+    // and no statement month's net carries the spike.
+    const earliest = rows
+      .map((r) => r.bookedOn)
+      .sort()[0];
+    expect(opening[0].bookedOn).toBe(earliest);
+    expect(rows.every((r) => r === opening[0] || r.bookedOn > opening[0].bookedOn)).toBe(true);
   });
 });
