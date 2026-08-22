@@ -16,7 +16,7 @@ import {
 import { z } from "zod";
 
 import { db } from "@/db";
-import { transactions, type Transaction } from "@/db/schema";
+import { anomalies, transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import {
   getAnomalyScanState,
@@ -74,6 +74,11 @@ const filterSchema = z.object({
   q: z.string().trim().max(80).optional(),
   // Not `z.coerce.boolean()`: search params arrive as strings and coercion
   // turns the string "false" into `true`. Only an explicit "true" opts in.
+  // A rule id from the anomaly engine, e.g. `?anomaly=REPEAT_CHARGE` — the
+  // links `/anomalies` hands out. Bounded to the shape a rule id actually has,
+  // because the value reaches a SQL `eq()`; anything else falls back to no
+  // filter like every other field here.
+  anomaly: z.string().regex(/^[A-Z_]{1,60}$/).optional(),
   includeTransfers: z
     .unknown()
     .optional()
@@ -122,6 +127,13 @@ export type Dashboard = {
    */
   anomalyScan: { hasCompletedScan: boolean; running: boolean };
   anomalies: AnomalyInsight[];
+  /**
+   * What the active `?anomaly=` filter is called, for the chip in the filter
+   * bar. `null` when no anomaly filter is set — and also when one is set that
+   * matches nothing, which the chip still has to render or there would be no
+   * way to clear an empty ledger.
+   */
+  anomalyLabel: string | null;
   /** Where the ledger's second chunk starts, or `null` when the first one was
    * the lot. The ledger scrolls rather than pages, so there is no page number
    * to carry — see components/transaction-feed.tsx. */
@@ -172,6 +184,23 @@ function buildFilterConditions(userId: number, filters: Filters): SQL[] {
       )!,
     );
   }
+  if (filters.anomaly) {
+    // Nothing routes an `anomaly` here today — this builds SQL only for the
+    // chat assistant's sandbox, which passes dates and nothing else. It is
+    // implemented anyway because one of two implementations of "the filter"
+    // quietly ignoring a field is precisely the drift the note above warns
+    // about. A subquery, not a join, so the row shape is unchanged; unawaited
+    // `db.select()` is construction, so this stays synchronous.
+    conditions.push(
+      inArray(
+        transactions.id,
+        db
+          .select({ id: anomalies.transactionId })
+          .from(anomalies)
+          .where(and(eq(anomalies.userId, userId), eq(anomalies.ruleId, filters.anomaly))),
+      ),
+    );
+  }
 
   return conditions;
 }
@@ -192,11 +221,42 @@ async function ownedRows(): Promise<Transaction[] | null> {
 }
 
 /**
- * Loads the dashboard:
- * - Loads only the visible page of transactions from the database via SQL LIMIT/OFFSET.
- * - Computes full baseline aggregates and evaluates anomalies specifically for the visible transactions.
+ * The transactions matching an anomaly rule, plus what that rule calls itself.
+ *
+ * One query for both: every rule emits a constant `title` literal, so any row's
+ * title is the rule's title, and a separate lookup — or a rule-title map in the
+ * UI that could drift from the engine — would buy nothing.
  */
-export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
+async function resolveAnomalyFilter(
+  userId: number,
+  ruleId: string,
+): Promise<{ ids: Set<number>; label: string | null }> {
+  const rows = await db
+    .select({ transactionId: anomalies.transactionId, title: anomalies.title })
+    .from(anomalies)
+    .where(and(eq(anomalies.userId, userId), eq(anomalies.ruleId, ruleId)));
+
+  return {
+    ids: new Set(rows.map((r) => r.transactionId)),
+    label: rows[0]?.title ?? null,
+  };
+}
+
+/**
+ * Everything both ledger readers need, resolved once and in one order.
+ *
+ * `getDashboard` and `getLedgerChunk` have to agree exactly on which row sits at
+ * which offset — the chunks index into this array — so the steps that produce it
+ * live here rather than being repeated in two places where they could drift
+ * apart. That is the same argument the note on `getLedgerChunk` already makes
+ * for sharing `applyFilters`; the anomaly filter added a fourth step to it.
+ */
+async function ledgerView(raw: unknown): Promise<{
+  filters: Filters;
+  rows: Transaction[];
+  filtered: Transaction[];
+  anomalyLabel: string | null;
+} | null> {
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -205,7 +265,29 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
   const rows = await ownedRows();
   if (!rows) return null;
 
-  const filtered = applyFilters(rows, filters);
+  // Only pay for this when the filter is actually on — `getDashboard({})` runs
+  // on every chat turn as well as every page view.
+  const anomaly = filters.anomaly
+    ? await resolveAnomalyFilter(user.id, filters.anomaly)
+    : null;
+
+  return {
+    filters,
+    rows,
+    filtered: applyFilters(rows, filters, anomaly?.ids),
+    anomalyLabel: anomaly?.label ?? null,
+  };
+}
+
+/**
+ * Loads the dashboard:
+ * - Loads only the visible page of transactions from the database via SQL LIMIT/OFFSET.
+ * - Computes full baseline aggregates and evaluates anomalies specifically for the visible transactions.
+ */
+export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
+  const view = await ledgerView(raw);
+  if (!view) return null;
+  const { filters, rows, filtered, anomalyLabel } = view;
 
   // The ledger's first chunk. This replaced a separate LIMIT/OFFSET query:
   // `filtered` is already the whole ordered result set (the facets, the trend
@@ -239,6 +321,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     // now triggered from the account page — see app/actions/anomalies.ts.
     anomalies: await getStoredAnomaliesForPage(chunk.rows.map((r) => r.id)),
     anomalyScan: await getAnomalyScanState(),
+    anomalyLabel,
     nextOffset: chunk.nextOffset,
     continuesInto: chunk.continuesInto,
     totalCount: filtered.length,
@@ -262,13 +345,10 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
  * is what keeps the rows off the client.
  */
 export async function getLedgerChunk(offset: number, raw: unknown) {
-  const user = await getCurrentUser();
-  if (!user) return null;
+  const view = await ledgerView(raw);
+  if (!view) return null;
+  const { filtered } = view;
 
-  const rows = await ownedRows();
-  if (!rows) return null;
-
-  const filtered = applyFilters(rows, parseFilters(raw));
   const chunk = ledgerChunk(filtered, Math.max(0, Math.floor(offset) || 0));
   if (chunk.rows.length === 0) return null;
 

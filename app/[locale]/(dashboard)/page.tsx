@@ -104,6 +104,7 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
                 facets={facets}
                 filters={filters}
                 accountTotals={dashboard.accountTotals}
+                anomalyLabel={dashboard.anomalyLabel}
               />
             </Suspense>
           </div>

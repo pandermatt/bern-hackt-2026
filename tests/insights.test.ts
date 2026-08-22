@@ -379,6 +379,70 @@ describe("topMerchants", () => {
   });
 });
 
+describe("applyFilters — the anomaly filter", () => {
+  it("ignores the id set when no anomaly is asked for", () => {
+    const rows = [row(), row()];
+    const kept = applyFilters(rows, NO_FILTERS, new Set([rows[0].id]));
+    expect(kept).toHaveLength(2);
+  });
+
+  it("narrows to the transactions the finding implicates", () => {
+    const rows = [row(), row(), row()];
+    const kept = applyFilters(
+      rows,
+      { ...NO_FILTERS, anomaly: "REPEAT_CHARGE" },
+      new Set([rows[0].id, rows[2].id]),
+    );
+    expect(kept.map((r) => r.id)).toEqual([rows[0].id, rows[2].id]);
+  });
+
+  it("returns nothing when an anomaly is asked for and no set is supplied", () => {
+    // The contract the two ledger callers depend on. Failing open here would
+    // hand one of them an unfiltered list while the other filtered, and the
+    // chunk offsets they share would stop meaning the same thing.
+    const rows = [row(), row()];
+    expect(applyFilters(rows, { ...NO_FILTERS, anomaly: "REPEAT_CHARGE" })).toEqual([]);
+  });
+
+  it("returns nothing for a rule that matched no transaction", () => {
+    const rows = [row(), row()];
+    expect(
+      applyFilters(rows, { ...NO_FILTERS, anomaly: "NO_SUCH_RULE" }, new Set()),
+    ).toEqual([]);
+  });
+
+  it("composes with the other filters rather than overriding them", () => {
+    const rows = [
+      row({ bookedOn: "2025-01-05", category: "Travel" }),
+      row({ bookedOn: "2025-06-05", category: "Travel" }),
+    ];
+    const kept = applyFilters(
+      rows,
+      { ...NO_FILTERS, anomaly: "REPEAT_CHARGE", from: "2025-05-01" },
+      new Set(rows.map((r) => r.id)),
+    );
+    expect(kept.map((r) => r.id)).toEqual([rows[1].id]);
+  });
+
+  it("still hides a flagged transfer unless transfers were asked for", () => {
+    // Some rules attach only to transfers, so /anomalies has to carry
+    // includeTransfers on its links or they land on an empty ledger.
+    const transfer = row({ kind: "transfer" });
+    const ids = new Set([transfer.id]);
+
+    expect(
+      applyFilters([transfer], { ...NO_FILTERS, anomaly: "LARGE_TRANSFER" }, ids),
+    ).toEqual([]);
+    expect(
+      applyFilters(
+        [transfer],
+        { ...NO_FILTERS, anomaly: "LARGE_TRANSFER", includeTransfers: true },
+        ids,
+      ),
+    ).toHaveLength(1);
+  });
+});
+
 describe("applyFilters", () => {
   it("treats both ends of the date range as inclusive", () => {
     const rows = [
