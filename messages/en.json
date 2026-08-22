@@ -396,6 +396,9 @@
     "Transfer": "Transfer"
   },
   "Metadata": {
+    "siteTitle": "Personal Finance Insights",
+    "siteTagline": "See where your money actually goes.",
+    "siteDescription": "Private spending insights from your own statements.",
     "login": "Sign in",
     "register": "Create an account",
     "account": "Account settings",
