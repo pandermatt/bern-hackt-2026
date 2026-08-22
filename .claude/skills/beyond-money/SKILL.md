@@ -256,6 +256,19 @@ Unchanged from the template this app grew out of, and still exactly true.
   figure is printed under the category name, in the tooltip, and in the
   `sr-only` table. A percent-of-budget scale solves the framing outright but
   was rejected: the axis has to read in francs.
+- **The radar's radius is measured, not a percentage.** ECharts resolves
+  `radius: "65%"` against `min(width, height) / 2`, but what has to fit outside
+  the dial is a *text label*, and text does not scale with the container. One
+  percentage that frames the dial nicely at 1280px clips "Marketplace" at
+  402px. `BudgetRadar` observes its own box, measures the widest axis label
+  with `measureText`, and subtracts — which is why `NAME_FONT` is pinned on
+  both the rich style and the ruler. If those two ever disagree the radius is
+  computed against the wrong width.
+- **Below `sm` the radar changes shape, not just size.** Shorter box (a radar
+  is bounded by the narrower side, so the desktop height is only dead space),
+  smaller type, names broken at their last space, and only the rim tick — six
+  axis numbers queue up one short spoke, and the series paints over them. The
+  rim tick goes too once the dial is under 60px.
 - **Every category name carries its share of budget underneath it.** A franc
   scale cannot separate "half the budget" from "twice it" for a small category
   near the hub, so the shape carries magnitude and the printed percentage
@@ -273,6 +286,12 @@ Unchanged from the template this app grew out of, and still exactly true.
   tried in the trend chart and drowned the in-versus-out reading in nine bands;
   if you want detail there, add a second chart rather than another dimension to
   this one.
+- **A visually hidden table needs a wrapper `<div className="sr-only">`.**
+  `sr-only` sets `width: 1px`, and a `<table>` ignores that — its intrinsic
+  content width wins — so an absolutely positioned 520px table sat in the
+  layout and gave the whole page a horizontal scrollbar on a phone. The div
+  takes the class and clips the table inside it. Same reason the `<caption>`
+  escaped: a table is not an ordinary block.
 - **The `sr-only` tables carry `aria-label`, not `<caption>`.** A caption box
   belongs to the table *wrapper*, which is not reliably clipped along with the
   `sr-only` box — Safari paints it as a stray line of text under the chart.

@@ -181,29 +181,31 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
           canvas fails. Also the relief a sub-3:1 fill requires. */}
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
-      <table className="sr-only" aria-label={t("tableLabel")}>
-        <thead>
-          <tr>
-            <th scope="col">{t("month")}</th>
-            <th scope="col">{t("in")}</th>
-            <th scope="col">{t("out")}</th>
-            <th scope="col">{t("net")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {series.map((point) => (
-            <tr key={point.month}>
-              <th scope="row">{point.month}</th>
-              <td>{formatMoney(point.income)}</td>
-              <td>{formatMoney(point.expense)}</td>
-              <td>
-                {point.net < 0 ? "−" : ""}
-                {formatMoney(point.net)}
-              </td>
+      <div className="sr-only">
+        <table aria-label={t("tableLabel")}>
+          <thead>
+            <tr>
+              <th scope="col">{t("month")}</th>
+              <th scope="col">{t("in")}</th>
+              <th scope="col">{t("out")}</th>
+              <th scope="col">{t("net")}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {series.map((point) => (
+              <tr key={point.month}>
+                <th scope="row">{point.month}</th>
+                <td>{formatMoney(point.income)}</td>
+                <td>{formatMoney(point.expense)}</td>
+                <td>
+                  {point.net < 0 ? "−" : ""}
+                  {formatMoney(point.net)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <p className="mt-3 font-mono text-[11.5px] text-text-subtle">
         {t("footnote")}
