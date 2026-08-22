@@ -3,7 +3,8 @@
     "accountSettings": "Kontoeinstellungen",
     "signOut": "Abmelden",
     "signIn": "Anmelden",
-    "getStarted": "Loslegen"
+    "getStarted": "Loslegen",
+    "anomalies": "Auffälligkeiten"
   },
   "AppFooter": {
     "tagline": "Private Einblicke in Ihre Ausgaben — aus Ihren eigenen Kontoauszügen.",
@@ -234,23 +235,56 @@
     "Finished": "Abgeschlossen",
     "Failed": "Fehlgeschlagen"
   },
-  "AnomalyInsights": {
-    "emptyTitle": "Statistische Anomalie-Analyse",
-    "emptyBody": "Im aktuellen Transaktionsbestand wurden keine statistischen Auffälligkeiten oder Verhaltensabweichungen gefunden.",
-    "heading": "Deterministische Anomalie-Erkennung",
-    "count": "{count, plural, one {# Befund} other {# Befunde}}",
-    "subtitle": "Mathematische Abweichungen, berechnet gegen Ihre bisherigen Transaktions-Baselines (MAD, Perzentile & Intervalle).",
-    "filterAll": "Alle ({count})",
-    "filterHigh": "Hoch ({count})",
-    "filterMedium": "Mittel ({count})",
-    "filterLow": "Niedrig ({count})",
-    "showEvidence": "Belege",
-    "hideEvidence": "Daten ausblenden",
-    "metricsHeading": "Deterministische Kennzahlen & Belege",
-    "referencedIds": "Referenzierte Transaktions-IDs:",
-    "severityHigh": "Hoch",
-    "severityMedium": "Mittel",
-    "severityLow": "Niedrig"
+  "Anomalies": {
+    "title": "Auffälligkeiten",
+    "subtitle": "Was der letzte Scan gefunden hat, nach Art der Auffälligkeit gruppiert.",
+    "subtitleUnscanned": "Es wurde noch nichts analysiert.",
+    "actionHeading": "Genauer ansehen",
+    "actionMeta": "Auffälligkeiten, bei denen sich ein Blick lohnt",
+    "contextHeading": "Nur zur Info",
+    "contextMeta": "Muster in deinen Ausgaben, als Einordnung",
+    "count": "{count, plural, one {# Transaktion} other {# Transaktionen}}",
+    "emptyTitle": "Alles unauffällig",
+    "emptyBody": "Der letzte Scan hat in deinen Transaktionen nichts Auffälliges gefunden.",
+    "neverScannedTitle": "Es wurde noch kein Scan ausgeführt",
+    "neverScannedBody": "Starte einen Scan, um doppelte Belastungen, ungewöhnliche Beträge und ausgebliebene Zahlungen zu erkennen.",
+    "runningBody": "Ein Scan läuft gerade. Die Ergebnisse erscheinen hier, sobald er fertig ist.",
+    "runScan": "Scan starten",
+    "staleTitle": "Diese Ergebnisse sind veraltet",
+    "staleBody": "Deine Kontoauszüge wurden seit dem letzten Scan neu importiert, daher passen die Ergebnisse nicht mehr zu deinen Transaktionen. Starte den Scan erneut.",
+    "seeAll": "Alle dieser Art ansehen",
+    "seeInLedger": "Im Kontoauszug anzeigen",
+    "thisFinding": "Diese Auffälligkeit",
+    "otherOfThisKind": "Weitere dieser Art",
+    "allOfThisKind": "Alle dieser Art"
+  },
+  "AnomalyRules": {
+    "AMOUNT_SPIKE": "Deutlich höher als das, was dieser Händler dir sonst verrechnet. Mal ein Grosseinkauf, mal ein vertippter Betrag.",
+    "BALANCE_DROP": "Eine insgesamt aussergewöhnlich ausgabenstarke Woche — nicht eine einzelne Zahlung.",
+    "CASH_WITHDRAWAL_SPIKE": "Ein Bargeldbezug deutlich über deinem üblichen Betrag.",
+    "CATEGORY_SHIFT": "Diese Kategorie macht einen spürbar anderen Anteil deiner Ausgaben aus als früher.",
+    "CATEGORY_SPENDING_SPIKE": "Die Ausgaben in dieser Kategorie sind gegenüber den Vormonaten stark gestiegen.",
+    "EXPENSE_GROWTH_TREND": "Die Ausgaben in dieser Kategorie steigen seit mehreren Monaten stetig an.",
+    "FREQUENCY_SPIKE": "Du hast diesen Händler in kurzer Zeit viel häufiger genutzt als sonst.",
+    "INCOME_DEVIATION": "Die regelmässige Einnahme kam an, aber in deutlich anderer Höhe als üblich. Prüfe die Lohnabrechnung oder Rechnung dahinter.",
+    "LARGE_TRANSFER": "Eine Überweisung zwischen deinen eigenen Konten, die deutlich grösser ist als üblich.",
+    "MERCHANT_CONCENTRATION": "Ein Händler machte einen ungewöhnlich grossen Anteil der Monatsausgaben aus.",
+    "MISSING_EXPECTED_INCOME": "Eine Zahlung, die sonst regelmässig eintrifft, ist überfällig. Wenn es der Lohn ist, lohnt sich das Nachfragen.",
+    "NEW_CATEGORY": "Deine erste erfasste Ausgabe in dieser Kategorie.",
+    "NEW_COUNTERPARTY": "Geld ging an einen Empfänger, der in deinen Überweisungen bisher nicht vorkam.",
+    "NEW_MERCHANT": "Dieser Händler taucht zum ersten Mal in deinen Kontoauszügen auf.",
+    "NEW_RECURRING_PAYMENT": "Eine Zahlung wiederholt sich neu in festem Rhythmus — häufig ein Gratis-Abo, das jetzt kostet.",
+    "PAYMENT_METHOD_SHIFT": "Deine Ausgaben haben sich gegenüber den Vormonaten zwischen Konten oder Karten verschoben.",
+    "RECURRING_PAYMENT_CHANGE": "Ein Abo oder Dauerauftrag hat den Preis geändert. Überlege, ob es den neuen Preis noch wert ist.",
+    "RECURRING_PAYMENT_DISAPPEARANCE": "Eine regelmässige Zahlung bleibt aus. Das kann ein gekündigter Dienst sein oder eine abgelaufene Karte und eine still fehlgeschlagene Zahlung.",
+    "REFUND_ANOMALY": "Eine Rückerstattung, die deutlich grösser ist als die, die du sonst erhältst.",
+    "REPEAT_CHARGE": "Derselbe Händler hat am selben Tag mehrfach den identischen Betrag belastet. Oft eine echte Doppelbelastung — vergleiche sie mit deinem Beleg und fordere sie zurück.",
+    "ROUND_NUMBER_TRANSACTION": "Ein grosser, exakt runder Betrag — typischer für eine Überweisung oder manuelle Zahlung als für einen Einkauf.",
+    "SAVINGS_RATE_CHANGE": "Der Anteil des Einkommens, den du diesen Monat behalten hast, weicht stark von den letzten Monaten ab.",
+    "SUBSCRIPTION_ACCUMULATION": "In kurzer Zeit sind mehrere neue Abos dazugekommen. Zusammen machen sie mehr aus, als jedes einzelne wirkt.",
+    "UNUSUALLY_LARGE_TRANSACTION": "Einer der grössten Abflüsse deiner gesamten Historie. Ein kurzer Blick zur Bestätigung lohnt sich.",
+    "UNUSUAL_DAY": "Diesen Händler nutzt du sonst an anderen Wochentagen.",
+    "UNUSUAL_FINANCIAL_IMPACT": "Eine einzelne Zahlung, die im Verhältnis zum Monatseinkommen ins Gewicht fällt, nicht nur zu deinen üblichen Ausgaben."
   },
   "DemoData": {
     "heading": "Demo- & synthetische Daten",
@@ -432,6 +466,7 @@
     "login": "Anmelden",
     "register": "Konto erstellen",
     "account": "Kontoeinstellungen",
-    "offline": "Offline"
+    "offline": "Offline",
+    "anomalies": "Auffälligkeiten"
   }
 }

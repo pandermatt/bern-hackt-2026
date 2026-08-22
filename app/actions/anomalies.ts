@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -9,10 +9,14 @@ import {
   transactions,
   type AnomalyRun,
   type NewAnomaly,
+  type Transaction,
 } from "@/db/schema";
 import {
   analyzeTransactionAnomalies,
+  attentionFor,
+  emojiFor,
   type AnomalyInsight,
+  type AnomalySeverity,
 } from "@/lib/anomaly-engine";
 import { analyzeTransactionInsights } from "@/lib/llm/analyze-insights";
 import { getCurrentUser } from "@/lib/auth";
@@ -307,4 +311,273 @@ export async function getStoredAnomaliesForPage(
   }
 
   return [...byInsight.values()];
+}
+
+/** One kind of finding, and how much of it there is. */
+export type AnomalyGroup = {
+  ruleId: string;
+  title: string;
+  emoji: string;
+  severity: AnomalySeverity;
+  /** The most recent finding's own words — see the note in `getAnomalyOverview`. */
+  description: string;
+  /** Distinct transactions, and only ones that still exist. */
+  transactionCount: number;
+  latestOn: string | null;
+};
+
+export type AnomalyOverview = {
+  action: AnomalyGroup[];
+  context: AnomalyGroup[];
+  hasCompletedScan: boolean;
+  running: boolean;
+  /**
+   * Findings exist, but every one of them points at a transaction that is gone
+   * — the statements were re-imported after the last scan, and ids are reissued
+   * on the way in. Without this the page would report "nothing looks off",
+   * which is the one wrong answer: nothing was checked, and the state is one
+   * re-scan away from being right.
+   */
+  stale: boolean;
+};
+
+const SEVERITY_ORDER: Record<AnomalySeverity, number> = { high: 3, medium: 2, low: 1 };
+
+/**
+ * Every finding this account has, folded into one row per kind.
+ *
+ * No arguments, and the account comes from the session — every export of a
+ * `"use server"` module is an endpoint the browser can call with arguments of
+ * its choosing, so a `userId` parameter here would be a door onto anyone's
+ * findings.
+ *
+ * Three things this deliberately does not do:
+ *
+ *  - It does not reuse the `ruleId|description` regrouping above. That key
+ *    collides by design — `UNUSUALLY_LARGE_TRANSACTION` describes itself with
+ *    the amount alone, so two separate CHF 1'766.50 purchases months apart
+ *    would fold into one "finding" and the count would understate. Counting
+ *    distinct transactions needs no such key.
+ *  - It does not trust `anomalies.transactionId`. That column is deliberately
+ *    not a foreign key (a scan is a snapshot), so findings outlive the rows
+ *    they point at. Counting them raw would advertise five transactions and
+ *    then show none, so the count is an intersection with live rows and a group
+ *    with nothing left is dropped entirely rather than rendered as a dead link.
+ *  - It does not leave the order to SQLite. There is no `ORDER BY` on the read,
+ *    so without a total sort — tie-broken on `ruleId` — the page would
+ *    reshuffle itself between renders.
+ */
+export async function getAnomalyOverview(): Promise<AnomalyOverview> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return {
+      action: [],
+      context: [],
+      hasCompletedScan: false,
+      running: false,
+      stale: false,
+    };
+  }
+
+  const scan = await getAnomalyScanState();
+
+  const [rows, live] = await Promise.all([
+    db
+      .select()
+      .from(anomalies)
+      .where(eq(anomalies.userId, user.id)),
+    db
+      .select({ id: transactions.id, bookedOn: transactions.bookedOn })
+      .from(transactions)
+      .where(eq(transactions.userId, user.id)),
+  ]);
+
+  const bookedOn = new Map(live.map((t) => [t.id, t.bookedOn]));
+
+  type Bucket = {
+    group: AnomalyGroup;
+    ids: Set<number>;
+    /** Tracks which description belongs to `latestOn`. */
+    latestSeen: string | null;
+  };
+  const buckets = new Map<string, Bucket>();
+
+  for (const row of rows) {
+    const day = bookedOn.get(row.transactionId);
+    // A finding whose transaction is gone — a re-import since the last scan.
+    if (day === undefined) continue;
+
+    let bucket = buckets.get(row.ruleId);
+    if (!bucket) {
+      bucket = {
+        group: {
+          ruleId: row.ruleId,
+          title: row.title,
+          emoji: row.emoji || emojiFor(row.ruleId),
+          severity: row.severity,
+          description: row.description,
+          transactionCount: 0,
+          latestOn: null,
+        },
+        ids: new Set(),
+        latestSeen: null,
+      };
+      buckets.set(row.ruleId, bucket);
+    }
+
+    bucket.ids.add(row.transactionId);
+    if (SEVERITY_ORDER[row.severity] > SEVERITY_ORDER[bucket.group.severity]) {
+      bucket.group.severity = row.severity;
+    }
+    // The newest finding's prose, because for the absence-shaped rules the
+    // description is the only place the finding actually is: a missed salary
+    // links to the last salary that *did* arrive, which explains nothing on its
+    // own.
+    if (bucket.latestSeen === null || day > bucket.latestSeen) {
+      bucket.latestSeen = day;
+      bucket.group.latestOn = day;
+      bucket.group.description = row.description;
+    }
+  }
+
+  const groups: AnomalyGroup[] = [];
+  for (const bucket of buckets.values()) {
+    bucket.group.transactionCount = bucket.ids.size;
+    groups.push(bucket.group);
+  }
+
+  const byLatest = (a: AnomalyGroup, b: AnomalyGroup) =>
+    (b.latestOn ?? "").localeCompare(a.latestOn ?? "") ||
+    b.transactionCount - a.transactionCount ||
+    a.ruleId.localeCompare(b.ruleId);
+
+  return {
+    // Severity leads here because it is the engine's own claim about urgency,
+    // and it is the order the ledger badges already use. It is close to a
+    // per-rule constant though, so recency is the real discriminator.
+    action: groups
+      .filter((g) => attentionFor(g.ruleId) === "action")
+      .sort(
+        (a, b) =>
+          SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity] || byLatest(a, b),
+      ),
+    // Severity is a dead key in this column — nearly everything here is "low" —
+    // so it reads as a feed of what is new.
+    context: groups.filter((g) => attentionFor(g.ruleId) === "context").sort(byLatest),
+    ...scan,
+    stale: rows.length > 0 && groups.length === 0,
+  };
+}
+
+/** The same shape the ledger's `?anomaly=` filter accepts. */
+const RULE_ID_PATTERN = /^[A-Z_]{1,60}$/;
+
+export type AnomalyRuleDetail = {
+  ruleId: string;
+  title: string;
+  emoji: string;
+  severity: AnomalySeverity;
+  /**
+   * The one finding that named transaction belongs to — the four charges of a
+   * single duplicate billing, rather than every duplicate of the year. `null`
+   * when no transaction was named, or when the one named is gone.
+   */
+  focus: { description: string; rows: Transaction[]; totalMinor: number } | null;
+  /** Everything else this rule flagged, newest first. */
+  others: Transaction[];
+  transactionCount: number;
+};
+
+/**
+ * One rule, everything it found, and which of it the reader asked about.
+ *
+ * `ruleId` is a parameter where `userId` never could be: it only narrows a set
+ * already scoped to the session, so the worst a caller can do by choosing it is
+ * look at their own data differently.
+ *
+ * On identifying "this finding": a finding has no id of its own — its identity
+ * is the composite of rule and description, which collides for the rules whose
+ * description omits the date (`UNUSUALLY_LARGE_TRANSACTION` describes itself
+ * with the amount alone, so two purchases months apart read alike). This never
+ * needs to solve that in general, only to answer "which finding is the one
+ * covering this transaction", which resolves exactly: take that row's
+ * description, and the finding is every row sharing it. Where the composite is
+ * genuinely ambiguous the two findings read as one thing to a person anyway.
+ */
+export async function getAnomalyRuleDetail(
+  ruleId: string,
+  focusTransactionId?: number,
+): Promise<AnomalyRuleDetail | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  // Checked before the query, so a hand-edited URL is a 404 rather than a scan.
+  if (!RULE_ID_PATTERN.test(ruleId)) return null;
+
+  const found = await db
+    .select({
+      transactionId: anomalies.transactionId,
+      description: anomalies.description,
+      title: anomalies.title,
+      emoji: anomalies.emoji,
+      severity: anomalies.severity,
+    })
+    .from(anomalies)
+    .where(and(eq(anomalies.userId, user.id), eq(anomalies.ruleId, ruleId)));
+
+  if (found.length === 0) return null;
+
+  // Only the rows the findings point at, and only ones that still exist — a
+  // scan is a snapshot, so findings outlive a re-import.
+  const live = await db
+    .select()
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, user.id),
+        inArray(
+          transactions.id,
+          found.map((f) => f.transactionId),
+        ),
+      ),
+    )
+    .orderBy(desc(transactions.bookedOn), asc(transactions.id));
+
+  if (live.length === 0) return null;
+
+  const liveIds = new Set(live.map((t) => t.id));
+  const usable = found.filter((f) => liveIds.has(f.transactionId));
+
+  const focusDescription =
+    focusTransactionId === undefined
+      ? null
+      : (usable.find((f) => f.transactionId === focusTransactionId)?.description ?? null);
+
+  const focusIds = new Set(
+    focusDescription === null
+      ? []
+      : usable.filter((f) => f.description === focusDescription).map((f) => f.transactionId),
+  );
+
+  const focusRows = live.filter((t) => focusIds.has(t.id));
+  const others = live.filter((t) => !focusIds.has(t.id));
+
+  return {
+    ruleId,
+    title: usable[0]?.title ?? ruleId,
+    emoji: usable[0]?.emoji || emojiFor(ruleId),
+    severity: usable.reduce<AnomalySeverity>(
+      (worst, f) => (SEVERITY_ORDER[f.severity] > SEVERITY_ORDER[worst] ? f.severity : worst),
+      "low",
+    ),
+    focus:
+      focusDescription === null || focusRows.length === 0
+        ? null
+        : {
+            description: focusDescription,
+            rows: focusRows,
+            totalMinor: focusRows.reduce((sum, t) => sum + Math.abs(t.amountMinor), 0),
+          },
+    others,
+    transactionCount: live.length,
+  };
 }

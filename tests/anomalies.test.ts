@@ -20,6 +20,8 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
 }));
 
 const {
+  getAnomalyOverview,
+  getAnomalyRuleDetail,
   getAnomalyScanState,
   getAnomalyScanStatus,
   getStoredAnomaliesForPage,
@@ -205,6 +207,248 @@ describe("scan state (drives the dashboard prompt)", () => {
   });
 });
 
+describe("the anomaly overview", () => {
+  /** A transaction to hang findings on, returned by id. */
+  async function txn(userId: number, key: string, bookedOn: string) {
+    const [inserted] = await db
+      .insert(transactions)
+      .values({
+        userId,
+        externalId: key,
+        bookedOn,
+        kind: "expense",
+        amountMinor: -5000,
+        currency: "CHF",
+        originalAmountMinor: 5000,
+        account: "Privatkonto",
+        merchant: "Kantine AG",
+        category: "Food & Drink",
+        description: key,
+      })
+      .returning();
+    return inserted.id;
+  }
+
+  async function finding(
+    userId: number,
+    transactionId: number,
+    ruleId: string,
+    overrides: Partial<{ severity: "low" | "medium" | "high"; description: string }> = {},
+  ) {
+    await db.insert(anomalies).values({
+      userId,
+      transactionId,
+      ruleId,
+      severity: overrides.severity ?? "medium",
+      title: `${ruleId} title`,
+      description: overrides.description ?? `${ruleId} description`,
+      icon: "lucide:arrow-up",
+      emoji: "🔺",
+      metrics: "{}",
+    });
+  }
+
+  it("counts distinct transactions, not stored rows", async () => {
+    const one = await txn(alice.id, "a-1", "2025-03-01");
+    // Two findings of the same rule on one transaction is one transaction.
+    await finding(alice.id, one, "REPEAT_CHARGE");
+    await finding(alice.id, one, "REPEAT_CHARGE", { description: "another" });
+
+    const overview = await getAnomalyOverview();
+    const group = overview.action.find((g) => g.ruleId === "REPEAT_CHARGE");
+    expect(group?.transactionCount).toBe(1);
+  });
+
+  it("splits findings into what needs acting on and what does not", async () => {
+    const one = await txn(alice.id, "a-1", "2025-03-01");
+    await finding(alice.id, one, "REPEAT_CHARGE");
+    await finding(alice.id, one, "SAVINGS_RATE_CHANGE");
+
+    const overview = await getAnomalyOverview();
+    expect(overview.action.map((g) => g.ruleId)).toEqual(["REPEAT_CHARGE"]);
+    expect(overview.context.map((g) => g.ruleId)).toEqual(["SAVINGS_RATE_CHANGE"]);
+  });
+
+  it("reports the group's worst severity and most recent date", async () => {
+    const older = await txn(alice.id, "a-1", "2025-01-01");
+    const newer = await txn(alice.id, "a-2", "2025-09-30");
+    await finding(alice.id, older, "REPEAT_CHARGE", { severity: "low" });
+    await finding(alice.id, newer, "REPEAT_CHARGE", {
+      severity: "high",
+      description: "the recent one",
+    });
+
+    const group = (await getAnomalyOverview()).action[0];
+    expect(group.severity).toBe("high");
+    expect(group.latestOn).toBe("2025-09-30");
+    // The newest finding's own words — for the absence-shaped rules that prose
+    // is the only place the finding actually is.
+    expect(group.description).toBe("the recent one");
+  });
+
+  it("drops a finding whose transaction no longer exists", async () => {
+    const live = await txn(alice.id, "a-1", "2025-03-01");
+    await finding(alice.id, live, "REPEAT_CHARGE");
+    // A scan is a snapshot and `transactionId` is deliberately not a foreign
+    // key, so findings outlive a re-import. Counting them would advertise rows
+    // the ledger cannot show.
+    await finding(alice.id, 999_999, "REPEAT_CHARGE");
+    await finding(alice.id, 999_998, "MISSING_EXPECTED_INCOME");
+
+    const overview = await getAnomalyOverview();
+    expect(overview.action.find((g) => g.ruleId === "REPEAT_CHARGE")?.transactionCount).toBe(1);
+    // Nothing live at all, so the group is gone rather than a dead link.
+    expect(overview.action.some((g) => g.ruleId === "MISSING_EXPECTED_INCOME")).toBe(false);
+    // Something survived, so this is a real result rather than a stale one.
+    expect(overview.stale).toBe(false);
+  });
+
+  it("calls out findings left behind by a re-import instead of reporting all clear", async () => {
+    // Every finding pointing at a vanished transaction is what a re-seed leaves:
+    // ids are reissued, so the old ones match nothing. Saying "nothing looks
+    // off" there would be the one wrong answer — nothing was checked.
+    await finding(alice.id, 999_999, "REPEAT_CHARGE");
+
+    const overview = await getAnomalyOverview();
+    expect(overview.action).toEqual([]);
+    expect(overview.context).toEqual([]);
+    expect(overview.stale).toBe(true);
+  });
+
+  it("orders deterministically, breaking ties on the rule id", async () => {
+    // Same severity, same date — only the tiebreak can decide, and without one
+    // the page would reshuffle itself between renders.
+    const one = await txn(alice.id, "a-1", "2025-03-01");
+    for (const rule of ["SUBSCRIPTION_ACCUMULATION", "INCOME_DEVIATION", "REPEAT_CHARGE"]) {
+      await finding(alice.id, one, rule, { severity: "medium" });
+    }
+
+    const first = (await getAnomalyOverview()).action.map((g) => g.ruleId);
+    const second = (await getAnomalyOverview()).action.map((g) => g.ruleId);
+    expect(first).toEqual(["INCOME_DEVIATION", "REPEAT_CHARGE", "SUBSCRIPTION_ACCUMULATION"]);
+    expect(second).toEqual(first);
+  });
+
+  it("puts the more urgent finding first, then the more recent one", async () => {
+    const older = await txn(alice.id, "a-1", "2025-01-01");
+    const newer = await txn(alice.id, "a-2", "2025-09-30");
+    await finding(alice.id, older, "REPEAT_CHARGE", { severity: "high" });
+    await finding(alice.id, newer, "INCOME_DEVIATION", { severity: "medium" });
+    await finding(alice.id, newer, "SUBSCRIPTION_ACCUMULATION", { severity: "medium" });
+
+    const order = (await getAnomalyOverview()).action.map((g) => g.ruleId);
+    expect(order[0]).toBe("REPEAT_CHARGE");
+  });
+
+  it("reports an un-scanned account as empty rather than clean", async () => {
+    const overview = await getAnomalyOverview();
+    expect(overview.action).toEqual([]);
+    expect(overview.context).toEqual([]);
+    expect(overview.hasCompletedScan).toBe(false);
+  });
+});
+
+describe("one rule's detail", () => {
+  async function txn(userId: number, key: string, bookedOn: string) {
+    const [inserted] = await db
+      .insert(transactions)
+      .values({
+        userId,
+        externalId: key,
+        bookedOn,
+        kind: "expense",
+        amountMinor: -5000,
+        currency: "CHF",
+        originalAmountMinor: 5000,
+        account: "Privatkonto",
+        merchant: "SWISS",
+        category: "Travel",
+        description: key,
+      })
+      .returning();
+    return inserted.id;
+  }
+
+  async function finding(
+    userId: number,
+    transactionId: number,
+    ruleId: string,
+    description: string,
+  ) {
+    await db.insert(anomalies).values({
+      userId,
+      transactionId,
+      ruleId,
+      severity: "medium",
+      title: `${ruleId} title`,
+      description,
+      icon: "lucide:copy",
+      emoji: "👯",
+      metrics: "{}",
+    });
+  }
+
+  it("returns nothing for a rule with no findings", async () => {
+    expect(await getAnomalyRuleDetail("REPEAT_CHARGE")).toBeNull();
+  });
+
+  it("rejects a malformed rule id without going near the database", async () => {
+    for (const bad of ["lowercase", "with spaces", "x".repeat(80), ""]) {
+      expect(await getAnomalyRuleDetail(bad)).toBeNull();
+    }
+  });
+
+  it("splits the finding you asked about from the rest of its kind", async () => {
+    // Two separate duplicate-charge findings, each covering two transactions.
+    const a1 = await txn(alice.id, "a-1", "2025-09-18");
+    const a2 = await txn(alice.id, "a-2", "2025-09-18");
+    const b1 = await txn(alice.id, "b-1", "2025-04-19");
+    const b2 = await txn(alice.id, "b-2", "2025-04-19");
+    for (const id of [a1, a2]) await finding(alice.id, id, "REPEAT_CHARGE", "four times in September");
+    for (const id of [b1, b2]) await finding(alice.id, id, "REPEAT_CHARGE", "twice in April");
+
+    const detail = await getAnomalyRuleDetail("REPEAT_CHARGE", a1);
+    expect(detail?.focus?.description).toBe("four times in September");
+    expect(detail?.focus?.rows.map((r) => r.id).sort()).toEqual([a1, a2].sort());
+    expect(detail?.focus?.totalMinor).toBe(10000);
+    expect(detail?.others.map((r) => r.id).sort()).toEqual([b1, b2].sort());
+    expect(detail?.transactionCount).toBe(4);
+  });
+
+  it("puts everything under 'others' when no transaction was named", async () => {
+    const one = await txn(alice.id, "a-1", "2025-09-18");
+    await finding(alice.id, one, "REPEAT_CHARGE", "once");
+
+    const detail = await getAnomalyRuleDetail("REPEAT_CHARGE");
+    expect(detail?.focus).toBeNull();
+    expect(detail?.others).toHaveLength(1);
+  });
+
+  it("degrades to no focus when the named transaction is gone", async () => {
+    // A shared link that outlived a re-import still shows the rule.
+    const one = await txn(alice.id, "a-1", "2025-09-18");
+    await finding(alice.id, one, "REPEAT_CHARGE", "once");
+
+    const detail = await getAnomalyRuleDetail("REPEAT_CHARGE", 999_999);
+    expect(detail?.focus).toBeNull();
+    expect(detail?.others).toHaveLength(1);
+  });
+
+  it("ignores findings whose transactions no longer exist", async () => {
+    const live = await txn(alice.id, "a-1", "2025-09-18");
+    await finding(alice.id, live, "REPEAT_CHARGE", "once");
+    await finding(alice.id, 999_998, "REPEAT_CHARGE", "orphaned");
+
+    const detail = await getAnomalyRuleDetail("REPEAT_CHARGE");
+    expect(detail?.transactionCount).toBe(1);
+  });
+
+  it("returns nothing when every finding for the rule is orphaned", async () => {
+    await finding(alice.id, 999_998, "REPEAT_CHARGE", "orphaned");
+    expect(await getAnomalyRuleDetail("REPEAT_CHARGE")).toBeNull();
+  });
+});
+
 describe("ownership", () => {
   it("never returns another account's findings", async () => {
     await db.insert(transactions).values(history(bob.id, "b"));
@@ -219,12 +463,26 @@ describe("ownership", () => {
     // Alice asking for Bob's transaction ids gets nothing back.
     signedIn.user = alice;
     expect(await getStoredAnomaliesForPage(bobsIds)).toEqual([]);
+
+    // And Bob's findings never reach Alice's overview or rule pages either.
+    const alicesOverview = await getAnomalyOverview();
+    expect(alicesOverview.action).toEqual([]);
+    expect(alicesOverview.context).toEqual([]);
+    expect(await getAnomalyRuleDetail("AMOUNT_SPIKE")).toBeNull();
   });
 
   it("returns nothing at all when signed out", async () => {
     signedIn.user = null;
     expect(await getAnomalyScanStatus()).toBeNull();
     expect(await getStoredAnomaliesForPage([1, 2, 3])).toEqual([]);
+    expect(await getAnomalyRuleDetail("REPEAT_CHARGE")).toBeNull();
+    expect(await getAnomalyOverview()).toEqual({
+      action: [],
+      context: [],
+      hasCompletedScan: false,
+      running: false,
+      stale: false,
+    });
     expect(await startAnomalyScan()).toEqual({
       ok: false,
       error: "Your session expired. Sign in again.",
