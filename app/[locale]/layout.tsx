@@ -170,10 +170,11 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[lo
           identically in light mode while still following the dark theme. A
           literal here would keep the page white on a dark ground.
 
-          `app-shell:pb-28` reserves the height of the fixed tab bar. The bar
-          floats out of the flow, so without this the last row of every page
-          ends up behind the glass. */}
-      <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased app-shell:pb-28">
+          `app-shell:pb-30` reserves the height of the fixed tab bar plus the
+          gap it floats in. The bar floats out of the flow, so without this the
+          last row of every page ends up behind the glass — and the number has
+          to follow the bar's padding in `components/tab-bar.tsx`. */}
+      <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased app-shell:pb-30">
         <script dangerouslySetInnerHTML={{ __html: STANDALONE_SCRIPT }} />
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>

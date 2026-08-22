@@ -94,10 +94,11 @@ export function ChatSidebar() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          /* `app-shell:bottom-28` lifts it clear of the installed app's tab
+          /* `app-shell:bottom-30` lifts it clear of the installed app's tab
              bar, which is fixed to the same edge on the same layer — at
-             `bottom-5` the launcher sits behind the glass. */
-          className="fixed right-5 bottom-5 z-40 inline-flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-lg transition-all duration-200 animate-in fade-in zoom-in-75 app-shell:bottom-28 hover:scale-105 hover:bg-accent-hover"
+             `bottom-5` the launcher sits behind the glass. Same number as the
+             body's reserved padding in the root layout. */
+          className="fixed right-5 bottom-5 z-40 inline-flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-lg transition-all duration-200 animate-in fade-in zoom-in-75 app-shell:bottom-30 hover:scale-105 hover:bg-accent-hover"
           aria-label={t("openLabel")}
         >
           <MessageCircle className="size-5" />

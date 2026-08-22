@@ -37,13 +37,20 @@ export function TabBar() {
        * Below the header's `z-50` and above the page, on the same layer as the
        * chat launcher — which is lifted clear of this bar in `chat-sidebar.tsx`.
        *
+       * iOS floats its own tab bar clear of every edge by about the same
+       * amount on all three sides, which is what makes it read as an object
+       * resting over the page rather than as a strip welded to the bottom of
+       * it. `px-5` and a 1.25rem floor are that same 20px on the sides and
+       * underneath — the earlier 12px was close enough to the edge that the
+       * capsule looked like it was straining against the screen.
+       *
        * `env(safe-area-inset-bottom)` is 0 today: without `viewport-fit=cover`
        * iOS already insets the web view above the home indicator, so there is
        * nothing to clear. It is written anyway so the bar stays correct if
        * cover is ever turned on, rather than sitting under the indicator until
        * someone notices.
        */
-      className="fixed inset-x-0 bottom-0 z-40 hidden px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] app-shell:block"
+      className="fixed inset-x-0 bottom-0 z-40 hidden px-5 pt-2 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] app-shell:block"
     >
       {/*
        * A full capsule, not a rounded rectangle. `rounded-[26px]` left a flat
