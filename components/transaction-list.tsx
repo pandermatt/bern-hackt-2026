@@ -1,14 +1,12 @@
 import { useTranslations } from "next-intl";
 
 import { EmptyState } from "@/components/empty-state";
+import { LEDGER_ANCHOR_ID } from "@/components/ledger-anchor";
 import { LedgerChunk } from "@/components/ledger-chunk";
 import { TransactionFeed } from "@/components/transaction-feed";
 import type { Transaction } from "@/db/schema";
 import type { AnomalyInsight } from "@/lib/anomaly-engine";
 import type { MonthTotal } from "@/lib/insights";
-
-/** The id the ledger carries, so a filter change can scroll back to it. */
-export const LEDGER_ANCHOR_ID = "transactions";
 
 /**
  * The ledger.

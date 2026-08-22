@@ -191,7 +191,10 @@
     "all": "All transactions",
     "credits": "Credits (money in)",
     "debits": "Debits (money out)",
-    "clear": "Clear"
+    "clear": "Clear",
+    "view": "View",
+    "viewList": "List",
+    "viewCalendar": "Calendar"
   },
   "Ledger": {
     "sectionLabel": "Transactions",
@@ -572,5 +575,37 @@
     "offline": "Offline",
     "anomalies": "Anomalies",
     "budget": "Budget"
+  },
+  "Weekdays": {
+    "short1": "Mon",
+    "short2": "Tue",
+    "short3": "Wed",
+    "short4": "Thu",
+    "short5": "Fri",
+    "short6": "Sat",
+    "short7": "Sun",
+    "long1": "Monday",
+    "long2": "Tuesday",
+    "long3": "Wednesday",
+    "long4": "Thursday",
+    "long5": "Friday",
+    "long6": "Saturday",
+    "long7": "Sunday"
+  },
+  "Calendar": {
+    "sectionLabel": "Transactions by day",
+    "dayLabel": "{date}, {count, plural, one {# transaction} other {# transactions}}, {moneyOut} out, {moneyIn} in. {finding}",
+    "kindNone": "Nothing flagged",
+    "kindInfo": "Worth noting",
+    "kindWarning": "Heads-up",
+    "kindAlert": "Alert",
+    "legendOut": "Money out, coloured by category",
+    "legendIn": "Money in",
+    "tableCaption": "Every day this month with transactions",
+    "colDate": "Date",
+    "colCount": "Transactions",
+    "colIn": "Money in",
+    "colOut": "Money out",
+    "colFinding": "Finding"
   }
 }

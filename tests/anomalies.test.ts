@@ -20,6 +20,7 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
 }));
 
 const {
+  getAnomalyKindByTransaction,
   getAnomalyOverview,
   getAnomalyRuleDetail,
   getAnomalyScanState,
@@ -555,6 +556,7 @@ describe("ownership", () => {
     expect(await getAnomalyScanStatus()).toBeNull();
     expect(await getStoredAnomaliesForPage([1, 2, 3])).toEqual([]);
     expect(await getAnomalyRuleDetail("REPEAT_CHARGE")).toBeNull();
+    expect(await getAnomalyKindByTransaction()).toEqual(new Map());
     expect(await getAnomalyOverview()).toEqual({
       action: [],
       context: [],
@@ -566,5 +568,47 @@ describe("ownership", () => {
       ok: false,
       error: "Your session expired. Sign in again.",
     });
+  });
+});
+
+/** The calendar's read: which days to tint, and how loudly. */
+describe("getAnomalyKindByTransaction", () => {
+  /** A finding on `transactionId`, written straight in — the classification is
+   * what is under test here, not the engine that produced it. */
+  async function finding(userId: number, transactionId: number, kind: "info" | "warning" | "alert") {
+    await db.insert(anomalies).values({
+      userId,
+      transactionId,
+      ruleId: "TEST",
+      severity: "medium",
+      kind,
+      title: "Test",
+      description: `A ${kind}`,
+      icon: "lucide:store",
+    });
+  }
+
+  it("keeps the most concerning kind when a row carries several findings", async () => {
+    await finding(alice.id, 42, "info");
+    await finding(alice.id, 42, "alert");
+    await finding(alice.id, 42, "warning");
+
+    expect(await getAnomalyKindByTransaction()).toEqual(new Map([[42, "alert"]]));
+  });
+
+  it("is insensitive to the order the rows come back in", async () => {
+    await finding(alice.id, 7, "alert");
+    await finding(alice.id, 7, "info");
+
+    expect((await getAnomalyKindByTransaction()).get(7)).toBe("alert");
+  });
+
+  it("never reaches another account's findings", async () => {
+    await finding(bob.id, 99, "alert");
+    await finding(alice.id, 1, "info");
+
+    const mine = await getAnomalyKindByTransaction();
+    expect(mine.has(99)).toBe(false);
+    expect(mine.get(1)).toBe("info");
   });
 });

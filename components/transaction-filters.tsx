@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronDown, X } from "lucide-react";
+import { CalendarDays, ChevronDown, List, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useTransition, type ReactNode } from "react";
 
 import { useRouter } from "@/i18n/navigation";
+import type { TransactionView } from "@/app/actions/transactions";
 import { formatMoney, type Facets, type Filters } from "@/lib/insights";
 
 /**
@@ -27,6 +28,13 @@ import { formatMoney, type Facets, type Filters } from "@/lib/insights";
  * Filter state lives in the URL rather than in React state, so a view is
  * shareable, bookmarkable and survives a reload. Reading `useSearchParams`
  * means the caller has to wrap this in a `<Suspense>` boundary.
+ *
+ * The list/calendar switch rides along here rather than in a component of its
+ * own, because `update` is already the one place this app writes a transaction
+ * view into the URL and a second writer would be a second copy of it. `view` is
+ * not a filter, though, and the two places that treat every param as one — the
+ * **Clear** button and the test that decides whether to show it — have to say
+ * so explicitly.
  */
 
 /**
@@ -49,6 +57,13 @@ const DIRECTIONS = [
   { value: "", key: "all" },
   { value: "income", key: "credits" },
   { value: "expense", key: "debits" },
+] as const;
+
+/** The two faces of the same set of transactions. Query values are fixed in
+ * code, like the directions above: the URL must not change with the language. */
+const VIEWS = [
+  { value: "list", key: "viewList", Icon: List },
+  { value: "calendar", key: "viewCalendar", Icon: CalendarDays },
 ] as const;
 
 /**
@@ -110,8 +125,13 @@ export function TransactionFilters({
   }
 
   // Counts filters set from anywhere, the breakdown links included — those have
-  // no control here, so Clear is the only way back from one.
-  const active = searchParams.toString().length > 0;
+  // no control here, so Clear is the only way back from one. `view` is excluded
+  // deliberately: it narrows nothing, so a calendar on an unfiltered account
+  // would otherwise offer a Clear button with nothing to clear.
+  const active = [...searchParams.keys()].some((key) => key !== "view");
+
+  const view: TransactionView =
+    searchParams.get("view") === "calendar" ? "calendar" : "list";
 
   /** "Privatkonto · CHF 12’450.30", with a real minus for a negative balance. */
   function accountLabel(account: string): string {
@@ -173,11 +193,53 @@ export function TransactionFilters({
         </button>
       )}
 
+      {/* Not a `<select>`: two options with icons are read at a glance, and the
+          pair doubles as a picture of what each view is. `aria-pressed` rather
+          than radio inputs, because these are buttons that act rather than a
+          value being edited. */}
+      <div className="min-w-0 flex-1 sm:flex-none">
+        <span className="mb-1.5 block pl-1 text-[12px] font-medium text-text-muted">
+          {t("view")}
+        </span>
+        <div
+          role="group"
+          aria-label={t("view")}
+          className="inline-flex h-11 items-center rounded-full border border-line-strong bg-surface p-1 sm:h-10"
+        >
+          {VIEWS.map(({ value, key, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={view === value}
+              onClick={() => update("view", value === "list" ? "" : value)}
+              /* `list` writes an empty value, which `update` turns into a
+                 delete — the default view leaves no trace in the URL. */
+              className={`flex h-full cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[14px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                view === value
+                  ? "bg-accent text-primary-foreground"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >
+              <Icon aria-hidden className="size-4 shrink-0" />
+              {t(key)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {active && (
         <button
           type="button"
+          /* Clears the filters and keeps the view. Dropping back to a bare `/`
+             would silently send a reader who cleared a merchant filter from the
+             calendar back to the ledger. */
           onClick={() =>
-            startTransition(() => router.replace("/", { scroll: false }))
+            startTransition(() =>
+              router.replace(
+                { pathname: "/", query: view === "list" ? {} : { view } },
+                { scroll: false },
+              ),
+            )
           }
           className="h-11 shrink-0 cursor-pointer rounded-full border border-line-strong bg-surface px-4 text-[14px] font-medium text-text-muted transition-colors hover:border-danger hover:text-danger sm:h-10"
         >

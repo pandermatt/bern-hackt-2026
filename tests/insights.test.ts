@@ -29,6 +29,10 @@ import {
   CATEGORY_SLOTS,
   FOLDED_MERCHANTS,
   MERCHANT_SEGMENTS,
+  MAX_DAY_DOTS,
+  calendarMonths,
+  daysInMonth,
+  firstWeekdayOf,
   type Filters,
 } from "@/lib/insights";
 
@@ -1037,5 +1041,122 @@ describe("categorySpendPeriods", () => {
     expect(result.month.categories.map((c) => c.key)).toEqual([
       "G", "F", "E", "D", "C", "B", "A",
     ]);
+  });
+});
+
+describe("daysInMonth / firstWeekdayOf", () => {
+  /*
+   * These two exist so the calendar can lay out a month without constructing a
+   * `Date` — a booking date is a date, not an instant, and one `new Date()` in
+   * this file shifts the whole grid by a day for anyone west of UTC. `Date` is
+   * fine as the *oracle* in a test, where the timezone is pinned to UTC.
+   */
+  it("agrees with the platform calendar over a century", () => {
+    const wrong: string[] = [];
+
+    for (let year = 1999; year <= 2100; year += 1) {
+      for (let m = 1; m <= 12; m += 1) {
+        const month = `${year}-${String(m).padStart(2, "0")}`;
+        const expectedDays = new Date(Date.UTC(year, m, 0)).getUTCDate();
+        // Monday-indexed, the way a Swiss calendar prints a week.
+        const expectedWeekday = (new Date(Date.UTC(year, m - 1, 1)).getUTCDay() + 6) % 7;
+
+        if (daysInMonth(month) !== expectedDays) wrong.push(`${month} length`);
+        if (firstWeekdayOf(month) !== expectedWeekday) wrong.push(`${month} weekday`);
+      }
+    }
+
+    expect(wrong).toEqual([]);
+  });
+
+  it("knows the century leap rule, not just the four-year one", () => {
+    expect(daysInMonth("2000-02")).toBe(29);
+    expect(daysInMonth("1900-02")).toBe(28);
+    expect(daysInMonth("2100-02")).toBe(28);
+    expect(daysInMonth("2024-02")).toBe(29);
+  });
+});
+
+describe("calendarMonths", () => {
+  const slots = new Map([["Food & Drink", 3]]);
+
+  it("comes back newest month first with days ascending inside each", () => {
+    // The order the database hands over: desc(bookedOn), asc(id).
+    const months = calendarMonths(
+      [
+        row({ bookedOn: "2025-04-02" }),
+        row({ bookedOn: "2025-04-01" }),
+        row({ bookedOn: "2025-03-31" }),
+        row({ bookedOn: "2025-03-01" }),
+      ],
+      slots,
+      new Map(),
+    );
+
+    expect(months.map((m) => m.month)).toEqual(["2025-04", "2025-03"]);
+    expect(months[0].days.map((d) => d.date)).toEqual(["2025-04-01", "2025-04-02"]);
+    expect(months[1].days.map((d) => d.date)).toEqual(["2025-03-01", "2025-03-31"]);
+  });
+
+  it("skips transfers in the money but still gives them a dot", () => {
+    const [month] = calendarMonths(
+      [
+        row({ bookedOn: "2025-03-14", kind: "income", amountMinor: 5000 }),
+        row({ bookedOn: "2025-03-14", amountMinor: -1200 }),
+        row({ bookedOn: "2025-03-14", kind: "transfer", amountMinor: -9999 }),
+      ],
+      slots,
+      new Map(),
+    );
+
+    const [day] = month.days;
+    expect(day.income).toBe(5000);
+    expect(day.expense).toBe(1200);
+    expect(day.count).toBe(3);
+    expect(day.dots.map((d) => d.kind)).toEqual(["income", "expense", "transfer"]);
+  });
+
+  it("caps the dots and counts the rest", () => {
+    const rows = Array.from({ length: MAX_DAY_DOTS + 4 }, () =>
+      row({ bookedOn: "2025-03-14" }),
+    );
+
+    const [day] = calendarMonths(rows, slots, new Map())[0].days;
+    expect(day.dots).toHaveLength(MAX_DAY_DOTS);
+    expect(day.hiddenDots).toBe(4);
+    expect(day.count).toBe(MAX_DAY_DOTS + day.hiddenDots);
+  });
+
+  it("colours a dot by its category's slot, and the tail by the neutral", () => {
+    const [month] = calendarMonths(
+      [row({ category: "Food & Drink" }), row({ category: "Nowhere" })],
+      slots,
+      new Map(),
+    );
+
+    expect(month.days[0].dots.map((d) => d.slot)).toEqual([3, 0]);
+  });
+
+  it("takes the most concerning kind on the day, not the first or the last", () => {
+    const info = row({ bookedOn: "2025-03-14" });
+    const alert = row({ bookedOn: "2025-03-14" });
+    const warning = row({ bookedOn: "2025-03-14" });
+
+    const [month] = calendarMonths(
+      [info, alert, warning],
+      slots,
+      new Map([
+        [info.id, "info" as const],
+        [alert.id, "alert" as const],
+        [warning.id, "warning" as const],
+      ]),
+    );
+
+    expect(month.days[0].kind).toBe("alert");
+  });
+
+  it("leaves a day unflagged when the scan found nothing on it", () => {
+    const [month] = calendarMonths([row()], slots, new Map());
+    expect(month.days[0].kind).toBeNull();
   });
 });

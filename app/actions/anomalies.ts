@@ -15,7 +15,9 @@ import {
   analyzeTransactionAnomalies,
   attentionFor,
   emojiFor,
+  strongestKind,
   type AnomalyInsight,
+  type AnomalyKind,
   type AnomalySeverity,
 } from "@/lib/anomaly-engine";
 import {
@@ -651,4 +653,44 @@ export async function getAnomalyRuleDetail(
     others,
     transactionCount: live.length,
   };
+}
+
+/**
+ * The worst kind flagged against each transaction, for the whole account.
+ *
+ * The calendar's read. Unlike `getStoredAnomaliesForPage` this is not bounded
+ * by a page of ids — a month grid is a summary of every day in it, so there is
+ * no page to bound it by — which is why it selects two columns rather than the
+ * row: one covering scan of `anomalies_user_id_idx`, no metrics blobs parsed,
+ * and nothing but a classification crossing back.
+ *
+ * `kind`, not `severity`. Severity is how far from baseline a number sits; kind
+ * is how much a person should worry, and it is what the ledger's rows and
+ * badges are already coloured by. A day tinted on one axis above a row tinted
+ * on the other would be two classifications of the same event.
+ *
+ * The account is resolved from the session, never from an argument — same
+ * contract as every other export here.
+ */
+export async function getAnomalyKindByTransaction(): Promise<
+  Map<number, AnomalyKind>
+> {
+  const user = await getCurrentUser();
+  if (!user) return new Map();
+
+  const rows = await db
+    .select({
+      transactionId: anomalies.transactionId,
+      kind: anomalies.kind,
+    })
+    .from(anomalies)
+    .where(eq(anomalies.userId, user.id));
+
+  const worst = new Map<number, AnomalyKind>();
+  for (const row of rows) {
+    const seen = worst.get(row.transactionId);
+    worst.set(row.transactionId, seen ? strongestKind(seen, row.kind) : row.kind);
+  }
+
+  return worst;
 }
