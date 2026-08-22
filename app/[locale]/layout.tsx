@@ -1,5 +1,5 @@
 import { hasLocale, NextIntlClientProvider } from "next-intl";
-import { getMessages, setRequestLocale } from "next-intl/server";
+import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import localFont from "next/font/local";
@@ -37,24 +37,33 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-const TITLE = `${site.name} — Personal Finance Insights`;
+export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "Metadata" });
+  const title = `${site.name} — ${t("siteTitle")}`;
+  const description = t("siteDescription");
 
-export const metadata: Metadata = {
-  // Without metadataBase the OG tags emit relative URLs, which every crawler
-  // ignores. `app/opengraph-image.tsx` fills in the image itself.
-  metadataBase: new URL(site.url),
-  title: { default: TITLE, template: `%s — ${site.name}` },
-  description: site.description,
-  applicationName: site.name,
-  openGraph: {
-    type: "website",
-    url: "/",
-    siteName: site.name,
-    title: TITLE,
-    description: site.description,
-  },
-  twitter: { card: "summary_large_image", title: TITLE, description: site.description },
-};
+  return {
+    // Without metadataBase the OG tags emit relative URLs, which every crawler
+    // ignores. `app/[locale]/opengraph-image.tsx` fills in the image itself —
+    // it has to live under the locale segment, see the note in that file.
+    metadataBase: new URL(site.url),
+    title: { default: title, template: `%s — ${site.name}` },
+    description,
+    applicationName: site.name,
+    openGraph: {
+      type: "website",
+      // The card's own language, so `og:locale` is not a claim the copy
+      // contradicts. `localePrefix` is "always", so "/" is never a real page.
+      locale,
+      url: `/${locale}`,
+      siteName: site.name,
+      title,
+      description,
+    },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
 
 /**
  * Next emits the `width=device-width, initial-scale=1` viewport meta on its own,
