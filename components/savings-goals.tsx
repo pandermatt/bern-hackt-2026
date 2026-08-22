@@ -60,10 +60,14 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
       )}
 
       {canAllocate && pots.length > 0 ? (
-        // Keyed on the month: the allocator holds typed-but-unsaved amounts,
-        // and switching months has to start it over.
+        // Keyed on the month *and* on what is already allocated: the allocator
+        // holds typed-but-unsaved amounts, so switching months has to start it
+        // over, and so does anything that moves money outside the allocator
+        // itself — dragging a pot onto another one can change this month's
+        // already-allocated figure for both, and a stale key would leave the
+        // fields showing amounts that no longer match what is actually saved.
         <SavingsAllocator
-          key={month}
+          key={`${month}:${pots.map((pot) => `${pot.id}:${pot.monthMinor}`).join(",")}`}
           month={month}
           surplusMinor={surplus}
           pots={pots}
