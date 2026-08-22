@@ -11,6 +11,7 @@ import {
   type EChartsOption,
 } from "@/components/echart";
 import { formatMoney, type CategoryStack } from "@/lib/insights";
+import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
  * The year in one shape: how the whole range's spending divides between
@@ -31,16 +32,33 @@ const HEIGHT = 320;
  */
 const LABEL_THRESHOLD = 0.04;
 
-function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
+function buildOption(
+  stack: CategoryStack,
+  tokens: ChartTokens,
+  narrow: boolean,
+): EChartsOption {
   return {
     animationDuration: 600,
     legend: {
+      /*
+       * Hidden on a phone. A scrolling legend fits four of the eleven bands per
+       * page, so reading the categories means paging through six screens — an
+       * interaction dead end, and worse than not offering it.
+       *
+       * Nothing is lost. "Where it goes" sits directly below this card and is
+       * the same eleven categories, named, with their amounts and shares, each
+       * wearing the colour its wedge has here — they read from the one slot map
+       * precisely so they cannot disagree. That list, plus the `sr-only` table,
+       * is the relief this palette's sub-3:1 fills are conditional on, and both
+       * are still here.
+       */
+      show: !narrow,
       type: "scroll",
       bottom: 0,
       icon: "roundRect",
       itemWidth: 10,
       itemHeight: 10,
-      itemGap: 14,
+      itemGap: narrow ? 10 : 14,
       textStyle: { color: tokens.textMuted, fontSize: 12 },
       pageIconColor: tokens.textMuted,
       pageIconInactiveColor: tokens.line,
@@ -53,8 +71,13 @@ function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
         // The inner radius is set by the centre label, not by taste: the hole
         // has to be wider than "CHF 92'969.40" renders at 15px mono, or the
         // total sits on top of the ring.
-        radius: ["55%", "74%"] as [string, string],
-        center: ["50%", "45%"] as [string, string],
+        // Outside labels and their leader lines need ~90px of margin per side,
+        // which a ~310px canvas does not have — so on a phone they come off
+        // (see the `label.show` note below), and with the legend gone too the
+        // donut is centred in the whole box rather than sitting above a strip
+        // it no longer needs. The HTML centre overlay tracks this.
+        radius: (narrow ? ["57%", "78%"] : ["55%", "74%"]) as [string, string],
+        center: (narrow ? ["50%", "50%"] : ["50%", "45%"]) as [string, string],
         // Wedges are drawn in data order, which is rank order, so the pie and
         // the list below it run in the same sequence.
         // The requested separation. It does the same job the 2px surface
@@ -87,7 +110,16 @@ function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
           value: band.total,
           itemStyle: { color: slotColor(tokens, band.slot) },
           label: {
-            show: stack.total > 0 && band.total / stack.total >= LABEL_THRESHOLD,
+            // Dropped wholesale on a narrow screen: there is no margin to place
+            // them in, and they would be drawn past the canvas edge. Nothing is
+            // lost that is not already carried twice — the legend below the
+            // donut names every band, and the `sr-only` table carries the
+            // figures. Those are also the relief this palette's sub-3:1 fills
+            // are conditional on, and both stay.
+            show:
+              !narrow &&
+              stack.total > 0 &&
+              band.total / stack.total >= LABEL_THRESHOLD,
           },
         })),
       },
@@ -97,9 +129,10 @@ function buildOption(stack: CategoryStack, tokens: ChartTokens): EChartsOption {
 
 export function CategoryPie({ stack }: { stack: CategoryStack }) {
   const tokens = useChartTokens();
+  const narrow = useIsNarrow();
   const option = useMemo(
-    () => (tokens ? buildOption(stack, tokens) : null),
-    [stack, tokens],
+    () => (tokens ? buildOption(stack, tokens, narrow) : null),
+    [stack, tokens, narrow],
   );
 
   if (stack.bands.length === 0) return null;
@@ -110,7 +143,7 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
       : "";
 
   return (
-    <section className="card p-5" aria-labelledby="pie-heading">
+    <section className="card p-4 sm:p-5" aria-labelledby="pie-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id="pie-heading" className="text-[15px] font-semibold text-text">
           The whole year
@@ -131,13 +164,13 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
             is in the server-rendered markup, wears the type tokens, and stays
             selectable. `45%` matches the series' own centre. */}
         <div
-          className="pointer-events-none absolute inset-x-0 top-[45%] -translate-y-1/2 text-center"
+          className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center sm:top-[45%]"
           aria-hidden
         >
           <p className="text-[11.5px] font-medium tracking-wide text-text-subtle uppercase">
             Total out
           </p>
-          <p className="font-mono text-[15px] font-medium tabular-nums text-text">
+          <p className="font-mono text-[13px] font-medium tabular-nums text-text sm:text-[15px]">
             {formatMoney(stack.total)}
           </p>
         </div>

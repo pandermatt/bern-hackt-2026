@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
@@ -10,11 +11,19 @@ import { useTransition } from "react";
  * Reads `useSearchParams`, so the caller has to wrap it in a `<Suspense>`
  * boundary; `transaction-filters.tsx` sets the same precedent.
  */
+/**
+ * Below `sm` the words collapse to a chevron. Not for taste — at 375px the
+ * three groups plus their gaps and the row's padding come to ~304px of a 343px
+ * box, which leaves the page picker nothing; the icons give back ~70px. The
+ * label survives as `sr-only`, so nothing is lost to a screen reader.
+ */
 const BUTTON =
-  "h-8 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface";
+  "inline-flex h-10 items-center justify-center rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface sm:h-8";
 
+// 16px below `sm`, or iOS Safari zooms the page when the picker takes focus —
+// the same reason `transaction-filters.tsx` and `auth-form.tsx` do it.
 const SELECT =
-  "h-8 cursor-pointer rounded-md border border-line-strong bg-surface px-2 text-[12px] font-medium tabular-nums text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "h-10 cursor-pointer rounded-md border border-line-strong bg-surface px-2 text-[16px] font-medium tabular-nums text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-8 sm:text-[12px]";
 
 /** The id `components/transaction-list.tsx` puts on the ledger card. */
 export const LEDGER_ANCHOR_ID = "transactions";
@@ -85,7 +94,8 @@ export function TransactionPagination({
         onClick={() => goTo(page - 1)}
         disabled={page <= 1}
       >
-        Previous
+        <ChevronLeft className="size-4 sm:hidden" aria-hidden />
+        <span className="max-sm:sr-only">Previous</span>
       </button>
 
       <div className="flex items-center gap-2">
@@ -123,7 +133,8 @@ export function TransactionPagination({
         onClick={() => goTo(page + 1)}
         disabled={page >= pageCount}
       >
-        Next
+        <span className="max-sm:sr-only">Next</span>
+        <ChevronRight className="size-4 sm:hidden" aria-hidden />
       </button>
     </nav>
   );

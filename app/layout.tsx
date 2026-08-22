@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import { Suspense } from "react";
@@ -49,6 +49,23 @@ export const metadata: Metadata = {
     description: site.description,
   },
   twitter: { card: "summary_large_image", title: TITLE, description: site.description },
+};
+
+/**
+ * Next emits the `width=device-width, initial-scale=1` viewport meta on its own,
+ * so this is here for `themeColor` — the colour a phone paints its status bar
+ * and the standalone PWA's chrome with.
+ *
+ * `app/manifest.ts` also carries one, but a manifest takes a single value and
+ * pins Supernova. That is the brand colour, not a surface: as a status bar above
+ * a #121212 page it reads as a yellow stripe. These two follow the ground the
+ * page actually paints, and the meta tags win over the manifest where both apply.
+ */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#121212" },
+  ],
 };
 
 /**

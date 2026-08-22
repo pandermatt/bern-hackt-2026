@@ -84,6 +84,45 @@ function getHighestSeverity(anomalies: AnomalyInsight[]): AnomalySeverity | null
   return "low";
 }
 
+/**
+ * The amount, rendered twice per row — once inside the stacked mobile layout and
+ * once as its own column from `sm` up. Only one is ever displayed, and
+ * `display: none` takes the other out of the accessibility tree too, so nothing
+ * is announced twice.
+ */
+function Amount({ row }: { row: Transaction }) {
+  const inflow = row.amountMinor > 0;
+  const foreign = row.currency !== "CHF";
+
+  return (
+    <>
+      <p
+        className={`font-mono text-[13.5px] tabular-nums ${
+          inflow ? "text-positive" : "text-text"
+        }`}
+      >
+        {inflow ? "+" : "−"}
+        {formatMoney(row.amountMinor)}
+      </p>
+      {foreign && (
+        <p className="font-mono text-[11px] text-text-subtle">
+          {formatMoney(row.originalAmountMinor, row.currency)}
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Two layouts, one row.
+ *
+ * From `sm` up this is the column table it has always been: description,
+ * category, date, amount. Below `sm` those columns cannot coexist — a `w-[10ch]`
+ * date and a `w-[13ch]` amount leave ~140px on a 375px screen for the merchant,
+ * the description *and* the anomaly badges, so everything truncates to nothing.
+ * The mobile layout stacks instead: merchant against amount, then the badges,
+ * then the description, then date · category on one muted line.
+ */
 function TransactionRow({
   row,
   anomalies = [],
@@ -91,73 +130,101 @@ function TransactionRow({
   row: Transaction;
   anomalies?: AnomalyInsight[];
 }) {
-  const inflow = row.amountMinor > 0;
-  const foreign = row.currency !== "CHF";
   const hasAnomaly = anomalies.length > 0;
   const isOnlyNewMerchant =
     hasAnomaly && anomalies.every((a) => a.rule_id === "NEW_MERCHANT");
 
-  // Row gradient: Light blue for NEW_MERCHANT; theme yellow (#ffcc00) for other anomalies
+  /*
+   * A wash fading out to the right, in tokens rather than the literal rgba
+   * stops this carried before: those were a light blue and a light yellow
+   * painted straight onto a #1c1c1c surface in dark mode. `--accent-soft` and
+   * `--brand-soft` are each theme's own version of the same idea, so the row
+   * now follows the ground it sits on.
+   *
+   * Teal for a new merchant, Supernova for everything else — the same
+   * informational-versus-noteworthy split the sky/yellow pair was making.
+   * Hover pushes the transparent stop further right, which deepens the wash
+   * without a second set of colour values to keep in step.
+   */
   const anomalyRowClasses = isOnlyNewMerchant
-    ? "bg-[linear-gradient(90deg,rgba(224,242,254,0.75)_0%,rgba(224,242,254,0.40)_25%,rgba(224,242,254,0)_50%)] hover:bg-[linear-gradient(90deg,rgba(224,242,254,0.90)_0%,rgba(224,242,254,0.55)_25%,rgba(224,242,254,0.05)_60%)] border-l-4 border-l-sky-400"
-    : "bg-[linear-gradient(90deg,rgba(255,204,0,0.30)_0%,rgba(255,204,0,0.18)_25%,rgba(255,204,0,0)_50%)] hover:bg-[linear-gradient(90deg,rgba(255,204,0,0.40)_0%,rgba(255,204,0,0.24)_25%,rgba(255,204,0,0.04)_60%)] border-l-4 border-l-[#ffcc00]";
+    ? "border-l-4 border-l-accent bg-[linear-gradient(90deg,var(--accent-soft)_0%,transparent_55%)] hover:bg-[linear-gradient(90deg,var(--accent-soft)_0%,transparent_80%)]"
+    : "border-l-4 border-l-brand bg-[linear-gradient(90deg,var(--brand-soft)_0%,transparent_55%)] hover:bg-[linear-gradient(90deg,var(--brand-soft)_0%,transparent_80%)]";
 
   return (
     <li
-      className={`flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 transition-colors sm:px-5 ${
+      className={`flex flex-col gap-1 border-b border-line px-4 py-3 last:border-b-0 transition-colors sm:flex-row sm:items-center sm:gap-3 sm:px-5 ${
         hasAnomaly ? anomalyRowClasses : "hover:bg-surface-hover"
       }`}
     >
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-baseline justify-between gap-3">
           <p className="truncate text-[14px] font-medium text-text">
             {row.merchant}
           </p>
-
-          {/* Anomaly Lucide Icons & Badges */}
-          {anomalies.map((anomaly) => {
-            const Icon = getLucideIcon(anomaly.icon);
-            const isNewMerchant = anomaly.rule_id === "NEW_MERCHANT";
-
-            return (
-              <span
-                key={anomaly.rule_id}
-                title={`${anomaly.title}: ${anomaly.description}`}
-                className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium shadow-2xs transition-transform hover:scale-105 ${
-                  isNewMerchant
-                    ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
-                    : "border-[#ffcc00] bg-[#fff9db] text-[#5c4700]"
-                }`}
-              >
-                <Icon
-                  className={`h-3.5 w-3.5 shrink-0 ${
-                    isNewMerchant ? "text-sky-600 dark:text-sky-400" : "text-[#8c6b00]"
-                  }`}
-                />
-                <span className="font-mono text-[10px] font-semibold">
-                  {anomaly.rule_id}
-                </span>
-              </span>
-            );
-          })}
+          {/* Mobile only; from `sm` this leaves for the column at the end. */}
+          <div className="shrink-0 text-right sm:hidden">
+            <Amount row={row} />
+          </div>
         </div>
+
+        {/* Their own row rather than sharing a `flex-wrap` with the merchant
+            name, which on a phone pushed a truncated name and a full-width
+            badge onto the same cramped line. */}
+        {hasAnomaly && (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {anomalies.map((anomaly) => {
+              const Icon = getLucideIcon(anomaly.icon);
+              const isNewMerchant = anomaly.rule_id === "NEW_MERCHANT";
+
+              return (
+                <span
+                  key={anomaly.rule_id}
+                  title={`${anomaly.title}: ${anomaly.description}`}
+                  /* `bg-surface`, not the soft tint the row already wears — a
+                     chip filled with its own background colour would dissolve
+                     into the wash behind it. On the tinted row a plain surface
+                     reads as raised, which is what a badge wants anyway. */
+                  className={`inline-flex items-center gap-1.5 rounded-md border bg-surface px-2 py-0.5 text-[11px] font-medium shadow-2xs transition-transform hover:scale-105 ${
+                    isNewMerchant
+                      ? "border-accent/40 text-accent"
+                      : "border-brand text-brand-ink"
+                  }`}
+                >
+                  <Icon
+                    className={`h-3.5 w-3.5 shrink-0 ${
+                      isNewMerchant ? "text-accent" : "text-brand-ink"
+                    }`}
+                  />
+                  <span className="font-mono text-[10px] font-semibold">
+                    {anomaly.rule_id}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         <p className="mt-0.5 truncate text-[12.5px] text-text-muted">
           {row.description}
         </p>
 
-        {/* Anomaly Highlight Note */}
         {hasAnomaly && (
           <p
             className={`mt-0.5 text-[11.5px] font-medium leading-tight ${
-              isOnlyNewMerchant
-                ? "text-sky-700 dark:text-sky-400"
-                : "text-[#805d00]"
+              isOnlyNewMerchant ? "text-accent" : "text-brand-ink"
             }`}
           >
             {anomalies[0].description}
           </p>
         )}
+
+        {/* Date and category, folded onto one line. Both are standalone columns
+            from `sm` up, where there is room for them. */}
+        <p className="mt-1 flex items-center gap-1.5 text-[11.5px] text-text-subtle sm:hidden">
+          <span className="font-mono tabular-nums">{formatDay(row.bookedOn)}</span>
+          <span aria-hidden>·</span>
+          <span className="truncate">{row.category}</span>
+        </p>
       </div>
 
       <div className="hidden shrink-0 sm:block">
@@ -166,24 +233,12 @@ function TransactionRow({
         </span>
       </div>
 
-      <div className="w-[10ch] shrink-0 text-right font-mono text-[11.5px] tabular-nums text-text-subtle">
+      <div className="hidden w-[10ch] shrink-0 text-right font-mono text-[11.5px] tabular-nums text-text-subtle sm:block">
         {formatDay(row.bookedOn)}
       </div>
 
-      <div className="w-[13ch] shrink-0 text-right">
-        <p
-          className={`font-mono text-[13.5px] tabular-nums ${
-            inflow ? "text-positive" : "text-text"
-          }`}
-        >
-          {inflow ? "+" : "−"}
-          {formatMoney(row.amountMinor)}
-        </p>
-        {foreign && (
-          <p className="font-mono text-[11px] text-text-subtle">
-            {formatMoney(row.originalAmountMinor, row.currency)}
-          </p>
-        )}
+      <div className="hidden w-[13ch] shrink-0 text-right sm:block">
+        <Amount row={row} />
       </div>
     </li>
   );
@@ -230,8 +285,8 @@ export function TransactionList({
             Transactions
           </h2>
           {flaggedInPage > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#ffcc00] bg-[#fff9db] px-2.5 py-0.5 text-[11px] font-medium text-[#664d00]">
-              <Sparkles className="h-3 w-3 text-[#997300]" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-brand bg-brand-soft px-2.5 py-0.5 text-[11px] font-medium text-brand-ink">
+              <Sparkles className="h-3 w-3 text-brand-ink" />
               <span>{flaggedInPage} anomaly insights</span>
             </span>
           )}

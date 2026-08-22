@@ -64,7 +64,7 @@ export function BreakdownList({
               <div className="flex items-baseline justify-between gap-3">
                 <Link
                   href={`/?${linkParam}=${encodeURIComponent(slice.key)}`}
-                  className="truncate text-[13.5px] font-medium text-text hover:text-accent hover:underline"
+                  className="-my-2 truncate py-2 text-[13.5px] font-medium text-text hover:text-accent hover:underline sm:my-0 sm:py-0"
                   title={slice.key}
                 >
                   {slice.key}

@@ -28,3 +28,43 @@ export function useHydrated(): boolean {
     () => false,
   );
 }
+
+/**
+ * The `sm` breakpoint, as a boolean: `true` below 640px, `false` at or above it.
+ *
+ * The same `useSyncExternalStore` shape as `useHydrated`, for the same reason —
+ * a viewport width is only knowable in the browser, and the server snapshot has
+ * to be a stable `false`. Unlike `useHydrated` this one has a real
+ * subscription, so a rotation or a resize re-renders rather than leaving a
+ * chart drawn for the wrong width.
+ *
+ * `639.98px` rather than `639px`: viewport widths are fractional on plenty of
+ * devices, and a plain integer leaves a sliver where neither this nor Tailwind's
+ * `sm:` applies.
+ *
+ * This exists because a media query is the only way to tell the ECharts canvases
+ * apart from CSS's point of view — a canvas takes no classes, so the responsive
+ * decisions inside `buildOption` have to be made in JavaScript.
+ */
+const NARROW = "(max-width: 639.98px)";
+
+let narrowQuery: MediaQueryList | null = null;
+
+function narrowList(): MediaQueryList {
+  narrowQuery ??= window.matchMedia(NARROW);
+  return narrowQuery;
+}
+
+function subscribeNarrow(onChange: () => void) {
+  const list = narrowList();
+  list.addEventListener("change", onChange);
+  return () => list.removeEventListener("change", onChange);
+}
+
+export function useIsNarrow(): boolean {
+  return useSyncExternalStore(
+    subscribeNarrow,
+    () => narrowList().matches,
+    () => false,
+  );
+}

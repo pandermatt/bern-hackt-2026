@@ -15,7 +15,7 @@ import type { Facets, Filters } from "@/lib/insights";
  */
 
 const CONTROL =
-  "h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[13px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "h-11 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-9 sm:text-[13px]";
 
 export function TransactionFilters({
   facets,
@@ -181,7 +181,7 @@ export function TransactionFilters({
               return (
                 <label
                   key={category}
-                  className={`cursor-pointer rounded-full border px-2.5 py-1 text-[12.5px] font-medium transition-colors ${
+                  className={`cursor-pointer rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors sm:px-2.5 sm:py-1 ${
                     checked
                       ? "border-accent bg-accent-soft text-accent"
                       : "border-line-strong bg-surface text-text-muted hover:bg-surface-muted"
@@ -201,10 +201,10 @@ export function TransactionFilters({
         </fieldset>
 
         <div className="flex items-end justify-between gap-3 sm:col-span-2 lg:col-span-4">
-          <label className="flex cursor-pointer items-center gap-2 pb-2 text-[13px] text-text">
+          <label className="flex min-h-10 cursor-pointer items-center gap-2 pb-2 text-[13px] text-text sm:min-h-0">
             <input
               type="checkbox"
-              className="size-4 accent-[var(--accent)]"
+              className="size-5 accent-[var(--accent)] sm:size-4"
               checked={filters.includeTransfers}
               onChange={(event) =>
                 update("includeTransfers", event.target.checked ? "true" : "")
@@ -219,7 +219,7 @@ export function TransactionFilters({
             <button
               type="button"
               onClick={() => startTransition(() => router.replace("/", { scroll: false }))}
-              className="cursor-pointer pb-2 text-[13px] font-medium text-text-muted transition-colors hover:text-danger"
+              className="-mx-2 min-h-10 cursor-pointer px-2 pb-2 text-[13px] font-medium text-text-muted transition-colors hover:text-danger sm:mx-0 sm:min-h-0 sm:px-0"
             >
               Reset
             </button>

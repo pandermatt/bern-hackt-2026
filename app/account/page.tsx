@@ -47,7 +47,7 @@ export default async function AccountPage() {
             Danger zone
           </h2>
         </div>
-        <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
             <p className="text-[14px] font-medium text-text">Delete account</p>
             <p className="mt-0.5 text-[13px] text-text-muted">

@@ -126,7 +126,7 @@ export function DemoDataControls() {
               type="button"
               onClick={handleGenerateFaker}
               disabled={isBusy}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-[13px] font-medium text-accent-contrast shadow-sm hover:opacity-90 disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all self-start shrink-0"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-[13px] font-medium text-accent-contrast shadow-sm hover:opacity-90 disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all shrink-0 max-sm:w-full sm:h-9 sm:self-start"
             >
               {isFakerPending ? (
                 <>
@@ -154,7 +154,7 @@ export function DemoDataControls() {
                   value={startYear}
                   onChange={(e) => setStartYear(Number(e.target.value))}
                   disabled={isBusy}
-                  className="w-full h-8 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] text-text focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full h-10 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:outline-none focus:ring-1 focus:ring-accent sm:h-8 sm:text-[13px]"
                 >
                   {START_YEARS.map((yr) => (
                     <option key={yr} value={yr}>
@@ -173,7 +173,7 @@ export function DemoDataControls() {
                   value={yearsCount}
                   onChange={(e) => setYearsCount(Number(e.target.value))}
                   disabled={isBusy}
-                  className="w-full h-8 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] text-text focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full h-10 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:outline-none focus:ring-1 focus:ring-accent sm:h-8 sm:text-[13px]"
                 >
                   <option value={1}>1 Year ({startYear})</option>
                   <option value={2}>2 Years ({startYear} – {startYear + 1})</option>
@@ -209,13 +209,13 @@ export function DemoDataControls() {
                 aria-label="Transaction count slider in log scale"
               />
 
-              <div className="flex justify-between text-[11px] text-text-muted font-mono px-0.5">
+              <div className="flex justify-between text-[11px] text-text-muted font-mono px-0.5 [&>*:nth-child(even)]:hidden sm:[&>*:nth-child(even)]:block">
                 {LOG_COUNT_STEPS.map((val, idx) => (
                   <button
                     key={val}
                     type="button"
                     onClick={() => setStepIndex(idx)}
-                    className={`cursor-pointer transition-colors ${
+                    className={`cursor-pointer px-1.5 py-2 transition-colors sm:px-0 sm:py-0 ${
                       stepIndex === idx ? "font-bold text-accent" : "hover:text-text"
                     }`}
                   >
@@ -283,7 +283,7 @@ export function DemoDataControls() {
             type="button"
             onClick={handleLoadCsv}
             disabled={isBusy}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text shadow-sm hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all self-start sm:self-center shrink-0"
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text shadow-sm hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all shrink-0 max-sm:w-full sm:h-8 sm:self-center"
           >
             {isCsvPending ? (
               <>

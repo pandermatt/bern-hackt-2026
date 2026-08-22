@@ -49,7 +49,7 @@ export function ThemeSetting() {
             // category chips mark an active filter. A raised white pill would
             // have read as "lifted" in light mode and *sunken* in dark, where
             // `--surface` sits below the track rather than above it.
-            className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors ${
+            className={`flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-2.5 text-[13px] font-medium transition-colors sm:py-1.5 ${
               selected
                 ? "bg-accent-soft text-accent"
                 : "text-text-muted hover:text-text"

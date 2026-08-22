@@ -10,6 +10,7 @@ import {
   type EChartsOption,
 } from "@/components/echart";
 import { formatMoney, type MonthPoint } from "@/lib/insights";
+import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
  * Money in against money out, month by month, as two overlaid areas.
@@ -24,8 +25,19 @@ import { formatMoney, type MonthPoint } from "@/lib/insights";
  * two curves the thing you actually read, which is the month's net.
  */
 
+/**
+ * The height is the same on every screen, deliberately: it is what
+ * `app/(dashboard)/loading.tsx` reserves, and a canvas cannot reserve its own
+ * space. The phone adapts by giving the plot more of that box, not less of it.
+ */
 const HEIGHT = 320;
+/**
+ * On a 390px screen the card leaves ~310px of canvas, and a 58px left gutter
+ * spends a fifth of it on axis labels. The narrow gutter is paid for by the
+ * `2.5k` formatter below.
+ */
 const GRID = { left: 58, right: 14, top: 16, bottom: 46 };
+const GRID_NARROW = { left: 40, right: 10, top: 16, bottom: 40 };
 
 /** Rounds a rappen amount up to a tidy gridline so the axis reads cleanly. */
 function niceCeiling(value: number): number {
@@ -34,7 +46,11 @@ function niceCeiling(value: number): number {
   return Math.ceil(value / (magnitude / 2)) * (magnitude / 2);
 }
 
-function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
+function buildOption(
+  series: MonthPoint[],
+  tokens: ChartTokens,
+  narrow: boolean,
+): EChartsOption {
   const peak = niceCeiling(
     Math.max(1, ...series.flatMap((point) => [point.income, point.expense])),
   );
@@ -72,13 +88,13 @@ function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
 
   return {
     animationDuration: 600,
-    grid: GRID,
+    grid: narrow ? GRID_NARROW : GRID,
     legend: {
       bottom: 0,
       icon: "roundRect",
       itemWidth: 10,
       itemHeight: 10,
-      itemGap: 16,
+      itemGap: narrow ? 12 : 16,
       textStyle: { color: tokens.textMuted, fontSize: 12 },
     },
     xAxis: {
@@ -87,7 +103,7 @@ function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
       boundaryGap: false,
       axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
       axisTick: { show: false },
-      axisLabel: { color: tokens.ink, fontSize: 11 },
+      axisLabel: { color: tokens.ink, fontSize: 11, interval: narrow ? 1 : "auto" },
     },
     yAxis: {
       type: "value",
@@ -95,9 +111,18 @@ function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
       axisLabel: {
         color: withAlpha(tokens.ink, 0.75),
         fontSize: 10,
-        // Francs, not rappen. The footnote says CHF once.
-        formatter: (value: number) =>
-          Math.round(value / 100).toLocaleString("de-CH"),
+        // Francs, not rappen. The footnote says CHF once. On a narrow screen
+        // thousands are abbreviated too — `2.5k` is three characters where
+        // `2’500` is five, which is what buys back the smaller left gutter.
+        formatter: (value: number) => {
+          const francs = Math.round(value / 100);
+          if (!narrow || Math.abs(francs) < 1000) {
+            return francs.toLocaleString("de-CH");
+          }
+          const thousands = francs / 1000;
+          // A trailing `.0` costs a character and says nothing.
+          return `${Number(thousands.toFixed(1))}k`;
+        },
       },
       splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
     },
@@ -110,15 +135,16 @@ function buildOption(series: MonthPoint[], tokens: ChartTokens): EChartsOption {
 
 export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
   const tokens = useChartTokens();
+  const narrow = useIsNarrow();
   const option = useMemo(
-    () => (tokens ? buildOption(series, tokens) : null),
-    [series, tokens],
+    () => (tokens ? buildOption(series, tokens, narrow) : null),
+    [series, tokens, narrow],
   );
 
   if (series.length === 0) return null;
 
   return (
-    <section className="card p-5" aria-labelledby="trend-heading">
+    <section className="card p-4 sm:p-5" aria-labelledby="trend-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id="trend-heading" className="text-[15px] font-semibold text-text">
           Month by month

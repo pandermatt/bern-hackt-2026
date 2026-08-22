@@ -34,12 +34,16 @@ export function SummaryCards({ totals }: { totals: Totals }) {
   ];
 
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {tiles.map((tile) => (
-        <li key={tile.label} className="card p-4">
+        <li key={tile.label} className="card p-3.5 sm:p-4">
           <p className="text-[13px] font-medium text-text-muted">{tile.label}</p>
           <p
-            className={`mt-1.5 font-mono text-[20px] leading-none font-medium tracking-tight tabular-nums ${
+            /* 16px, not the desktop 20px: a half-width tile at 390px has
+               ~141px of inner box, and `−CHF 92’969.40` — a negative Net, which
+               is the "Overspent" case and not an exotic one — is 14 characters
+               of Plex Mono. 20px would need 168px. */
+            className={`mt-1.5 font-mono text-[16px] leading-none font-medium tracking-tight tabular-nums sm:text-[20px] ${
               tile.tone === "positive"
                 ? "text-positive"
                 : tile.tone === "negative"

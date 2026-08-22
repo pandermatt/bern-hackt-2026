@@ -13,7 +13,7 @@ import type { User } from "@/db/schema";
  * where `neutral-200` did.
  */
 const CONTROL =
-  "cursor-pointer rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] font-semibold text-text transition-all hover:bg-surface-muted hover:border-line-strong shadow-2xs active:scale-95";
+  "cursor-pointer rounded-full border border-line bg-surface px-3 py-2 text-[13px] font-semibold text-text transition-all hover:bg-surface-muted hover:border-line-strong shadow-2xs active:scale-95 sm:py-1.5";
 
 /**
  * Rendered once by the root layout, so every route gets the same chrome.
@@ -30,7 +30,7 @@ export function AppHeader({ user }: { user: User | null }) {
             <Link
               href="/account"
               aria-label="Account settings"
-              className={`flex shrink-0 items-center gap-2 ${CONTROL}`}
+              className={`flex min-h-10 shrink-0 items-center gap-2 sm:min-h-0 ${CONTROL}`}
             >
               <UserIcon className="size-3.5 text-text-subtle" />
               <span className="hidden max-w-[20ch] truncate sm:inline" title={user.email}>
@@ -38,7 +38,10 @@ export function AppHeader({ user }: { user: User | null }) {
               </span>
             </Link>
             <form action={logout}>
-              <button type="submit" className={`flex items-center gap-1.5 ${CONTROL}`}>
+              <button
+                type="submit"
+                className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
+              >
                 <LogOut className="size-3.5 text-text-subtle" />
                 <span>Sign out</span>
               </button>
@@ -46,7 +49,10 @@ export function AppHeader({ user }: { user: User | null }) {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <Link href="/login" className={`flex items-center gap-1.5 ${CONTROL}`}>
+            <Link
+              href="/login"
+              className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
+            >
               <LogIn className="size-3.5 text-text-subtle" />
               <span>Sign in</span>
             </Link>

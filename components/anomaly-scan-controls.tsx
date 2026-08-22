@@ -112,7 +112,7 @@ export function AnomalyScanControls() {
             type="button"
             onClick={onScan}
             disabled={running || pending}
-            className="inline-flex h-9 shrink-0 cursor-pointer items-center rounded-md bg-accent px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-md bg-accent px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 max-sm:w-full sm:h-9"
           >
             {running ? "Scanning…" : pending ? "Starting…" : "Run scan"}
           </button>

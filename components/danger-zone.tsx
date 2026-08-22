@@ -19,7 +19,7 @@ export function DangerZone() {
       <AlertDialogTrigger asChild>
         <button
           type="button"
-          className="h-8 shrink-0 cursor-pointer rounded-md border border-danger/40 px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger-soft"
+          className="h-10 w-full shrink-0 cursor-pointer rounded-md border border-danger/40 px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger-soft sm:h-8 sm:w-auto"
         >
           Delete account
         </button>

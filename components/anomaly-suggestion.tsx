@@ -63,7 +63,7 @@ export function AnomalySuggestion({
         {!running && (
           <Link
             href="/account#anomaly-scan"
-            className="inline-flex h-9 shrink-0 items-center rounded-md bg-text px-3.5 text-[13px] font-medium text-bg transition-opacity hover:opacity-85"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-text px-3.5 text-[13px] font-medium text-bg transition-opacity hover:opacity-85 max-sm:w-full sm:h-9"
           >
             Run a scan
           </Link>

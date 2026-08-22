@@ -7,7 +7,7 @@ import type { User } from "@/db/schema";
 
 export function AppFooter({ user }: { user: User | null }) {
   return (
-    <footer className="w-full border-t border-line bg-surface py-12">
+    <footer className="w-full border-t border-line bg-surface py-10 sm:py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col sm:flex-row items-center justify-between gap-6 px-5 sm:px-8">
         <div className="flex flex-col items-center sm:items-start gap-1.5 text-center sm:text-left">
           <div className="flex items-center gap-2">

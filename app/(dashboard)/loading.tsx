@@ -43,9 +43,9 @@ export default function Loading() {
         <Bar className="h-[22px] w-[190px]" />
         <Bar className="mt-2 h-[14px] w-[240px]" />
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[0, 1, 2, 3].map((tile) => (
-            <div key={tile} className="card p-4">
+            <div key={tile} className="card p-3.5 sm:p-4">
               <Bar className="h-[13px] w-[64px]" />
               <Bar className="mt-2 h-[20px] w-[110px]" />
               <Bar className="mt-2.5 h-[12px] w-[88px]" />
@@ -54,14 +54,14 @@ export default function Loading() {
         </div>
 
         {/* Month by month: 320px of canvas plus the footnote line. */}
-        <div className="card mt-4 p-5">
+        <div className="card mt-4 p-4 sm:p-5">
           <Bar className="h-[15px] w-[130px]" />
           <Bar className="mt-4 h-[320px] w-full" />
           <Bar className="mt-3 h-[11px] w-[300px]" />
         </div>
 
         {/* The whole year: 320px of donut. */}
-        <div className="card mt-4 p-5">
+        <div className="card mt-4 p-4 sm:p-5">
           <Bar className="h-[15px] w-[110px]" />
           <Bar className="mt-4 h-[320px] w-full" />
         </div>
@@ -90,7 +90,7 @@ export default function Loading() {
         <div className="card mt-4 p-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[0, 1, 2, 3].map((field) => (
-              <Bar key={field} className="h-[52px] w-full" />
+              <Bar key={field} className="h-[60px] w-full sm:h-[52px]" />
             ))}
           </div>
           {/* The category chip row, collapsed to one bar rather than one per
@@ -117,9 +117,9 @@ export default function Loading() {
           ))}
           {/* The Previous / page N of M / Next footer. */}
           <div className="flex items-center justify-between gap-4 border-t border-line px-4 py-3 sm:px-5">
-            <Bar className="h-8 w-[76px]" />
+            <Bar className="h-10 w-[44px] sm:h-8 sm:w-[76px]" />
             <Bar className="h-[12px] w-[90px]" />
-            <Bar className="h-8 w-[52px]" />
+            <Bar className="h-10 w-[44px] sm:h-8 sm:w-[52px]" />
           </div>
         </div>
       </div>

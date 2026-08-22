@@ -301,8 +301,14 @@ export function Landing() {
                         <p className="font-medium text-text truncate">{tx.title}</p>
                         <p className="text-[11px] text-text-subtle truncate">{tx.date} · {tx.account}</p>
                       </div>
-                      <span className={`font-mono font-semibold shrink-0 ${tx.inflow ? "text-[#4a5800]" : "text-neutral-900"
-                          }`}
+                      {/* The same pair the real ledger uses. These were a
+                          hardcoded olive and `text-neutral-900` — the latter is
+                          near-black on the dark theme's `--surface-hover`, so
+                          the preview's outflows were invisible there. */}
+                      <span
+                        className={`font-mono font-semibold shrink-0 ${
+                          tx.inflow ? "text-positive" : "text-text"
+                        }`}
                       >
                         {tx.amount}
                       </span>

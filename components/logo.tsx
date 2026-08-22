@@ -27,7 +27,7 @@ function Mark() {
 
 export function Logo() {
   return (
-    <Link href="/" className="group flex items-center gap-2.5">
+    <Link href="/" className="group flex min-h-10 items-center gap-2.5 sm:min-h-0">
       <Mark />
       <span className="text-[15px] font-semibold tracking-tight text-text">
         <span aria-hidden="true" className="inline-flex items-center">

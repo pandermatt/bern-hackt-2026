@@ -45,6 +45,12 @@
      fills the inflow bars, where a large area plus a legend plus the chart's
      data table carry the meaning. */
   --brand: #ffcc00;
+  /* Supernova as a *tint* and its ink. Supernova itself is 1.5:1 and can never
+     set type, so a brand-flavoured chip — the ledger's anomaly badges — needs
+     a pair: a ground pale enough to sit under text, and a Supernova darkened
+     until it clears AA on it. 8.9:1. */
+  --brand-soft: #fff6d1;
+  --brand-ink: #5c4700;
   --pistachio: #a5c400;
   /* Pistachio is only 2:1 against white, so a filled bar needs a defining edge
      to stay perceptible. This is that edge, at 3.4:1. */
@@ -169,6 +175,11 @@
   --accent-soft: #123c40;
 
   --brand: #ffcc00;
+  /* Chosen, not inverted, same as every other dark step: the tint becomes a
+     deep Supernova the surface can hold, and the ink flips to a light one.
+     9.5:1 on the tint. */
+  --brand-soft: #3d3100;
+  --brand-ink: #ffdd55;
   --pistachio: #a5c400;
   /* The edge has to be lighter than the fill here, not darker — its job is to
      separate the fill from the ground, and the ground moved. */
@@ -240,6 +251,8 @@
   --color-danger-hover: var(--danger-hover);
   --color-danger-soft: var(--danger-soft);
   --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
   --color-pistachio: var(--pistachio);
   --color-pistachio-edge: var(--pistachio-edge);
   --color-positive: var(--positive);
@@ -287,7 +300,6 @@
        for the right theme — `<input type="date">` in the filter bar renders a
        light calendar icon on a dark field without it. */
     color-scheme: light;
-    background-color: #ffffff;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
