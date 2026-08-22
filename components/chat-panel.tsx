@@ -1,13 +1,21 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { Check, Loader2, PiggyBank, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { askAssistant } from "@/app/actions/chat";
+import { allocateSurplus } from "@/app/actions/savings";
 import { ChatEChart } from "@/components/chat-echart";
 import { ChatPie } from "@/components/chat-pie";
-import type { ChartSpec, ChatRole } from "@/lib/assistant";
+import {
+  SUGGESTION_KEYS,
+  type AllocationProposal,
+  type ChartSpec,
+  type ChatRole,
+} from "@/lib/assistant";
+import { formatMoney } from "@/lib/insights";
 
 /**
  * The assistant's body, and the state behind it — one conversation, two shells.
@@ -30,16 +38,26 @@ export type PanelMessage = {
   role: ChatRole;
   content: string;
   chart?: ChartSpec;
+  /** A validated surplus split, rendered as a card with an Apply button. */
+  proposal?: AllocationProposal;
+  /** Apply state lives on the message, not the panel: the panel unmounts
+   * with the slide-over, and an applied card has to stay applied. */
+  proposalApplied?: boolean;
+  proposalError?: string;
   error?: boolean;
 };
 
-/**
- * These land in the empty state as one-tap starters, and each is phrased to
- * trip a different branch of `pickChart`, so the demo shows a chart early. The
- * wording lives in the `Chat` namespace — they are sent verbatim to the model,
- * so a German reader asks in German and is answered in German.
+/*
+ * The empty state's one-tap starters are the four advice features the
+ * assistant leads with — saving potential, anomalies, subscriptions, and
+ * allocating last month's surplus. Each is phrased to hit its tool's branch
+ * in `routeTool`, so even a stalled model lands on the right data, and the
+ * wording lives in the `Chat` namespace: the strings are sent verbatim to
+ * the model, so a German reader asks in German and is answered in German.
+ * The key list itself lives in `lib/assistant.ts`, because the action
+ * re-offers the same questions as follow-up chips when the model proposed
+ * none of its own.
  */
-const SUGGESTION_KEYS = ["suggestion1", "suggestion2", "suggestion3", "suggestion4"] as const;
 
 export type AssistantChat = {
   messages: PanelMessage[];
@@ -48,6 +66,9 @@ export type AssistantChat = {
   followUps: string[];
   pending: boolean;
   send: (text: string) => void;
+  /** Index of the message whose proposal is being applied, if any. */
+  applying: number | null;
+  applyProposal: (index: number) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
 };
 
@@ -57,10 +78,12 @@ export type AssistantChat = {
  */
 export function useAssistantChat(): AssistantChat {
   const t = useTranslations("Chat");
+  const router = useRouter();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
+  const [applying, setApplying] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -91,6 +114,7 @@ export function useAssistantChat(): AssistantChat {
             role: "assistant",
             content: turn.reply,
             chart: turn.chart,
+            proposal: turn.proposal,
             error: turn.error,
           },
         ]);
@@ -108,7 +132,53 @@ export function useAssistantChat(): AssistantChat {
     });
   };
 
-  return { messages, input, setInput, followUps, pending, send, scrollRef };
+  /**
+   * Post one message's proposal through `allocateSurplus` — the same action
+   * the Savings section's allocator uses, ceiling re-checked server-side. The
+   * outcome lands on the message itself, so an applied card stays applied
+   * after the slide-over closes and reopens.
+   */
+  const applyProposal = (index: number) => {
+    const message = messages[index];
+    if (!message?.proposal || message.proposalApplied || applying !== null) {
+      return;
+    }
+    const { month, entries } = message.proposal;
+    setApplying(index);
+    void (async () => {
+      let applied = false;
+      let error: string | undefined;
+      try {
+        const result = await allocateSurplus(month, entries);
+        applied = result.ok;
+        if (!result.ok) error = result.error;
+      } catch {
+        error = t("failed");
+      }
+      setMessages((prev) =>
+        prev.map((entry, i) =>
+          i === index
+            ? { ...entry, proposalApplied: applied, proposalError: error }
+            : entry,
+        ),
+      );
+      setApplying(null);
+      // The pots on the page behind the chat just changed.
+      if (applied) router.refresh();
+    })();
+  };
+
+  return {
+    messages,
+    input,
+    setInput,
+    followUps,
+    pending,
+    send,
+    applying,
+    applyProposal,
+    scrollRef,
+  };
 }
 
 export function ChatPanel({
@@ -135,7 +205,17 @@ export function ChatPanel({
   "aria-label"?: string;
 }) {
   const t = useTranslations("Chat");
-  const { messages, input, setInput, followUps, pending, send, scrollRef } = chat;
+  const {
+    messages,
+    input,
+    setInput,
+    followUps,
+    pending,
+    send,
+    applying,
+    applyProposal,
+    scrollRef,
+  } = chat;
 
   return (
     /* `min-h-0` is not optional. This root is a new flex item between the
@@ -196,6 +276,63 @@ export function ChatPanel({
               ) : message.chart && (
                 <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
                   <ChatPie chart={message.chart} />
+                </div>
+              )}
+              {message.proposal && (
+                <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
+                  <p className="text-[12px] font-semibold text-text">
+                    {t("proposalTitle")}
+                  </p>
+                  <ul className="mt-2 space-y-1.5">
+                    {message.proposal.items.map((item) => (
+                      <li
+                        key={item.goalId}
+                        className="flex items-baseline justify-between gap-3 text-[12.5px]"
+                      >
+                        <span className="min-w-0 truncate text-text-muted">
+                          {item.name}
+                        </span>
+                        <span className="font-mono text-text tabular-nums">
+                          + {formatMoney(item.addMinor)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 flex items-baseline justify-between gap-3 border-t border-line pt-2 text-[12.5px]">
+                    <span className="text-text-muted">{t("proposalTotal")}</span>
+                    <span className="font-mono font-semibold text-text tabular-nums">
+                      + {formatMoney(message.proposal.addTotalMinor)}
+                    </span>
+                  </div>
+                  {message.proposalApplied ? (
+                    <p className="mt-2.5 flex items-center gap-1.5 text-[12.5px] font-medium text-positive">
+                      <Check className="size-3.5" aria-hidden />
+                      {t("proposalApplied")}
+                    </p>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => applyProposal(index)}
+                        disabled={applying !== null}
+                        className="mt-2.5 inline-flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-accent text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40"
+                      >
+                        {applying === index ? (
+                          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                        ) : (
+                          <PiggyBank className="size-3.5" aria-hidden />
+                        )}
+                        {applying === index
+                          ? t("proposalApplying")
+                          : t("proposalApply")}
+                      </button>
+                      {message.proposalError && (
+                        <p className="mt-1.5 text-[12px] text-danger" role="alert">
+                          {message.proposalError}
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>

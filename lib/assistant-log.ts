@@ -23,7 +23,8 @@ export type AssistantLogEntry = {
   httpStatus?: number;
   error?: string;
   model: string;
-  maxTokens: number;
+  /** Absent when MAX_TOKENS is unset — the request then carried no cap. */
+  maxTokens?: number;
   question: string;
   /** Which round of the tool loop this request was, and what it fetched. */
   note?: string;

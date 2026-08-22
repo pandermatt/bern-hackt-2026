@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 
+import type { SavingsOverview } from "@/app/actions/savings";
+import type { Dashboard } from "@/app/actions/transactions";
+import type { Transaction } from "@/db/schema";
 import {
+  anomaliesToolResult,
+  buildAllocationProposal,
   defaultPeriod,
+  detectSubscriptions,
+  parseAllocationArgs,
   extractJsonAfter,
   extractSql,
   looksLikeStall,
   routeTool,
+  runTool,
   sanitizeEChartsOption,
+  savingsGoalsToolResult,
   shouldDefaultChart,
   validateSelect,
   wantsNonPieChart,
@@ -184,6 +193,342 @@ describe("routeTool", () => {
   it("keeps aggregate superlatives on the charting tools", () => {
     expect(routeTool("What's my biggest spending category?")).toBe("get_spending_by_category");
     expect(routeTool("Who is my largest merchant?")).toBe("get_top_merchants");
+  });
+
+  it("routes the four starter proposals to the advice tools", () => {
+    expect(routeTool("Where could I save money?")).toBe("get_savings_potential");
+    expect(routeTool("Is something shady going on in my account?")).toBe("get_recent_anomalies");
+    expect(routeTool("What subscriptions am I paying for?")).toBe("get_subscriptions");
+    expect(
+      routeTool("How should I split last month's surplus across my saving goals?"),
+    ).toBe("get_savings_goals");
+  });
+
+  it("routes the German starter proposals too", () => {
+    expect(routeTool("Wo könnte ich Geld sparen?")).toBe("get_savings_potential");
+    expect(routeTool("Gibt es verdächtige Aktivitäten auf meinem Konto?")).toBe("get_recent_anomalies");
+    expect(routeTool("Welche Abos bezahle ich?")).toBe("get_subscriptions");
+    expect(
+      routeTool("Wie soll ich den Überschuss vom letzten Monat auf meine Sparziele verteilen?"),
+    ).toBe("get_savings_goals");
+  });
+
+  it("keeps 'how much did I save' on the overview, away from savings potential", () => {
+    expect(routeTool("How much did I save this year?")).toBe("get_overview");
+  });
+});
+
+/** Only the fields `detectSubscriptions` reads; the cast supplies the rest. */
+function charge(
+  bookedOn: string,
+  amountMinor: number,
+  merchant: string,
+  category = "Subscriptions",
+): Transaction {
+  return { bookedOn, kind: "expense", amountMinor, merchant, category } as Transaction;
+}
+
+describe("detectSubscriptions", () => {
+  it("finds a monthly and a yearly subscription and prices the year", () => {
+    const rows = [
+      // Netflix: the 5th of every month, always the same amount.
+      ...Array.from({ length: 12 }, (_, i) =>
+        charge(`2025-${String(i + 1).padStart(2, "0")}-05`, -1890, "Netflix"),
+      ),
+      // A service billed once a year, twice seen.
+      charge("2024-03-10", -9900, "Microsoft"),
+      charge("2025-03-12", -9900, "Microsoft"),
+      // Rent recurs perfectly, but a fixed cost is not a subscription.
+      ...Array.from({ length: 12 }, (_, i) =>
+        charge(`2025-${String(i + 1).padStart(2, "0")}-01`, -185000, "Rent", "Housing"),
+      ),
+    ];
+    const subs = detectSubscriptions(rows);
+    // Ranked by what a year of each costs: 12 × Netflix beats the annual bill.
+    expect(subs.map((s) => s.merchant)).toEqual(["Netflix", "Microsoft"]);
+    const netflix = subs.find((s) => s.merchant === "Netflix");
+    expect(netflix?.cadence).toBe("monthly");
+    expect(netflix?.typicalMinor).toBe(1890);
+    expect(netflix?.yearlyMinor).toBe(1890 * 12);
+    expect(netflix?.lastOn).toBe("2025-12-05");
+    expect(subs.find((s) => s.merchant === "Microsoft")?.cadence).toBe("yearly");
+  });
+
+  it("rejects an irregular habit and an unstable amount", () => {
+    const rows = [
+      // Groceries: roughly every three days — no cadence window fits.
+      ...Array.from({ length: 10 }, (_, i) =>
+        charge(`2025-04-${String(3 * i + 1).padStart(2, "0")}`, -4200, "Migros", "Food & Drink"),
+      ),
+      // Monthly rhythm but wildly varying amounts.
+      charge("2025-01-15", -1200, "Manor", "Clothing"),
+      charge("2025-02-15", -9700, "Manor", "Clothing"),
+      charge("2025-03-15", -350, "Manor", "Clothing"),
+      charge("2025-04-15", -22000, "Manor", "Clothing"),
+      // Income is never a subscription, whatever its rhythm.
+      ...Array.from({ length: 6 }, (_, i) => ({
+        ...charge(`2025-0${i + 1}-25`, 550000, "Employer AG", "Salary"),
+        kind: "income" as const,
+      })),
+    ] as Transaction[];
+    expect(detectSubscriptions(rows)).toEqual([]);
+  });
+});
+
+describe("runTool get_savings_potential", () => {
+  const slice = (key: string, amount: number, share: number) => ({
+    key,
+    amount,
+    count: 1,
+    share,
+  });
+  const dashboard = {
+    facets: { accounts: [], first: "2025-01-01", last: "2025-12-31" },
+    totals: { expense: 1_000_000 },
+    categories: [
+      slice("Housing", 500_000, 50),
+      slice("Travel", 300_000, 30),
+      slice("Clothing", 150_000, 15),
+      slice("Taxes & Fees", 50_000, 5),
+    ],
+    merchants: [],
+    monthly: [],
+  } as unknown as Dashboard;
+
+  it("splits fixed costs from the flexible categories and charts only the latter", () => {
+    const { result, chart } = runTool("get_savings_potential", dashboard);
+    const payload = result as {
+      fixed_categories: string[];
+      fixed_costs_chf: string;
+      flexible_spending_chf: string;
+      flexible_categories: { name: string }[];
+    };
+    expect(payload.fixed_categories).toEqual(["Housing", "Taxes & Fees"]);
+    expect(payload.fixed_costs_chf).toBe("5'500.00");
+    expect(payload.flexible_spending_chf).toBe("4'500.00");
+    expect(payload.flexible_categories.map((c) => c.name)).toEqual([
+      "Travel",
+      "Clothing",
+    ]);
+    expect(chart?.slices.map((s) => s.label)).toEqual(["Travel", "Clothing"]);
+  });
+});
+
+describe("savingsGoalsToolResult", () => {
+  const pot = (name: string, targetMinor: number, savedMinor: number) => ({
+    id: 1,
+    name,
+    targetMinor,
+    savedMinor,
+    monthMinor: 0,
+    slot: 0,
+  });
+
+  it("hands the model the free surplus and each goal's gap", () => {
+    const overview: SavingsOverview = {
+      month: "2025-07",
+      monthEnded: true,
+      surplusMinor: 120_000,
+      allocatedMinor: 20_000,
+      freeMinor: 100_000,
+      pots: [pot("Ferien", 500_000, 350_000)],
+    };
+    const payload = savingsGoalsToolResult(overview) as {
+      free_to_allocate_chf: string;
+      goals: { still_missing_chf: string }[];
+      note: string;
+    };
+    expect(payload.free_to_allocate_chf).toBe("1'000.00");
+    expect(payload.goals[0].still_missing_chf).toBe("1'500.00");
+    expect(payload.note).toContain("cannot move money");
+  });
+
+  it("says so while the month still runs, and when there are no goals", () => {
+    const running = savingsGoalsToolResult({
+      month: "2025-08",
+      monthEnded: false,
+      surplusMinor: null,
+      allocatedMinor: 0,
+      freeMinor: 0,
+      pots: [pot("Auto", 100_000, 0)],
+    }) as { surplus_chf: null; note: string };
+    expect(running.surplus_chf).toBeNull();
+    expect(running.note).toContain("still running");
+
+    const goalless = savingsGoalsToolResult({
+      month: "2025-07",
+      monthEnded: true,
+      surplusMinor: 50_000,
+      allocatedMinor: 0,
+      freeMinor: 50_000,
+      pots: [],
+    }) as { note: string };
+    expect(goalless.note).toContain("no saving goals");
+  });
+});
+
+describe("parseAllocationArgs", () => {
+  it("reads a clean call, numeric and Swiss-formatted string amounts alike", () => {
+    const content =
+      '<|tools_prefix|>[{"propose_allocation": {"allocations": [{"goal": "Ferien", "amount_chf": 600}, {"goal": "Auto", "amount_chf": "CHF 1\'200,50"}]}}]';
+    expect(parseAllocationArgs(content)).toEqual([
+      { goal: "Ferien", amountMinor: 60_000 },
+      { goal: "Auto", amountMinor: 120_050 },
+    ]);
+  });
+
+  it("salvages goal/amount pairs from a truncated argument array", () => {
+    const content =
+      'I will call propose_allocation: [{"goal": "Ferien", "amount_chf": "600"}, {"goal": "Auto", "amount_chf": 2';
+    expect(parseAllocationArgs(content)).toEqual([
+      { goal: "Ferien", amountMinor: 60_000 },
+    ]);
+  });
+
+  it("returns nothing when there is nothing to read", () => {
+    expect(parseAllocationArgs("propose_allocation, but no arguments")).toEqual([]);
+  });
+});
+
+describe("buildAllocationProposal", () => {
+  const overview = (patch: Partial<SavingsOverview> = {}): SavingsOverview => ({
+    month: "2025-07",
+    monthEnded: true,
+    surplusMinor: 120_000,
+    allocatedMinor: 20_000,
+    freeMinor: 100_000,
+    pots: [
+      { id: 1, name: "Ferien", targetMinor: 500_000, savedMinor: 100_000, monthMinor: 0, slot: 0 },
+      { id: 2, name: "Auto", targetMinor: 300_000, savedMinor: 50_000, monthMinor: 20_000, slot: 1 },
+    ],
+    ...patch,
+  });
+
+  it("builds entries as new month totals, not as the adds", () => {
+    const { proposal, result } = buildAllocationProposal(
+      [
+        { goal: "ferien", amountMinor: 60_000 },
+        { goal: "Auto", amountMinor: 30_000 },
+      ],
+      overview(),
+    );
+    expect(proposal?.items).toEqual([
+      { goalId: 1, name: "Ferien", addMinor: 60_000 },
+      { goalId: 2, name: "Auto", addMinor: 30_000 },
+    ]);
+    expect(proposal?.addTotalMinor).toBe(90_000);
+    // Auto already holds CHF 200 this month, so its posted total is CHF 500.
+    expect(proposal?.entries).toEqual([
+      { goalId: 1, amount: "600.00" },
+      { goalId: 2, amount: "500.00" },
+    ]);
+    expect((result as { shown_to_customer: boolean }).shown_to_customer).toBe(true);
+  });
+
+  it("merges duplicate goals and scales an over-budget split down to fit", () => {
+    const { proposal, result } = buildAllocationProposal(
+      [
+        { goal: "Ferien", amountMinor: 40_000 },
+        { goal: "Ferien", amountMinor: 40_000 },
+        { goal: "Auto", amountMinor: 80_000 },
+      ],
+      overview(),
+    );
+    // 160'000 proposed against 100'000 free → halved, to whole francs.
+    expect(proposal?.items.map((i) => i.addMinor)).toEqual([50_000, 50_000]);
+    expect(proposal?.addTotalMinor).toBe(100_000);
+    expect((result as { note_scaled?: string }).note_scaled).toBeTruthy();
+  });
+
+  it("reports unknown goals and errors when nothing matches", () => {
+    const some = buildAllocationProposal(
+      [
+        { goal: "Ferien", amountMinor: 10_000 },
+        { goal: "Yacht", amountMinor: 10_000 },
+      ],
+      overview(),
+    );
+    expect((some.result as { ignored_unknown_goals: string[] }).ignored_unknown_goals).toEqual(["Yacht"]);
+
+    const none = buildAllocationProposal(
+      [{ goal: "Yacht", amountMinor: 10_000 }],
+      overview(),
+    );
+    expect(none.proposal).toBeUndefined();
+    expect((none.result as { error: string }).error).toContain("Ferien");
+  });
+
+  it("refuses a running month, an empty free amount, and missing goals", () => {
+    const running = buildAllocationProposal(
+      [{ goal: "Ferien", amountMinor: 10_000 }],
+      overview({ monthEnded: false, surplusMinor: null, freeMinor: 0 }),
+    );
+    expect(running.proposal).toBeUndefined();
+    expect((running.result as { error: string }).error).toContain("still running");
+
+    const spent = buildAllocationProposal(
+      [{ goal: "Ferien", amountMinor: 10_000 }],
+      overview({ freeMinor: 0 }),
+    );
+    expect((spent.result as { error: string }).error).toContain("already fully");
+
+    const goalless = buildAllocationProposal(
+      [{ goal: "Ferien", amountMinor: 10_000 }],
+      overview({ pots: [] }),
+    );
+    expect((goalless.result as { error: string }).error).toContain("no saving goals");
+  });
+});
+
+describe("anomaliesToolResult", () => {
+  const group = {
+    ruleId: "AMOUNT_SPIKE",
+    title: "Unusually large charge",
+    icon: "zap",
+    severity: "high" as const,
+    description: "A charge far above this merchant's usual range.",
+    transactionCount: 2,
+    latestOn: "2025-08-01",
+  };
+
+  it("distinguishes 'nothing found' from 'never scanned'", () => {
+    const clean = anomaliesToolResult({
+      action: [],
+      context: [group],
+      hasCompletedScan: true,
+      running: false,
+      stale: false,
+    }) as { status: string; note: string };
+    expect(clean.status).toBe("ok");
+    expect(clean.note).toContain("reassure");
+
+    const unscanned = anomaliesToolResult({
+      action: [],
+      context: [],
+      hasCompletedScan: false,
+      running: false,
+      stale: false,
+    }) as { status: string };
+    expect(unscanned.status).toBe("never_scanned");
+  });
+
+  it("surfaces findings that need a look, compacted for the model", () => {
+    const payload = anomaliesToolResult({
+      action: [group],
+      context: [],
+      hasCompletedScan: true,
+      running: false,
+      stale: false,
+    }) as { needs_a_look: { finding: string; severity: string }[] };
+    expect(payload.needs_a_look).toEqual([
+      {
+        finding: "Unusually large charge",
+        severity: "high",
+        transactions: 2,
+        latest_on: "2025-08-01",
+        summary: "A charge far above this merchant's usual range.",
+      },
+    ]);
   });
 });
 

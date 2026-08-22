@@ -110,7 +110,9 @@ export function ChatDebug() {
               {entry.note && (
                 <span className="font-medium text-accent">{entry.note} · </span>
               )}
-              {entry.model} {t("max")} {entry.maxTokens} {t("tokens")}
+              {entry.model}
+              {entry.maxTokens !== undefined &&
+                ` ${t("max")} ${entry.maxTokens} ${t("tokens")}`}
               {entry.usage &&
                 ` · ${entry.usage.promptTokens ?? "?"} in / ${entry.usage.completionTokens ?? "?"} out`}
               {entry.messageCount > 0 &&

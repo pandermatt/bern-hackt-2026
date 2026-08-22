@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { transactions, users, type User } from "@/db/schema";
+import { transactions, users, type Transaction, type User } from "@/db/schema";
+import { detectSubscriptions } from "@/lib/assistant";
 import { hashPassword } from "@/lib/auth";
 import { loadDemoCsvForUser } from "@/lib/demo-loader";
 import {
@@ -110,6 +111,21 @@ describe("Synthetic Transaction Generator (Faker)", () => {
         .filter((r) => r.kind !== "transfer")
         .reduce((sum, r) => sum + r.amountMinor, 0);
       expect(balance).toBeGreaterThan(0);
+    }
+  });
+
+  it("produces recurring charges the assistant's subscription detector finds", () => {
+    // The chat's "what subscriptions do I have" proposal is only a feature if
+    // the demo account actually contains detectable rhythms.
+    const rows = generateYearlyTransactions(user1.id, { endDate: "2025-12-31", seed: 42 });
+    const subs = detectSubscriptions(rows as Transaction[]);
+
+    expect(subs.length).toBeGreaterThanOrEqual(2);
+    const monthly = subs.filter((s) => s.cadence === "monthly");
+    expect(monthly.length).toBeGreaterThanOrEqual(2);
+    for (const sub of subs) {
+      expect(sub.yearlyMinor).toBeGreaterThan(0);
+      expect(sub.payments).toBeGreaterThanOrEqual(2);
     }
   });
 

@@ -1,10 +1,14 @@
 "use server";
 
-import { getLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { z } from "zod";
 
+import { getAnomalyOverview } from "@/app/actions/anomalies";
+import { getSavingsOverview } from "@/app/actions/savings";
 import { getDashboard, listTransactions } from "@/app/actions/transactions";
 import {
+  anomaliesToolResult,
+  buildAllocationProposal,
   chartToolForSource,
   composeEChart,
   defaultChartSource,
@@ -14,6 +18,7 @@ import {
   extractSql,
   formatSwissNumbers,
   looksLikeStall,
+  parseAllocationArgs,
   parseChartRequest,
   parsePeriod,
   parseToolCalls,
@@ -22,14 +27,18 @@ import {
   routeTool,
   runTool,
   sanitizeEChartsOption,
+  savingsGoalsToolResult,
   shouldDefaultChart,
   stripModelMarkup,
-  suggestFollowUps,
+  subscriptionsToolResult,
   systemPromptFor,
   wantsNonPieChart,
+  SUGGESTION_KEYS,
   TOOL_DEFINITIONS,
+  type AllocationProposal,
   type AssistantTurn,
   type ChartSpec,
+  type Period,
   type WireMessage,
 } from "@/lib/assistant";
 import { runSandboxSql } from "@/lib/sql-sandbox";
@@ -96,7 +105,10 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
 
   const turnStarted = Date.now();
   const model = process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
-  const maxTokens = Number.parseInt(process.env.MAX_TOKENS ?? "", 10) || 100;
+  // Unset (or unparseable, or 0) means "no cap": the request then carries no
+  // max_tokens at all and the endpoint's own default applies.
+  const maxTokens =
+    Number.parseInt(process.env.MAX_TOKENS ?? "", 10) || undefined;
 
   const parsed = historySchema.safeParse(rawHistory);
   const question = parsed.success
@@ -149,6 +161,8 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   // An explicit display_chart call outranks the auto-attach fallback that
   // fires when the model fetched chartable data but never asked for a chart.
   let chartExplicit = false;
+  // A validated surplus split from propose_allocation, if the model made one.
+  let proposal: AllocationProposal | undefined;
   let reply: string | undefined;
   let proposedFollowUps: string[] = [];
   // Once any tool has run this turn, a digit-bearing reply is a caption, not a
@@ -158,6 +172,17 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   // they were fetched for.
   let sandboxRows: Awaited<ReturnType<typeof listTransactions>> | undefined;
   let sandboxKey: string | undefined;
+  // The subscription detector's rows — always the whole history, never the
+  // turn's period window: a year-to-date view would demote every yearly bill.
+  let historyRows: Awaited<ReturnType<typeof listTransactions>> | undefined;
+  // Which month the savings tools are about: a single-month period picks it;
+  // otherwise the last completed one — a running month has no final surplus
+  // to hand out. getSavingsOverview validates the month against the
+  // statements and falls back on its own default when it does not exist.
+  const goalMonthFor = (window?: Period) =>
+    window && window.from.slice(0, 7) === window.to.slice(0, 7)
+      ? window.from.slice(0, 7)
+      : resolvePeriod("last_month", dashboard.facets.last)?.from.slice(0, 7);
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const offerTools = round < MAX_ROUNDS;
@@ -167,9 +192,14 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       // MAX_TOKENS caps the visible answer; the +80 is the budget for the
       // FOLLOWUP: lines parsed out of it. Tool rounds get a higher floor —
       // a truncated ECharts option or SQL statement is an unusable one.
-      max_tokens: offerTools
-        ? Math.max(maxTokens + 80, 700)
-        : maxTokens + 80,
+      // Without MAX_TOKENS the key is omitted and the endpoint decides.
+      ...(maxTokens !== undefined
+        ? {
+            max_tokens: offerTools
+              ? Math.max(maxTokens + 80, 700)
+              : maxTokens + 80,
+          }
+        : {}),
       ...(offerTools ? { tools: TOOL_DEFINITIONS } : {}),
     };
     const startedAt = Date.now();
@@ -405,6 +435,66 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         continue;
       }
 
+      // The context tools read beyond the dashboard aggregate — stored scan
+      // findings, the savings tables, the raw rows — so each fetches lazily,
+      // only on the turn the model actually asks. All three resolve the
+      // account from the session, like every other read.
+      if (name === "get_subscriptions") {
+        historyRows ??= await listTransactions({});
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({
+            tool: name,
+            result: subscriptionsToolResult(historyRows),
+          }),
+        });
+        toolRan = true;
+        continue;
+      }
+
+      if (name === "get_recent_anomalies") {
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({
+            tool: name,
+            result: anomaliesToolResult(await getAnomalyOverview()),
+          }),
+        });
+        toolRan = true;
+        continue;
+      }
+
+      if (name === "get_savings_goals") {
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({
+            tool: name,
+            result: savingsGoalsToolResult(
+              await getSavingsOverview(goalMonthFor(period)),
+            ),
+          }),
+        });
+        toolRan = true;
+        continue;
+      }
+
+      if (name === "propose_allocation") {
+        // The model's split becomes a typed proposal only after validation
+        // against the month's real free surplus; the Apply card renders what
+        // survived, and the tool result tells the model the same final split.
+        const { proposal: built, result } = buildAllocationProposal(
+          parseAllocationArgs(content),
+          await getSavingsOverview(goalMonthFor(period)),
+        );
+        if (built) proposal = built;
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({ tool: name, result }),
+        });
+        toolRan = true;
+        continue;
+      }
+
       const tool = runTool(
         name,
         scoped,
@@ -464,23 +554,21 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     }
   }
 
-  // The model's own proposals lead; the deterministic ones cover the turns
-  // where it forgot the FOLLOWUP: lines. Either way nothing already asked
-  // in this conversation comes back around.
+  // The model's own FOLLOWUP proposals lead; a turn without them falls back
+  // to the four starter questions — the same localized strings the empty
+  // state shows, so the chips never invent a fifth phrasing. Either way,
+  // nothing already asked in this conversation comes back around.
   const asked = parsed.data
     .filter((m) => m.role === "user")
     .map((m) => m.content.toLowerCase());
-  const followUps = proposedFollowUps
-    .filter((q) => !asked.includes(q.toLowerCase()))
-    .slice(0, 3);
+  const notAsked = (q: string) => !asked.includes(q.toLowerCase());
+  let followUps = proposedFollowUps.filter(notAsked).slice(0, 3);
+  if (followUps.length === 0) {
+    const t = await getTranslations("Chat");
+    followUps = SUGGESTION_KEYS.map((key) => t(key)).filter(notAsked);
+  }
 
-  return {
-    reply,
-    chart,
-    followUps: followUps.length
-      ? followUps
-      : suggestFollowUps(question.content, dashboard, asked),
-  };
+  return { reply, chart, proposal, followUps };
 }
 
 /** The current user's recent assistant calls, newest first. */
