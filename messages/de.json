@@ -377,7 +377,6 @@
     "retry": "Erneut versuchen"
   },
   "AnomalyScan": {
-    "heading": "Anomalie-Erkennung",
     "title": "Transaktionen auf Auffälligkeiten prüfen",
     "description": "Führt alle Regeln über Ihre Historie aus und speichert die Befunde, damit das Dashboard sie zeigen kann, ohne bei jedem Seitenaufruf neu zu rechnen. Beliebig wiederholbar — jede Analyse ersetzt die Ergebnisse der vorherigen.",
     "run": "Analyse starten",
@@ -587,8 +586,6 @@
     }
   },
   "DemoData": {
-    "heading": "Demo- & synthetische Daten",
-    "subtitle": "Befüllen Sie Ihr Konto mit Kontoauszügen, um das Dashboard auszuprobieren.",
     "viewDashboard": "Zum Dashboard",
     "syntheticTitle": "Synthetische Transaktionen",
     "syntheticDescription": "Erzeugt realistische Schweizer Transaktionen mit eingebauten Auffälligkeiten, damit jede Regel der Erkennung etwas zu finden hat.",
@@ -601,7 +598,6 @@
     "year5": "Letzte 5 Jahre ({range})",
     "targetCount": "Angestrebte Anzahl Transaktionen",
     "transactionsBadge": "{count} Transaktionen",
-    "step": "Schritt {step} von {total}",
     "sliderLabel": "Schieberegler für die Anzahl Transaktionen (logarithmisch)",
     "includedTitle": "Enthaltene Anomalie-Muster",
     "included1": "Ausreissende Luxuskäufe",
@@ -620,7 +616,8 @@
   "Account": {
     "title": "Kontoeinstellungen",
     "profile": "Profil",
-    "appearance": "Darstellung",
+    "preferences": "Präferenzen",
+    "data": "Daten",
     "colourTheme": "Farbschema",
     "colourThemeNote": "Gilt nur für diesen Browser.",
     "language": "Sprache",
@@ -643,7 +640,6 @@
     "dark": "Dunkel"
   },
   "Install": {
-    "heading": "Installieren",
     "title": "Zum Startbildschirm hinzufügen",
     "note": "Installieren Sie Beyond Money als App. Sie öffnet sich in einem eigenen Fenster, ohne Browserleiste.",
     "action": "Installieren",

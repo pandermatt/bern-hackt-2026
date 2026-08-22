@@ -441,10 +441,10 @@ Unchanged from the template this app grew out of, and still exactly true.
   the ledger's month groups use, so the page reads as one design rather than
   cards stacked on panels. Every block above the ledger goes through it; the
   summary tiles are the same grey panel without a heading of their own, because
-  the page `h1` heads them. **`/anomalies` and `/budget` run on it too**, and
-  their `h1` matches the dashboard's 30/36px — the budget page used to head
-  itself at 22px, which is smaller than the sections underneath it. `.card`
-  still belongs on `/account`, the auth forms and the error pages. Two
+  the page `h1` heads them. **`/anomalies`, `/budget` and `/account` run on it
+  too**, and their `h1` matches the dashboard's 30/36px — the budget and account
+  pages used to head themselves at 22px, which is smaller than the sections
+  underneath them. `.card` is left on the auth forms and the error pages. Two
   consequences worth knowing: the section headings are
   deliberately **not** sticky (the month headings are, at `top-16`, and a second
   sticky layer at the same offset collides with them), and the `pt-6` on each
@@ -464,6 +464,20 @@ Unchanged from the template this app grew out of, and still exactly true.
   every tick, where it had been a hole in the rings. The `bg-surface-muted/40`
   header and footer strips those blocks wore went away entirely: they existed to
   separate themselves from a white card, and there is no white card any more.
+- **`/account` is four groups of rows, not six cards.**
+  `components/settings-row.tsx` is the row — label and note on the left, the
+  control on the right, an optional `detail` spanning underneath it — and
+  `SETTINGS_GROUP` is the panel class that divides them, `divide-surface` per
+  the rule above. The control components render *rows*; the heading and the
+  panel come from `Section` on the page, which is why `install-app.tsx` and
+  `anomaly-scan-controls.tsx` no longer draw a box or a header strip. The
+  grouping answers **what a setting reaches**: Profile (the account itself),
+  Preferences (this browser — theme, language, install), Data (the scan and the
+  two importers), Danger zone. Two things not to undo: nothing inside a group
+  gets a panel of its own — the generator's controls used to be three grounds
+  deep on one control — and the `#anomaly-scan` anchor `/anomalies` links to
+  twice lives on the Data group, so the link lands on a heading rather than
+  mid-panel.
 - **The header's tab group is the app's top-level pages; the right-hand pill
   cluster is account chrome.** `HeaderNav` carries Dashboard, Budget and
   Auffälligkeiten — the last moved out of the pill cluster, where it read as a

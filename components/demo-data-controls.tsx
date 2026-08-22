@@ -9,8 +9,6 @@ import {
   Loader2,
   CheckCircle2,
   ArrowRight,
-  Flame,
-  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +16,7 @@ import {
   generateSyntheticTransactionsAction,
   loadDemoCsvAction,
 } from "@/app/actions/demo-data";
+import { SettingsRow } from "@/components/settings-row";
 import { Link } from "@/i18n/navigation";
 import { useHydrated } from "@/lib/use-hydrated";
 
@@ -32,6 +31,25 @@ function Filename({ children }: { children: React.ReactNode }) {
   );
 }
 const YEARS_CHOICES = [1, 2, 3, 5] as const;
+
+/** What the generator seeds, rendered as one footnote line under its inputs. */
+const INCLUDED = [
+  "included1",
+  "included2",
+  "included3",
+  "included4",
+  "included5",
+  "included6",
+] as const;
+
+/**
+ * The two rows of the account page's Data group that put statements *into* an
+ * account: the synthetic generator and the shipped demo CSV.
+ *
+ * It renders rows rather than a card of its own — the group's heading and
+ * panel come from `Section` in `app/[locale]/account/page.tsx`, the same way
+ * every other block on that page now works.
+ */
 
 export function DemoDataControls() {
   const t = useTranslations("DemoData");
@@ -101,83 +119,46 @@ export function DemoDataControls() {
   const isBusy = isFakerPending || isCsvPending;
 
   return (
-    <div className="card mt-8 overflow-hidden border-line">
-      <div className="border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5 flex items-center justify-between">
-        <div>
-          <h2 className="text-[14.5px] font-semibold text-text">
-            {t("heading")}
-          </h2>
-          <p className="text-[12.5px] text-text-muted">
-            {t("subtitle")}
-          </p>
-        </div>
-      </div>
-
+    <>
       {lastActionStatus && (
-        <div className="flex items-center justify-between gap-3 border-b border-line bg-accent-soft/30 px-4 py-2.5 sm:px-5 text-[13px] text-text">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="size-4 text-accent shrink-0" />
-            <span>{lastActionStatus}</span>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-accent-soft/40 px-4 py-2.5 text-[13px] text-text sm:px-5">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 className="size-4 shrink-0 text-accent" />
+            {lastActionStatus}
+          </span>
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-1 font-medium text-accent hover:underline text-xs"
+            className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
           >
             {t("viewDashboard")} <ArrowRight className="size-3" />
           </Link>
         </div>
       )}
 
-      <div className="divide-y divide-line">
-        {/* Synthetic Generator with Log Scale Slider & Anomalies */}
-        <div className="p-4 sm:p-5 space-y-4 hover:bg-surface-muted/10 transition-colors">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-md bg-accent-soft text-accent">
-                  <Sparkles className="size-4" />
-                </span>
-                <p className="text-[14px] font-medium text-text">
-                  {t("syntheticTitle")}
-                </p>
-              </div>
-              <p className="text-[13px] text-text-muted max-w-2xl">
-                {t("syntheticDescription")}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleGenerateFaker}
-              disabled={isBusy}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-[13px] font-medium text-primary-foreground shadow-sm hover:opacity-90 disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all shrink-0 max-sm:w-full sm:h-9 sm:self-start"
-            >
-              {isFakerPending ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" />
-                  <span>{t("generating", { count: targetCount.toLocaleString("de-CH") })}</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="size-3.5" />
-                  <span>{t("generate", { count: targetCount.toLocaleString("de-CH") })}</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Controls: Time Span, Log Slider */}
-          <div className="rounded-lg border border-line-strong/60 bg-surface-muted/20 p-4 space-y-4">
-            {/* How far back from today the history reaches */}
+      <SettingsRow
+        label={t("syntheticTitle")}
+        note={t("syntheticDescription")}
+        detail={
+          /* The two inputs the button reads, side by side from `sm` up. They
+             used to live in a bordered panel nested inside the card, with the
+             nine slider steps as their own row of buttons and the patterns
+             below in a third box — three grounds deep on what is one control.
+             On the group's grey panel only the select needs a ground of its
+             own, and it gets `--surface`. */
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 sm:items-start">
             <div>
-              <label className="flex items-center gap-1.5 text-xs font-medium text-text mb-1.5">
-                <Layers className="size-3.5 text-text-muted" /> {t("duration")}
+              <label
+                htmlFor="synthetic-years"
+                className="text-[12.5px] font-medium text-text"
+              >
+                {t("duration")}
               </label>
               <select
+                id="synthetic-years"
                 value={yearsCount}
                 onChange={(e) => setYearsCount(Number(e.target.value))}
                 disabled={isBusy}
-                className="w-full h-10 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:outline-none focus:ring-1 focus:ring-accent sm:h-8 sm:text-[13px]"
+                className="mt-1.5 h-10 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:ring-1 focus:ring-accent focus:outline-none sm:h-9 sm:text-[13px]"
               >
                 {YEARS_CHOICES.map((n) => (
                   <option key={n} value={n}>
@@ -187,21 +168,20 @@ export function DemoDataControls() {
               </select>
             </div>
 
-            {/* Log Scale Slider */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-text flex items-center gap-1.5">
-                  <span>{t("targetCount")}</span>
-                  <span className="font-semibold text-accent bg-accent-soft px-1.5 py-0.5 rounded text-xs">
-                    {t("transactionsBadge", { count: targetCount.toLocaleString("de-CH") })}
-                  </span>
+            <div>
+              <div className="flex items-baseline justify-between gap-2">
+                <label
+                  htmlFor="synthetic-count"
+                  className="text-[12.5px] font-medium text-text"
+                >
+                  {t("targetCount")}
                 </label>
-                <span className="text-[11px] text-text-muted">
-                  {t("step", { step: stepIndex + 1, total: LOG_COUNT_STEPS.length })}
+                <span className="font-mono text-[12.5px] tabular-nums text-accent">
+                  {targetCount.toLocaleString("de-CH")}
                 </span>
               </div>
-
               <input
+                id="synthetic-count"
                 type="range"
                 min={0}
                 max={LOG_COUNT_STEPS.length - 1}
@@ -209,98 +189,79 @@ export function DemoDataControls() {
                 value={stepIndex}
                 onChange={(e) => setStepIndex(Number(e.target.value))}
                 disabled={isBusy}
-                className="w-full cursor-pointer accent-accent"
+                className="mt-2.5 w-full cursor-pointer accent-accent sm:mt-3"
                 aria-label={t("sliderLabel")}
               />
-
-              <div className="flex justify-between text-[11px] text-text-muted font-mono px-0.5 [&>*:nth-child(even)]:hidden sm:[&>*:nth-child(even)]:block">
-                {LOG_COUNT_STEPS.map((val, idx) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setStepIndex(idx)}
-                    className={`cursor-pointer px-1.5 py-2 transition-colors sm:px-0 sm:py-0 ${
-                      stepIndex === idx ? "font-bold text-accent" : "hover:text-text"
-                    }`}
-                  >
-                    {val >= 1000 ? `${val / 1000}k` : val}
-                  </button>
-                ))}
+              {/* Just the ends, the way a slider is normally labelled. The nine
+                  clickable steps this replaces were a second control for what
+                  the slider already does, and the value now sits above it. */}
+              <div className="mt-1 flex justify-between font-mono text-[11px] tabular-nums text-text-subtle">
+                <span>{LOG_COUNT_STEPS[0]}</span>
+                <span>
+                  {LOG_COUNT_STEPS[LOG_COUNT_STEPS.length - 1] / 1000}k
+                </span>
               </div>
             </div>
 
-            {/* Anomalies Preview Banner */}
-            <div className="rounded-md border border-line bg-surface p-3 text-xs space-y-1.5">
-              <div className="flex items-center gap-1.5 font-medium text-text">
-                <Flame className="size-3.5 text-amber-500" />
-                <span>{t("includedTitle")}</span>
-              </div>
-              <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-text-muted text-[11.5px]">
-                <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> {t("included1")}
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> {t("included2")}
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> {t("included3")}
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> {t("included4")}
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> {t("included5")}
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> {t("included6")}
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Demo CSV Option */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 hover:bg-surface-muted/20 transition-colors">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-1 rounded-md bg-surface-muted text-text-muted">
-                <FileSpreadsheet className="size-4" />
-              </span>
-              <p className="text-[14px] font-medium text-text">
-                {t("csvTitle")}
-              </p>
-            </div>
-            {/* One sentence with the two filenames interpolated, rather than
-                five fragments spliced around them: only the whole sentence can
-                be reordered into German. `t.rich` keeps the <code> wrappers. */}
-            <p className="text-[13px] text-text-muted max-w-xl">
-              {t.rich("csvDescription", {
-                file: (chunks) => <Filename>{chunks}</Filename>,
-                file2: (chunks) => <Filename>{chunks}</Filename>,
-              })}
+            {/* A footnote, not a panel: it says what the generator seeds, and
+                nothing here is actionable. */}
+            <p className="text-[12px] text-text-subtle sm:col-span-2">
+              {t("includedTitle")}: {INCLUDED.map((key) => t(key)).join(" \u00b7 ")}
             </p>
           </div>
+        }
+      >
+        <button
+          type="button"
+          onClick={handleGenerateFaker}
+          disabled={isBusy}
+          className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-50 max-sm:w-full sm:h-9"
+        >
+          {isFakerPending ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" />
+              {t("generating", { count: targetCount.toLocaleString("de-CH") })}
+            </>
+          ) : (
+            <>
+              <Sparkles className="size-3.5" />
+              {t("generate", { count: targetCount.toLocaleString("de-CH") })}
+            </>
+          )}
+        </button>
+      </SettingsRow>
 
-          <button
-            type="button"
-            onClick={handleLoadCsv}
-            disabled={isBusy}
-            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text shadow-sm hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50 cursor-pointer transition-all shrink-0 max-sm:w-full sm:h-8 sm:self-center"
-          >
-            {isCsvPending ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin" />
-                <span>{t("csvLoading")}</span>
-              </>
-            ) : (
-              <>
-                <FileSpreadsheet className="size-3.5" />
-                <span>{t("csvLoad")}</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+      <SettingsRow
+        label={t("csvTitle")}
+        note={
+          /* One sentence with the two filenames interpolated, rather than five
+             fragments spliced around them: only the whole sentence can be
+             reordered into German. `t.rich` keeps the <code> wrappers. */
+          t.rich("csvDescription", {
+            file: (chunks) => <Filename>{chunks}</Filename>,
+            file2: (chunks) => <Filename>{chunks}</Filename>,
+          })
+        }
+      >
+        <button
+          type="button"
+          onClick={handleLoadCsv}
+          disabled={isBusy}
+          className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 max-sm:w-full sm:h-9"
+        >
+          {isCsvPending ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" />
+              {t("csvLoading")}
+            </>
+          ) : (
+            <>
+              <FileSpreadsheet className="size-3.5" />
+              {t("csvLoad")}
+            </>
+          )}
+        </button>
+      </SettingsRow>
+    </>
   );
 }

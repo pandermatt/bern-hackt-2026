@@ -12,10 +12,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { SettingsRow } from "@/components/settings-row";
 import { useHydrated } from "@/lib/use-hydrated";
 
 /**
- * The account page's "add to home screen" row.
+ * The account page's "add to home screen" row, in the Preferences group —
+ * installing is a per-browser choice, the same as the theme and the language
+ * it sits with.
  *
  * Three mutually exclusive states, because there is no one control that works
  * everywhere:
@@ -152,78 +155,70 @@ export function InstallApp() {
   };
 
   return (
-    <div className="card mt-8 overflow-hidden border-line">
-      <div className="border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5">
-        <h2 className="text-[14.5px] font-semibold text-text">{t("heading")}</h2>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
-        <div>
-          <p className="text-[14px] font-medium text-text">{t("title")}</p>
-          <p className="mt-0.5 text-[13px] text-text-muted">
-            {/* The note follows the state, so nobody is told to press a button
-                that is not there. Before hydration it is the neutral one — the
-                server cannot know which of the three applies. */}
-            {!hydrated
+    <SettingsRow
+      label={t("title")}
+      note={
+        /* The note follows the state, so nobody is told to press a button
+           that is not there. Before hydration it is the neutral one — the
+           server cannot know which of the three applies. */
+        !hydrated
+          ? t("note")
+          : installed
+            ? t("installedNote")
+            : promptEvent
               ? t("note")
-              : installed
-                ? t("installedNote")
-                : promptEvent
-                  ? t("note")
-                  : ios
-                    ? t("iosNote")
-                    : t("browserMenuNote")}
-          </p>
-        </div>
+              : ios
+                ? t("iosNote")
+                : t("browserMenuNote")
+      }
+    >
+      {/* Reserve nothing before hydration: which control belongs here is only
+          knowable in the browser, and guessing would flash the wrong one. */}
+      {hydrated && installed && (
+        <p className="flex shrink-0 items-center gap-2 rounded-full bg-accent-soft px-4 py-2 text-[13px] font-medium text-accent sm:py-1.5">
+          <Check className="size-3.5" aria-hidden />
+          {t("installed")}
+        </p>
+      )}
 
-        {/* Reserve nothing before hydration: which control belongs here is only
-            knowable in the browser, and guessing would flash the wrong one. */}
-        {hydrated && installed && (
-          <p className="flex shrink-0 items-center gap-2 rounded-full bg-accent-soft px-4 py-2 text-[13px] font-medium text-accent sm:py-1.5">
-            <Check className="size-3.5" aria-hidden />
-            {t("installed")}
-          </p>
-        )}
+      {hydrated && !installed && promptEvent && (
+        <button type="button" onClick={install} className={CONTROL}>
+          <Download className="size-3.5 text-text-subtle" aria-hidden />
+          {t("action")}
+        </button>
+      )}
 
-        {hydrated && !installed && promptEvent && (
-          <button type="button" onClick={install} className={CONTROL}>
-            <Download className="size-3.5 text-text-subtle" aria-hidden />
-            {t("action")}
-          </button>
-        )}
-
-        {hydrated && !installed && !promptEvent && ios && (
-          <Dialog>
-            <DialogTrigger className={CONTROL}>
-              <Share className="size-3.5 text-text-subtle" aria-hidden />
-              {t("iosAction")}
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("iosTitle")}</DialogTitle>
-                <DialogDescription>{t("iosIntro")}</DialogDescription>
-              </DialogHeader>
-              <ol className="flex flex-col gap-3 text-[13.5px] text-text">
-                <li className="flex items-start gap-2.5">
-                  <Share className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
-                  <span>{t("iosStep1")}</span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <SquarePlus
-                    className="mt-0.5 size-4 shrink-0 text-accent"
-                    aria-hidden
-                  />
-                  <span>{t("iosStep2")}</span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <Check className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
-                  <span>{t("iosStep3")}</span>
-                </li>
-              </ol>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
-    </div>
+      {hydrated && !installed && !promptEvent && ios && (
+        <Dialog>
+          <DialogTrigger className={CONTROL}>
+            <Share className="size-3.5 text-text-subtle" aria-hidden />
+            {t("iosAction")}
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("iosTitle")}</DialogTitle>
+              <DialogDescription>{t("iosIntro")}</DialogDescription>
+            </DialogHeader>
+            <ol className="flex flex-col gap-3 text-[13.5px] text-text">
+              <li className="flex items-start gap-2.5">
+                <Share className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
+                <span>{t("iosStep1")}</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <SquarePlus
+                  className="mt-0.5 size-4 shrink-0 text-accent"
+                  aria-hidden
+                />
+                <span>{t("iosStep2")}</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Check className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
+                <span>{t("iosStep3")}</span>
+              </li>
+            </ol>
+          </DialogContent>
+        </Dialog>
+      )}
+    </SettingsRow>
   );
 }

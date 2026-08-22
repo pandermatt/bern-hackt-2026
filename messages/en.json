@@ -377,7 +377,6 @@
     "retry": "Try again"
   },
   "AnomalyScan": {
-    "heading": "Anomaly detection",
     "title": "Scan transactions for anomalies",
     "description": "Runs the full rule set over your history and saves what it finds, so the dashboard can show it without re-analysing on every page view. Safe to re-run — each scan replaces the last one's results.",
     "run": "Run scan",
@@ -587,8 +586,6 @@
     }
   },
   "DemoData": {
-    "heading": "Demo & Synthetic Data",
-    "subtitle": "Populate your account with statements to explore the dashboard.",
     "viewDashboard": "View dashboard",
     "syntheticTitle": "Synthetic Transactions",
     "syntheticDescription": "Generates realistic Swiss transactions with seeded anomalies, so every rule in the detection engine has something to find.",
@@ -601,7 +598,6 @@
     "year5": "Last 5 years ({range})",
     "targetCount": "Target transaction count",
     "transactionsBadge": "{count} transactions",
-    "step": "Step {step} of {total}",
     "sliderLabel": "Transaction count slider in log scale",
     "includedTitle": "Included anomaly patterns",
     "included1": "Outlier luxury purchases",
@@ -620,7 +616,8 @@
   "Account": {
     "title": "Account settings",
     "profile": "Profile",
-    "appearance": "Appearance",
+    "preferences": "Preferences",
+    "data": "Data",
     "colourTheme": "Colour theme",
     "colourThemeNote": "Applies to this browser only.",
     "language": "Language",
@@ -643,7 +640,6 @@
     "dark": "Dark"
   },
   "Install": {
-    "heading": "Install",
     "title": "Add to home screen",
     "note": "Install Beyond Money as an app. It opens in its own window, without browser chrome.",
     "action": "Install",
