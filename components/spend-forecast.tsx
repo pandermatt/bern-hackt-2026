@@ -45,9 +45,10 @@ function buildOption(
   const line = {
     type: "line" as const,
     showSymbol: false,
-    symbol: "circle",
-    symbolSize: 6,
     smooth: false,
+    // A 60px sparkline reads at a glance or not at all; there is nothing a
+    // pointer could usefully single out, so the series take no mouse events.
+    silent: true,
     // Both series read the same axis, so neither may drop its nulls onto the
     // next point along — the gap is the point.
     connectNulls: false,
@@ -56,15 +57,6 @@ function buildOption(
   return {
     animationDuration: 500,
     grid: { left: 2, right: 2, top: 6, bottom: 2, containLabel: false },
-    tooltip: {
-      confine: true,
-      trigger: "axis",
-      axisPointer: { type: "line", lineStyle: { color: withAlpha(tokens.ink, 0.3) } },
-      backgroundColor: tokens.surface,
-      borderColor: tokens.line,
-      textStyle: { color: tokens.text, fontSize: 12 },
-      valueFormatter: (value) => formatMoney(Number(value)),
-    },
     xAxis: {
       type: "category",
       boundaryGap: false,
