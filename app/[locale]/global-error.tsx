@@ -1,6 +1,6 @@
 "use client";
 
-import "./globals.css";
+import "../globals.css";
 
 /**
  * Catches failures in the root layout itself — including the `getCurrentUser`

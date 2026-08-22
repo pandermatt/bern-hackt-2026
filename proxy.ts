@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-
+import createMiddleware from 'next-intl/middleware';
 import { SESSION_COOKIE } from "@/lib/site";
+
+const intlProxy = createMiddleware({
+  locales: ['de', 'en'],
+  defaultLocale: 'de'
+});
 
 /**
  * An optimistic redirect only — this runs on the edge runtime and cannot reach
@@ -11,9 +16,16 @@ import { SESSION_COOKIE } from "@/lib/site";
  * (Next 16 renamed the `middleware` convention to `proxy`.)
  */
 export function proxy(request: NextRequest) {
+  // Handle i18n routing first
+  const response = intlProxy(request);
+
   const hasCookie = request.cookies.has(SESSION_COOKIE);
   const { pathname } = request.nextUrl;
-  const isAuthRoute = pathname === "/login" || pathname === "/register";
+  
+  // Strip locale for auth checking
+  const pathWithoutLocale = pathname.replace(/^\/(de|en)/, '') || '/';
+  
+  const isAuthRoute = pathWithoutLocale === "/login" || pathWithoutLocale === "/register";
 
   // "/" is public: it serves the landing page when signed out and the
   // dashboard when signed in, so it must not be redirected away here.
@@ -23,19 +35,21 @@ export function proxy(request: NextRequest) {
   // the host's healthcheck. Without them here, each one gets a 307 to /login.
   const isPublic =
     isAuthRoute ||
-    pathname === "/" ||
-    pathname === "/api/health" ||
-    pathname === "/opengraph-image" ||
-    pathname === "/manifest.webmanifest" ||
+    pathWithoutLocale === "/" ||
+    pathWithoutLocale === "/api/health" ||
+    pathWithoutLocale === "/opengraph-image" ||
+    pathWithoutLocale === "/manifest.webmanifest" ||
     // The worker registers before anyone signs in, and it precaches /offline
     // with credentials omitted — both requests arrive without a cookie.
-    pathname === "/sw.js" ||
-    pathname === "/offline";
+    pathWithoutLocale === "/sw.js" ||
+    pathWithoutLocale === "/offline";
 
   // A *missing* cookie is conclusive — nobody holding no cookie is signed in —
   // so this direction is safe to decide here.
   if (!hasCookie && !isPublic) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const match = pathname.match(/^\/(de|en)/);
+    const locale = match ? match[1] : 'de';
+    return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
   }
 
   // The opposite direction is NOT safe here, and used to be: bouncing /login to
@@ -48,11 +62,16 @@ export function proxy(request: NextRequest) {
   // Only `getCurrentUser()` can tell a live session from a dead one, so
   // app/login and app/register do that redirect themselves.
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|ico)$).*)",
+    // Match all pathnames except for
+    // - … if they start with `/api`, `/_next` or `/_vercel`
+    // - … the ones containing a dot (e.g. `favicon.ico`)
+    "/((?!api|_next|_vercel|.*\\..*).*)",
+    "/",
+    "/(de|en)/:path*"
   ],
 };

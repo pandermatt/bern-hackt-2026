@@ -14,6 +14,7 @@ import {
   analyzeTransactionAnomalies,
   type AnomalyInsight,
 } from "@/lib/anomaly-engine";
+import { analyzeTransactionInsights } from "@/lib/llm/analyze-insights";
 import { getCurrentUser } from "@/lib/auth";
 
 /**
@@ -102,7 +103,22 @@ async function runScan(runId: number, userId: number): Promise<void> {
     }
 
     await yieldToEventLoop();
-    const insights: AnomalyInsight[] = analyzeTransactionAnomalies(rows);
+    let insights: AnomalyInsight[] = analyzeTransactionAnomalies(rows);
+
+    if (insights.length > 0) {
+      await setProgress(runId, { phase: "Generating insights with AI", processed: Math.floor(total * 0.1) });
+      
+      let aiProgress = Math.floor(total * 0.1);
+      const interval = setInterval(() => {
+        aiProgress = Math.min(total - 1, aiProgress + Math.max(1, Math.floor(total * 0.05)));
+        void setProgress(runId, { processed: aiProgress });
+      }, 500);
+
+      insights = await analyzeTransactionInsights(insights);
+      clearInterval(interval);
+    }
+
+    await setProgress(runId, { processed: total });
 
     // Flatten to one row per (insight, transaction) pair.
     const pending: NewAnomaly[] = [];
@@ -134,12 +150,6 @@ async function runScan(runId: number, userId: number): Promise<void> {
     for (let i = 0; i < pending.length; i += INSERT_CHUNK) {
       await db.insert(anomalies).values(pending.slice(i, i + INSERT_CHUNK));
       if (i % (INSERT_CHUNK * 10) === 0) await yieldToEventLoop();
-    }
-
-    // Report the scan as having covered every transaction, in chunks, so the
-    // bar finishes rather than snapping from 0 to 100.
-    for (let done = 0; done < total; done += PROGRESS_CHUNK) {
-      await setProgress(runId, { processed: Math.min(done + PROGRESS_CHUNK, total) });
     }
 
     await db
