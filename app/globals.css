@@ -433,6 +433,54 @@
   }
 }
 
+/* A pot's celebration when it first reaches its target: a burst of sparks
+   from the jar's mouth, then the jar itself glowing in the pot's own colour.
+   Sequenced rather than simultaneous — the glow's delay starts it roughly
+   where the sparks fade, so the two read as one moment instead of two
+   competing effects. `--spark-angle`/`--spark-distance`/`--spark-delay` are
+   set per spark from `components/savings-pot.tsx`; `--pot-glow-colour` is the
+   pot's own `--chart-N`, so a pot celebrates in its own hue. */
+@keyframes pot-spark-burst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--spark-angle))
+      translateY(calc(var(--spark-distance) * -1)) scale(0.4);
+  }
+}
+
+.pot-spark {
+  position: absolute;
+  top: 24%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--spark-colour);
+  opacity: 0;
+  animation: pot-spark-burst 850ms var(--spark-delay, 0ms) ease-out forwards;
+}
+
+@keyframes pot-glow-pulse {
+  0%,
+  15% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  55% {
+    filter: drop-shadow(0 0 16px var(--pot-glow-colour));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+
+.pot-glow {
+  animation: pot-glow-pulse 2.1s ease-out 350ms both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

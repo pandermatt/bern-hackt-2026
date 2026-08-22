@@ -1,5 +1,6 @@
 import { CalendarDays, Repeat } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { CSSProperties } from "react";
 
 import { SavingsGoalDelete } from "@/components/savings-goal-delete";
 import { SavingsGoalEdit } from "@/components/savings-goal-edit";
@@ -23,6 +24,14 @@ import {
  *
  * The fill takes the goal's palette slot from `potSlot`, which is keyed on the
  * row id — so a pot keeps its colour when the one above it is deleted.
+ *
+ * `celebrating` and `sparks` are decided by `PotSlot` in
+ * `savings-pots-grid.tsx`, which watches for the moment a pot's fill first
+ * reaches 100% — this component draws the pot identically regardless, it
+ * only adds the burst and a glow in the pot's own colour when told to. It
+ * stays false on every ordinary render, including the one where a pot is
+ * *already* full, so reloading the page never replays a celebration that
+ * already happened.
  */
 
 /* Cylinder geometry, in viewBox units. `RY` is the perspective squash: the
@@ -54,7 +63,25 @@ const LID_BAND =
   `A ${LID_RX} ${RY} 0 0 0 ${CX + LID_RX} ${LID_Y + LID_SKIRT} ` +
   `L ${CX + LID_RX} ${LID_Y} Z`;
 
-export function SavingsPot({ pot }: { pot: Pot }) {
+/**
+ * One spark in the burst a pot gets the moment it first reaches its target.
+ *
+ * Rolled in `PotSlot` (`savings-pots-grid.tsx`), not here: `Math.random` is
+ * impure, and the only place in this component tree already doing impure work
+ * in an effect — timing the celebration's own end with `setTimeout` — is
+ * there. This component only ever renders whatever list it is handed.
+ */
+export type Spark = { angle: number; distance: number; delay: number; colour: string };
+
+export function SavingsPot({
+  pot,
+  celebrating = false,
+  sparks = [],
+}: {
+  pot: Pot;
+  celebrating?: boolean;
+  sparks?: Spark[];
+}) {
   // Synchronous server component, so the hook works here — see `SavingsGoals`.
   const t = useTranslations("Savings");
   const fill = potFill(pot.savedMinor, pot.targetMinor);
@@ -113,9 +140,29 @@ export function SavingsPot({ pot }: { pot: Pot }) {
         />
       </span>
 
+      {celebrating && (
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
+          {sparks.map((spark, index) => (
+            <span
+              key={index}
+              className="pot-spark"
+              style={
+                {
+                  "--spark-angle": `${spark.angle}deg`,
+                  "--spark-distance": `${spark.distance}px`,
+                  "--spark-delay": `${spark.delay}ms`,
+                  "--spark-colour": spark.colour,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
+      )}
+
       <svg
         viewBox="0 0 120 128"
-        className="h-[118px] w-[110px] shrink-0"
+        className={`h-[118px] w-[110px] shrink-0 ${celebrating ? "pot-glow" : ""}`}
+        style={celebrating ? ({ "--pot-glow-colour": colour } as CSSProperties) : undefined}
         role="img"
         aria-label={`${pot.name}: ${formatMoney(pot.savedMinor)} of ${formatMoney(
           pot.targetMinor,

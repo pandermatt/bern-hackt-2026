@@ -3,11 +3,12 @@
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { toast } from "sonner";
 
 import { transferSavings } from "@/app/actions/savings";
-import { SavingsPot } from "@/components/savings-pot";
+import { SavingsPot, type Spark } from "@/components/savings-pot";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,38 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { formatMoney, potPercent, type SavingsPot as Pot } from "@/lib/insights";
+import { formatMoney, potFill, potPercent, type SavingsPot as Pot } from "@/lib/insights";
+
+/** Pointer travel, in pixels, before a press counts as a drag rather than a tap. */
+const DRAG_THRESHOLD = 10;
+
+/** How long a pot's fireworks-and-glow celebration plays before it clears. */
+const CELEBRATION_MS = 2500;
+
+/** Sparks in the burst a pot gets the moment it first reaches its target. */
+const SPARK_COUNT = 12;
+
+/** Colours cycle the whole chart ramp rather than the pot's own hue — confetti reads as festive precisely because it isn't one colour. */
+function randomSparks(): Spark[] {
+  return Array.from({ length: SPARK_COUNT }, (_, index) => ({
+    angle: (360 / SPARK_COUNT) * index + (Math.random() * 20 - 10),
+    distance: 34 + Math.random() * 22,
+    delay: Math.random() * 90,
+    colour: `var(--chart-${(index % 10) + 1})`,
+  }));
+}
+
+type Drag = {
+  fromId: number;
+  pointerId: number;
+  originX: number;
+  originY: number;
+  dx: number;
+  dy: number;
+  overId: number | null;
+  /** Past the threshold — a real drag, not a tap still deciding what it is. */
+  active: boolean;
+};
 
 /**
  * The pots grid, plus drag-and-drop between them.
@@ -25,9 +57,74 @@ import { formatMoney, potPercent, type SavingsPot as Pot } from "@/lib/insights"
  * A pot only knows how to draw itself — it stays a plain `<div>` — so the
  * dragging lives here, one level up, where the full list of pots is in scope
  * and a drop can be resolved against it.
+ *
+ * Pointer Events rather than HTML5 drag-and-drop: the native API has no touch
+ * backing on mobile browsers, so a finger on the pot's text or its SVG just
+ * scrolled or selected text instead of starting a drag. One pointer-based
+ * implementation covers mouse, pen and touch alike.
  */
 export function SavingsPotsGrid({ pots }: { pots: Pot[] }) {
   const [transfer, setTransfer] = useState<{ from: Pot; to: Pot } | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  // A ref alongside the state: pointer handlers fire faster than React commits,
+  // so the next move event needs the drag that was *just* set, not last render's.
+  const dragRef = useRef<Drag | null>(null);
+
+  const setDragState = useCallback((next: Drag | null) => {
+    dragRef.current = next;
+    setDrag(next);
+  }, []);
+
+  // The element under the finger, not under the (visually translated) pot
+  // being dragged — that pot turns `pointer-events-none` for exactly this.
+  const potIdAt = useCallback((x: number, y: number): number | null => {
+    const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-pot-id]");
+    const id = cell ? Number(cell.dataset.potId) : NaN;
+    return Number.isFinite(id) ? id : null;
+  }, []);
+
+  function handlePointerDown(fromId: number, event: ReactPointerEvent<HTMLLIElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    setDragState({
+      fromId,
+      pointerId: event.pointerId,
+      originX: event.clientX,
+      originY: event.clientY,
+      dx: 0,
+      dy: 0,
+      overId: null,
+      active: false,
+    });
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLLIElement>) {
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const dx = event.clientX - current.originX;
+    const dy = event.clientY - current.originY;
+    const active = current.active || Math.hypot(dx, dy) > DRAG_THRESHOLD;
+    if (active) {
+      // Only past the threshold: a tap that never moves must not steal the
+      // pointer capture the settings/delete buttons need for their own click.
+      if (!current.active) event.currentTarget.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    }
+    setDragState({ ...current, dx, dy, active, overId: active ? potIdAt(event.clientX, event.clientY) : null });
+  }
+
+  function endDrag(event: ReactPointerEvent<HTMLLIElement>) {
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    if (current.active && current.overId !== null && current.overId !== current.fromId) {
+      const from = pots.find((pot) => pot.id === current.fromId);
+      const to = pots.find((pot) => pot.id === current.overId);
+      if (from && to) setTransfer({ from, to });
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDragState(null);
+  }
 
   return (
     <>
@@ -36,10 +133,13 @@ export function SavingsPotsGrid({ pots }: { pots: Pot[] }) {
           <PotSlot
             key={pot.id}
             pot={pot}
-            onDrop={(fromGoalId) => {
-              const from = pots.find((candidate) => candidate.id === fromGoalId);
-              if (from) setTransfer({ from, to: pot });
-            }}
+            dragging={drag !== null && drag.active && drag.fromId === pot.id}
+            offset={drag !== null && drag.fromId === pot.id ? { x: drag.dx, y: drag.dy } : null}
+            over={drag !== null && drag.active && drag.overId === pot.id && drag.fromId !== pot.id}
+            onPointerDown={(event) => handlePointerDown(pot.id, event)}
+            onPointerMove={handlePointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
           />
         ))}
       </ul>
@@ -58,58 +158,68 @@ export function SavingsPotsGrid({ pots }: { pots: Pot[] }) {
 }
 
 /**
- * One draggable, droppable grid cell.
+ * One draggable, droppable grid cell — see `SavingsPotsGrid` for the gesture.
  *
- * Native HTML5 drag-and-drop rather than a library: this is one gesture
- * (drag a pot onto another pot), not a sortable list or a cross-window drop
- * target, so `dataTransfer` carrying the source id is the whole mechanism.
+ * Also the one place that notices a pot just reached its target: `key={pot.id}`
+ * keeps this component mounted across refreshes, so a ref here can compare
+ * "was it full a moment ago" against "is it full now" and fire the pot's
+ * celebration only on that crossing, never on an ordinary reload of an
+ * already-full pot.
  */
-function PotSlot({ pot, onDrop }: { pot: Pot; onDrop: (fromGoalId: number) => void }) {
-  const [over, setOver] = useState(false);
-  // Counts enter/leave rather than toggling on both, because a child element
-  // firing its own dragleave on the way to a grandchild would otherwise drop
-  // the highlight mid-drag.
-  const depth = useRef(0);
+function PotSlot({
+  pot,
+  dragging,
+  offset,
+  over,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+}: {
+  pot: Pot;
+  dragging: boolean;
+  offset: { x: number; y: number } | null;
+  over: boolean;
+  onPointerDown: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerCancel: (event: ReactPointerEvent<HTMLLIElement>) => void;
+}) {
+  const full = potFill(pot.savedMinor, pot.targetMinor) >= 1;
+  const wasFull = useRef(full);
+  const [celebration, setCelebration] = useState<Spark[] | null>(null);
+
+  useEffect(() => {
+    if (full && !wasFull.current) {
+      // Rolled here rather than in `SavingsPot`: `Math.random` is impure, and
+      // this effect already does genuine side-effect work (the timer), which
+      // is the one place React's stricter rules allow it.
+      setCelebration(randomSparks());
+      const timer = setTimeout(() => setCelebration(null), CELEBRATION_MS);
+      wasFull.current = true;
+      return () => clearTimeout(timer);
+    }
+    wasFull.current = full;
+  }, [full]);
 
   return (
     <li
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.setData("text/plain", String(pot.id));
-        event.dataTransfer.effectAllowed = "move";
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-      }}
-      onDragEnter={(event) => {
-        event.preventDefault();
-        depth.current += 1;
-        setOver(true);
-      }}
-      onDragLeave={() => {
-        depth.current -= 1;
-        if (depth.current <= 0) {
-          depth.current = 0;
-          setOver(false);
-        }
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        depth.current = 0;
-        setOver(false);
-        const raw = event.dataTransfer.getData("text/plain");
-        const fromGoalId = Number(raw);
-        if (Number.isFinite(fromGoalId) && fromGoalId !== pot.id) {
-          onDrop(fromGoalId);
-        }
-      }}
+      data-pot-id={pot.id}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      style={dragging && offset ? { transform: `translate(${offset.x}px, ${offset.y}px)` } : undefined}
       className={cn(
-        "cursor-grab rounded-lg transition-shadow active:cursor-grabbing",
+        // `touch-none` is what turns a finger-drag on the card into this
+        // gesture instead of the page scrolling underneath it — the tradeoff
+        // is that the card itself can no longer be the start of a scroll.
+        "relative cursor-grab touch-none rounded-lg transition-shadow select-none active:cursor-grabbing",
+        dragging && "z-20 opacity-80 shadow-lg pointer-events-none",
         over && "shadow-[0_0_0_2px_var(--accent)]",
       )}
     >
-      <SavingsPot pot={pot} />
+      <SavingsPot pot={pot} celebrating={celebration !== null} sparks={celebration ?? []} />
     </li>
   );
 }
