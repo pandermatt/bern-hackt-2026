@@ -8,8 +8,9 @@ import { useTranslations } from "next-intl";
  *
  * Collapsed — which is what the server renders, and what a reader with no
  * JavaScript keeps — the top nudge is fully readable and the rest of the deck
- * shows as two edges behind it. "Show all" unfolds them into exactly the list
- * this used to be. The cap of three in `rankNudges` is what makes the deck
+ * shows as two edges behind it. "Show all" — or a click on the front card,
+ * which while closed is covering the others — unfolds them into exactly the
+ * list this used to be. The cap of three in `rankNudges` is what makes the deck
  * legible: a deck of eight is a pile, and an entry page is not an inbox.
  *
  * **It owns the speaker as well as the bubble**, and that is not tidiness: the
@@ -91,8 +92,35 @@ export function NudgeStack({
                 />
               </div>
             )}
-            {/* The front card never folds — the deck always says one thing. */}
-            <div className="relative z-10">{cards[0]}</div>
+            {/* The front card never folds — the deck always says one thing.
+
+                While the deck is closed the front card is standing on top of
+                two others, so a click on it is far more likely to mean "let me
+                see the rest" than "take me to the budget page" — and the one
+                reading it cannot tell what it is covering until it opens. So
+                the first click deals the deck out and goes nowhere; the second
+                click, on a card that is now plainly the only thing under the
+                pointer, follows the link as usual. A lone nudge is not a deck
+                and links on the first click, as it always has.
+
+                Capture phase, on the wrapper rather than the card: the cards
+                are `children` and the link lives inside one, so this is the
+                last place that sees the event before the anchor does.
+                `stopPropagation` keeps it away from the anchor's own handler
+                and `preventDefault` keeps the browser from following the href
+                — Enter on a focused card included, which is the same gesture
+                by keyboard. */}
+            <div
+              className="relative z-10"
+              onClickCapture={(event) => {
+                if (!collapsed) return;
+                event.preventDefault();
+                event.stopPropagation();
+                setExpanded(true);
+              }}
+            >
+              {cards[0]}
+            </div>
           </div>
         </div>
 

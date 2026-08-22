@@ -11,9 +11,13 @@ import {
   startAnomalyScan,
   type ScanStatus,
 } from "@/app/actions/anomalies";
+import { SettingsRow } from "@/components/settings-row";
 
 /**
- * Triggers an anomaly scan and follows its progress.
+ * Triggers an anomaly scan and follows its progress — the first row of the
+ * account page's Data group. The `#anomaly-scan` anchor two pages link to now
+ * lives on that group in `app/[locale]/account/page.tsx`, so the link lands on
+ * the heading rather than mid-panel.
  *
  * The scan is a background job on the server, so there is nothing to await —
  * the button kicks it off and this component polls for progress. Polling only
@@ -109,99 +113,85 @@ export function AnomalyScanControls({ outdated = false }: { outdated?: boolean }
       : 0;
 
   return (
-    <section
-      id="anomaly-scan"
-      className="card mt-8 scroll-mt-20 overflow-hidden"
-      aria-labelledby="scan-heading"
-    >
-      <div className="border-b border-line bg-surface-muted/50 px-4 py-3 sm:px-5">
-        <h2 id="scan-heading" className="text-[14.5px] font-semibold text-text">
-          {t("heading")}
-        </h2>
-      </div>
-
-      <div className="px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-[62ch]">
-            <p className="text-[14px] font-medium text-text">
-              {t("title")}
+    <SettingsRow
+      label={t("title")}
+      note={t("description")}
+      detail={
+        <>
+          {/* The re-run button is always available — this only says when
+              pressing it would actually change something. Hidden while a scan
+              is in flight, because "out of date" is about to stop being true. */}
+          {outdated && !running && (
+            <p className="mt-3 flex items-start gap-2 text-[13px] text-brand-ink">
+              <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+              <span>{t("outdated")}</span>
             </p>
-            <p className="mt-0.5 text-[13px] text-text-muted">
-              {t("description")}
-            </p>
-          </div>
+          )}
 
-          <button
-            type="button"
-            onClick={onScan}
-            disabled={running || pending}
-            className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-md bg-accent px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 max-sm:w-full sm:h-9"
-          >
-            {running ? t("running") : pending ? t("starting") : t("run")}
-          </button>
-        </div>
-
-        {/* The re-run button above is always available — this only says when
-            pressing it would actually change something. Hidden while a scan is
-            in flight, because "out of date" is about to stop being true. */}
-        {outdated && !running && (
-          <p className="mt-3 flex items-start gap-2 text-[13px] text-brand-ink">
-            <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-            <span>{t("outdated")}</span>
-          </p>
-        )}
-
-        {running && (
-          <div className="mt-4">
-            <div
-              className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"
-              role="progressbar"
-              aria-valuenow={percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={t("progressLabel")}
-            >
+          {running && (
+            <div className="mt-4">
+              {/* The track is `--surface`, not `--surface-muted`: on the
+                  group's grey panel a muted track would be filled with its own
+                  ground and disappear. */}
               <div
-                className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
-                style={{ width: `${percent}%` }}
-              />
+                className="h-2 w-full overflow-hidden rounded-full bg-surface"
+                role="progressbar"
+                aria-valuenow={percent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={t("progressLabel")}
+              >
+                <div
+                  className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+              <p className="mt-2 font-mono text-[12px] tabular-nums text-text-muted">
+                {/* The phase is written to the database by the scan in English;
+                    `ScanPhases` maps those fixed strings to words. An unknown
+                    one passes through rather than throwing. */}
+                {t("progress", {
+                  phase: tPhases.has(status.phase)
+                    ? tPhases(status.phase)
+                    : status.phase,
+                  processed: status.processed.toLocaleString("de-CH"),
+                  total: status.total.toLocaleString("de-CH"),
+                })}
+                {percent > 0 && ` \u00b7 ${percent}%`}
+              </p>
             </div>
-            <p className="mt-2 font-mono text-[12px] tabular-nums text-text-muted">
-              {/* The phase is written to the database by the scan in English;
-                  `ScanPhases` maps those fixed strings to words. An unknown one
-                  passes through rather than throwing. */}
-              {t("progress", {
-                phase: tPhases.has(status.phase) ? tPhases(status.phase) : status.phase,
-                processed: status.processed.toLocaleString("de-CH"),
+          )}
+
+          {loaded && !running && status?.status === "done" && (
+            <p className="mt-3 font-mono text-[12px] tabular-nums text-text-muted">
+              {t("lastScan", {
+                when: formatWhen(status.finishedAt, locale, t("never")),
                 total: status.total.toLocaleString("de-CH"),
+                findings: status.insightCount.toLocaleString("de-CH"),
               })}
-              {percent > 0 && ` · ${percent}%`}
             </p>
-          </div>
-        )}
+          )}
 
-        {loaded && !running && status?.status === "done" && (
-          <p className="mt-3 font-mono text-[12px] tabular-nums text-text-muted">
-            {t("lastScan", {
-              when: formatWhen(status.finishedAt, locale, t("never")),
-              total: status.total.toLocaleString("de-CH"),
-              findings: status.insightCount.toLocaleString("de-CH"),
-            })}
-          </p>
-        )}
+          {loaded && !running && status?.status === "failed" && (
+            <p className="mt-3 text-[13px] text-danger">
+              {t("failed", { error: status.error ?? t("unknownError") })}
+            </p>
+          )}
 
-        {loaded && !running && status?.status === "failed" && (
-          <p className="mt-3 text-[13px] text-danger">
-            {t("failed", { error: status.error ?? t("unknownError") })}
-          </p>
-        )}
-
-        {loaded && !status && (
-          <p className="mt-3 text-[13px] text-text-muted">
-            {t("noScan")}
-          </p>
-        )}
-      </div>
-    </section>
+          {loaded && !status && (
+            <p className="mt-3 text-[13px] text-text-muted">{t("noScan")}</p>
+          )}
+        </>
+      }
+    >
+      <button
+        type="button"
+        onClick={onScan}
+        disabled={running || pending}
+        className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-md bg-accent px-3.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60 max-sm:w-full sm:h-9"
+      >
+        {running ? t("running") : pending ? t("starting") : t("run")}
+      </button>
+    </SettingsRow>
   );
 }

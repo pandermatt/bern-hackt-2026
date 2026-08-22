@@ -1,7 +1,9 @@
-import { ShieldCheck, Heart } from "lucide-react";
+import { Heart } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { HideOnRoute } from "@/components/hide-on-route";
 import { LanguageSelector } from "@/components/language-selector";
+import { LogoMark } from "@/components/logo";
 import type { User } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
 import { site } from "@/lib/site";
@@ -10,18 +12,14 @@ import pkg from "@/package.json";
 /**
  * Two layouts, one footer.
  *
- * From `sm` up it is the two-column bar it has always been: brand on the left,
- * a wrapped row of chips and links on the right. Below `sm` those columns
- * cannot coexist — the brand line alone ("Beyond Money · Private spending
- * insights from your own statements.") is wider than a 375px screen, and the
- * meta row collapsed into a ragged centred pile of a badge, a language pill,
- * two 12px text links and a version string.
+ * From `sm` up it is a two-column bar: the signet and the wordmark on the
+ * left over the "built with ♥" line, a row of controls on the right. Below
+ * `sm` the same three bands stack and centre.
  *
- * The mobile layout stacks instead, in three bands: the brand, then the badge
- * beside the language pill, then the two links as real controls. The inner
- * groups that make those bands wear `sm:contents`, so at `sm` they stop
- * generating a box and their children rejoin the parent row — one DOM for both
- * layouts rather than two copies behind a breakpoint.
+ * It carries the identity and nothing else. The tagline and the privacy chip
+ * that used to sit here said, in the footer's smallest type, what the landing
+ * page already says at full size — and a claim about where the data lives is
+ * worth more on a page somebody is reading than in a line under it.
  */
 
 /**
@@ -38,24 +36,20 @@ export function AppFooter({ user }: { user: User | null }) {
   const t = useTranslations("AppFooter");
 
   return (
-    /* Gone in the installed app on a phone. This is the marketing footer — a
-       tagline, a privacy badge, a version string and, signed out, the only
-       sign-in links there are. An app opened from a home screen has no use for
-       any of it, and it is the one thing the fixed tab bar would otherwise
-       cover. Untouched at every other width and in every browser tab. */
+    /* Gone in the installed app on a phone. This is the marketing footer — the
+       wordmark, a version string and, signed out, the only sign-in links there
+       are. An app opened from a home screen has no use for any of it, and it is
+       the one thing the fixed tab bar would otherwise cover. Untouched at every
+       other width and in every browser tab. */
     <footer className="w-full border-t border-line bg-surface py-8 app-shell:hidden sm:py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-6 px-5 sm:flex-row sm:px-8">
-        <div className="flex flex-col items-center gap-1.5 text-center sm:items-start sm:text-left">
-          {/* Stacked on a phone, one line from `sm`. The separator goes with
-              the single line — a `·` left hanging at the end of a wrapped line
-              reads as a typo. */}
-          <div className="flex flex-col items-center gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-            <span className="text-[15px] font-semibold tracking-tight text-text sm:text-[14px]">
+        <div className="flex flex-col items-center gap-2 text-center sm:items-start sm:text-left">
+          {/* Not a link: the header's wordmark already goes home, and it knows
+              whether "home" is the landing or the dashboard. */}
+          <div className="flex items-center gap-2.5">
+            <LogoMark />
+            <span className="text-[15px] font-semibold tracking-tight text-text">
               {site.name}
-            </span>
-            <span className="hidden text-line-strong sm:inline">·</span>
-            <span className="max-w-[38ch] text-[13px] text-text-muted">
-              {t("tagline")}
             </span>
           </div>
 
@@ -70,28 +64,30 @@ export function AppFooter({ user }: { user: User | null }) {
         </div>
 
         <div className="flex w-full flex-col items-center gap-3 text-xs font-medium text-text-muted sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center sm:gap-5">
-          {/* Band one: the two pills, which are the same height and read as a
-              pair. */}
-          <div className="flex items-center gap-3 sm:contents">
-            <div className="flex items-center gap-1 rounded-full border border-positive/25 bg-positive-soft px-2.5 py-1 text-positive">
-              <ShieldCheck className="size-3.5" />
-              <span>{t("clientScoped")}</span>
-            </div>
-            {/* Signed out, this is the only place to change language — signed
-                in, it lives on /account instead, so the footer does not offer
-                the same control twice. */}
-            {!user && <LanguageSelector />}
-          </div>
+          {/* Signed out, this is the only place to change language — signed
+              in, it lives on /account instead, so the footer does not offer
+              the same control twice. */}
+          {!user && <LanguageSelector />}
 
-          {/* Band two. */}
+          {/* The two links share a row of their own below `sm`; `sm:contents`
+              drops the box at `sm` so they rejoin the parent row rather than
+              needing a second copy behind a breakpoint.
+
+              Each is dropped on the page it leads to, the same way the
+              header's pair is — the footer of `/login` offering "Anmelden"
+              points at the form the reader is looking at. */}
           {!user && (
             <div className="flex items-center gap-1 sm:contents">
-              <Link href="/login" className={FOOTER_LINK}>
-                {t("signIn")}
-              </Link>
-              <Link href="/register" className={FOOTER_LINK}>
-                {t("register")}
-              </Link>
+              <HideOnRoute route="/login">
+                <Link href="/login" className={FOOTER_LINK}>
+                  {t("signIn")}
+                </Link>
+              </HideOnRoute>
+              <HideOnRoute route="/register">
+                <Link href="/register" className={FOOTER_LINK}>
+                  {t("register")}
+                </Link>
+              </HideOnRoute>
             </div>
           )}
 

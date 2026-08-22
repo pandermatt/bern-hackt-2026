@@ -14,7 +14,6 @@ import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { displayName } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +46,7 @@ export default async function Dashboard({
           {/* Bigger than the 26/30px section headings below it, or the page
               would be headed by something smaller than its own sections. */}
           <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
-            {t("welcome")} {displayName(user)}
+            {t("title")}
           </h1>
           {/* Describes the rows in view, so it tracks the filters. An empty view
               with statements behind it is a filter that matched nothing — a
