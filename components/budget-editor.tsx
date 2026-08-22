@@ -3,11 +3,12 @@
 import { Loader2, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type CSSProperties } from "react";
 import { toast } from "sonner";
 
 import { saveBudgets } from "@/app/actions/budget";
 import { Section } from "@/components/section";
+import { categoryLucideIcon } from "@/lib/category-icons";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
 import { useCategoryLabel } from "@/lib/use-category-label";
 
@@ -100,6 +101,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
           ledger's month panels do it — white lines rather than grey borders. */}
       <ul className="divide-y divide-surface">
         {rows.map((row) => {
+          const CategoryIcon = categoryLucideIcon(row.category);
           const limit = row.limitMinor;
           const over = limit !== null && row.usedMinor > limit;
           const share = limit && limit > 0 ? (row.usedMinor / limit) * 100 : 0;
@@ -109,16 +111,41 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
               key={row.category}
               className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-surface-hover sm:px-5"
             >
+              {/* The category's colour, as its picture rather than as a
+                  swatch — same slot, same `slotsOf` map the radar reads, so
+                  the two halves of the page still agree on which hue means
+                  which category.
+
+                  Neither tone is the raw hue, and neither is hardcoded. Six of
+                  the ten fills are under 3:1 on white (Soft yellow is 1.26:1),
+                  and a 1.5px stroke has far less to be seen than the square
+                  had — so the tile mixes the hue into `--surface` and the glyph
+                  mixes it toward `--chart-ink`. Both tokens swap between
+                  themes and in opposite directions, which is what makes one
+                  formula cover light and dark: 60/40 puts the worst slot at
+                  2.66:1 on its own tile in light and 4.28:1 in dark, against
+                  ~1.1:1 for the swatch this replaces. Mixing further greys the
+                  hue out, which is the one thing the swatch was for. It stays
+                  `aria-hidden` for the same reason the square was: the name is
+                  right next to it. */}
               <span
-                className="size-2.5 shrink-0 rounded-[2px]"
-                style={{
-                  background:
-                    row.slot === 0
-                      ? "var(--chart-other)"
-                      : `var(--chart-${row.slot})`,
-                }}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md"
+                style={
+                  {
+                    "--tint":
+                      row.slot === 0
+                        ? "var(--chart-other)"
+                        : `var(--chart-${row.slot})`,
+                    background:
+                      "color-mix(in oklab, var(--tint) 18%, var(--surface))",
+                    color:
+                      "color-mix(in oklab, var(--tint) 60%, var(--chart-ink))",
+                  } as CSSProperties
+                }
                 aria-hidden
-              />
+              >
+                <CategoryIcon className="size-[18px]" />
+              </span>
 
               <div className="min-w-[9rem] flex-1">
                 <p className="text-[14px] font-medium text-text">
