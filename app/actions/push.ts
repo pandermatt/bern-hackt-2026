@@ -10,6 +10,7 @@ import { defaultLocale, isAppLocale, locales, type AppLocale } from "@/i18n/rout
 import { getCurrentUser } from "@/lib/auth";
 import {
   broadcastPush,
+  broadcastUrlFor,
   getPushSubscriptions,
   pushBroadcastEnabled,
   pushConfigured,
@@ -124,10 +125,11 @@ export async function deletePushSubscription(endpoint: string): Promise<PushResu
  * The text of one "found new anomaly" push, in every locale the app has.
  *
  * Resolved up front rather than at send time because `getTranslations` reads
- * the request, and the send happens twenty seconds after the request has
+ * the request, and the test send fires twenty seconds after that request has
  * returned. Composed for *all* locales rather than for the caller's, so a
  * device that chose the other language still gets its own — see the note on
- * `pushSubscriptions.locale`.
+ * `pushSubscriptions.locale`. Shared with the broadcast below, so the button
+ * on stage sends the notification the app actually sends.
  */
 async function anomalyPayloads(): Promise<Record<AppLocale, PushPayload>> {
   const entries = await Promise.all(
@@ -187,56 +189,107 @@ export async function sendTestPushNotification(): Promise<PushResult> {
   return { ok: true };
 }
 /** Room enough for a sentence on a lock screen, and no room for an essay. */
-const MESSAGE_MAX = 120;
+const TITLE_MAX = 120;
+const BODY_MAX = 240;
+const URL_MAX = 500;
+
+/** What the broadcast field posts: the three parts of a notification. */
+export type BroadcastInput = {
+  title: string;
+  body: string;
+  /** Empty, a path, or an absolute URL — see `broadcastUrlFor`. */
+  url: string;
+};
+
+const broadcastSchema = z.object({
+  title: z.string().trim().min(1).max(TITLE_MAX),
+  body: z.string().trim().max(BODY_MAX),
+  url: z.string().trim().max(URL_MAX),
+});
 
 /**
- * Sends a typed message to every subscribed device on the deployment, now.
+ * The guard both broadcasts share.
  *
- * A demo control, gated on `PUSH_BROADCAST_ENABLED` — with the flag unset this
- * refuses regardless of who is calling, which matters because a `"use server"`
- * export is reachable by POST whether or not the UI renders a button for it.
- * The flag is checked here rather than only in the page for exactly that
- * reason.
+ * Checked in the action rather than only in the page: a `"use server"` export
+ * is reachable by POST whether or not a button points at it, and these two let
+ * *any* signed-in account push to *every* subscribed device on the deployment.
+ * That is a demo affordance, and the flag is what bounds it.
+ */
+async function broadcastAllowed(): Promise<PushError | null> {
+  const user = await getCurrentUser();
+  if (!user) return "sessionExpired";
+  if (!pushConfigured()) return "notConfigured";
+  if (!pushBroadcastEnabled()) return "notAllowed";
+  return null;
+}
+
+/**
+ * Sends a typed title, description and link to every subscribed device, now.
  *
  * No delay, unlike the test send: on stage the point is that the phones buzz
  * while you are still talking, and the presenter owns the timing. It is
  * awaited rather than floated so the button can report the number of devices
  * reached instead of leaving that to guesswork.
+ *
+ * The description and the link may be left empty — the fallbacks are the app's
+ * name and its entry page, both per device locale, so a hurried broadcast
+ * still lands as a complete notification.
  */
 export async function broadcastPushNotification(
-  message: string,
+  input: BroadcastInput,
 ): Promise<BroadcastResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "sessionExpired" };
-  if (!pushConfigured()) return { ok: false, error: "notConfigured" };
-  if (!pushBroadcastEnabled()) return { ok: false, error: "notAllowed" };
+  const denied = await broadcastAllowed();
+  if (denied) return { ok: false, error: denied };
 
-  const parsed = z.string().trim().min(1).max(MESSAGE_MAX).safeParse(message);
+  const parsed = broadcastSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "empty" };
 
-  // The typed line is the *title*: that is the part a lock screen sets in
-  // bold, and a broadcast is one sentence. The body carries the app's name so
-  // a notification with no context still says where it came from.
+  // The default body, per locale, for a broadcast that carries no description.
   const bodies = await Promise.all(
     locales.map(async (locale) => {
       const t = await getTranslations({ locale, namespace: "Push" });
       return [locale, t("broadcastBody")] as const;
     }),
   );
-  const bodyFor = Object.fromEntries(bodies) as Record<AppLocale, string>;
+  const fallbackBody = Object.fromEntries(bodies) as Record<AppLocale, string>;
 
   const devices = await broadcastPush((subscription) => {
     const locale = isAppLocale(subscription.locale)
       ? subscription.locale
       : defaultLocale;
     return {
-      title: parsed.data,
-      body: bodyFor[locale],
-      url: `/${locale}/home`,
+      title: parsed.data.title,
+      body: parsed.data.body || fallbackBody[locale],
+      url: broadcastUrlFor(parsed.data.url, locale),
       // Its own tag, so a broadcast never collapses into an anomaly push.
       tag: "broadcast",
     };
   });
+
+  if (devices === 0) return { ok: false, error: "noSubscription" };
+  return { ok: true, devices };
+}
+
+/**
+ * Sends the "found new anomaly" notification — the real one, the same payload
+ * the test button uses — to every subscribed device, now.
+ *
+ * The one-press version of the demo: no typing, no delay, and the phones open
+ * on the anomalies page in their own language. Shares `anomalyPayloads` with
+ * the test send precisely so the thing on stage is the thing the app sends.
+ */
+export async function broadcastAnomalyNotification(): Promise<BroadcastResult> {
+  const denied = await broadcastAllowed();
+  if (denied) return { ok: false, error: denied };
+
+  const payloads = await anomalyPayloads();
+
+  const devices = await broadcastPush(
+    (subscription) =>
+      payloads[
+        isAppLocale(subscription.locale) ? subscription.locale : defaultLocale
+      ],
+  );
 
   if (devices === 0) return { ok: false, error: "noSubscription" };
   return { ok: true, devices };

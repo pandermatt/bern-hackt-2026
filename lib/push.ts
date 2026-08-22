@@ -9,6 +9,7 @@ import {
 
 import { db } from "@/db";
 import { pushSubscriptions, type PushSubscriptionRow } from "@/db/schema";
+import { isAppLocale, type AppLocale } from "@/i18n/routing";
 import { site } from "@/lib/site";
 
 /**
@@ -82,6 +83,33 @@ function applyVapidDetails() {
     process.env.VAPID_PRIVATE_KEY!,
   );
   configured = true;
+}
+
+
+/**
+ * Turns what a presenter types into the link a notification opens.
+ *
+ * Three shapes, because on stage nobody should have to remember which one this
+ * field wants:
+ *
+ * - **empty** — the app's own entry page, in the device's language.
+ * - **an absolute URL** — used verbatim. Anything off-origin can only be
+ *   opened in a new window by the worker, which is the browser's rule, not
+ *   ours.
+ * - **a path** — prefixed with the device's locale unless it already carries
+ *   one, so typing `/anomalies` sends a German phone to `/de/anomalies` and an
+ *   English one to `/en/anomalies` from the same field.
+ *
+ * Pure and exported so the locale-prefixing can be tested without a push.
+ */
+export function broadcastUrlFor(input: string, locale: AppLocale): string {
+  const trimmed = input.trim();
+  if (!trimmed) return `/${locale}/home`;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  const path = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  const first = path.split("/")[1];
+  return isAppLocale(first) ? path : `/${locale}${path}`;
 }
 
 /** Every device this account has subscribed, newest last. */

@@ -51,7 +51,10 @@ vi.mock("next-intl/server", () => {
 });
 
 /** One recorded `sendNotification` call. */
-type Sent = { endpoint: string; payload: { title: string; url: string } };
+type Sent = {
+  endpoint: string;
+  payload: { title: string; body: string; url: string; tag?: string };
+};
 
 const push = vi.hoisted(() => ({
   sent: [] as { endpoint: string; payload: string }[],
@@ -83,12 +86,13 @@ vi.mock("web-push", () => {
 });
 
 const {
+  broadcastAnomalyNotification,
   broadcastPushNotification,
   deletePushSubscription,
   savePushSubscription,
   sendTestPushNotification,
 } = await import("@/app/actions/push");
-const { sendPushToUser } = await import("@/lib/push");
+const { broadcastUrlFor, sendPushToUser } = await import("@/lib/push");
 
 /** What `PushSubscription.toJSON()` hands back in the browser. */
 function subscriptionJson(endpoint: string) {
@@ -317,30 +321,32 @@ describe("sendPushToUser", () => {
 });
 describe("broadcastPushNotification", () => {
   /** A second account with a device of its own, to prove the reach. */
-  async function otherDevice(endpoint: string) {
+  async function otherDevice(endpoint: string, deviceLocale = "en") {
     const other = await createUser("someone@example.com");
     await db.insert(pushSubscriptions).values({
       userId: other.id,
       endpoint,
       p256dh: "x",
       auth: "y",
-      locale: "en",
+      locale: deviceLocale,
     });
   }
+
+  const message = { title: "Look at your phone", body: "", url: "" };
 
   it("refuses unless the server flag is set, however it is called", async () => {
     // The gate has to live in the action, not only in the page: a "use server"
     // export is reachable by POST whether or not a button points at it.
     await savePushSubscription(subscriptionJson("https://push.test/a"));
 
-    expect(await broadcastPushNotification("hello")).toEqual({
+    expect(await broadcastPushNotification(message)).toEqual({
       ok: false,
       error: "notAllowed",
     });
     expect(push.sent).toHaveLength(0);
 
     process.env.PUSH_BROADCAST_ENABLED = "0";
-    expect(await broadcastPushNotification("hello")).toEqual({
+    expect(await broadcastPushNotification(message)).toEqual({
       ok: false,
       error: "notAllowed",
     });
@@ -351,7 +357,7 @@ describe("broadcastPushNotification", () => {
     await savePushSubscription(subscriptionJson("https://push.test/mine"));
     await otherDevice("https://push.test/theirs");
 
-    expect(await broadcastPushNotification("Look at your phone")).toEqual({
+    expect(await broadcastPushNotification(message)).toEqual({
       ok: true,
       devices: 2,
     });
@@ -361,17 +367,48 @@ describe("broadcastPushNotification", () => {
     ]);
   });
 
-  it("puts the typed line in the title, where a lock screen sets it bold", async () => {
+  it("sends the title, description and link that were typed", async () => {
     process.env.PUSH_BROADCAST_ENABLED = "1";
     await savePushSubscription(subscriptionJson("https://push.test/a"));
 
-    await broadcastPushNotification("  Look at your phone  ");
+    await broadcastPushNotification({
+      title: "  Look at your phone  ",
+      body: "  We found something.  ",
+      url: "/budget",
+    });
 
     const [{ payload }] = sentPayloads();
     // Trimmed, so stray whitespace does not ship as part of the message.
     expect(payload.title).toBe("Look at your phone");
+    expect(payload.body).toBe("We found something.");
+    // Prefixed with this device's locale — see broadcastUrlFor.
+    expect(payload.url).toBe("/de/budget");
     // Its own tag, or a broadcast would collapse into an anomaly push.
-    expect(payload).toMatchObject({ tag: "broadcast", url: "/de/home" });
+    expect(payload.tag).toBe("broadcast");
+  });
+
+  it("falls back to the app's name and entry page when only a title is given", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    await savePushSubscription(subscriptionJson("https://push.test/a"));
+
+    await broadcastPushNotification(message);
+
+    const [{ payload }] = sentPayloads();
+    expect(payload.body).toBe(de.Push.broadcastBody);
+    expect(payload.url).toBe("/de/home");
+  });
+
+  it("gives each device the link in its own language", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    locale.current = "de";
+    await savePushSubscription(subscriptionJson("https://push.test/phone"));
+    await otherDevice("https://push.test/laptop", "en");
+
+    await broadcastPushNotification({ ...message, url: "/anomalies" });
+
+    const byEndpoint = new Map(sentPayloads().map((s) => [s.endpoint, s.payload.url]));
+    expect(byEndpoint.get("https://push.test/phone")).toBe("/de/anomalies");
+    expect(byEndpoint.get("https://push.test/laptop")).toBe("/en/anomalies");
   });
 
   it("sends at once rather than on the test send's delay", async () => {
@@ -380,22 +417,24 @@ describe("broadcastPushNotification", () => {
     process.env.PUSH_BROADCAST_ENABLED = "1";
     await savePushSubscription(subscriptionJson("https://push.test/a"));
 
-    await broadcastPushNotification("now");
+    await broadcastPushNotification(message);
     expect(push.sent).toHaveLength(1);
   });
 
-  it("refuses an empty message and one past the length cap", async () => {
+  it("refuses an untitled message and one past the length cap", async () => {
     process.env.PUSH_BROADCAST_ENABLED = "1";
     await savePushSubscription(subscriptionJson("https://push.test/a"));
 
-    expect(await broadcastPushNotification("   ")).toEqual({
+    expect(await broadcastPushNotification({ ...message, title: "   " })).toEqual({
       ok: false,
       error: "empty",
     });
-    expect(await broadcastPushNotification("x".repeat(121))).toEqual({
-      ok: false,
-      error: "empty",
-    });
+    expect(
+      await broadcastPushNotification({ ...message, title: "x".repeat(121) }),
+    ).toEqual({ ok: false, error: "empty" });
+    expect(
+      await broadcastPushNotification({ ...message, body: "x".repeat(241) }),
+    ).toEqual({ ok: false, error: "empty" });
     expect(push.sent).toHaveLength(0);
   });
 
@@ -405,7 +444,7 @@ describe("broadcastPushNotification", () => {
     await otherDevice("https://push.test/dead");
     push.gone.add("https://push.test/dead");
 
-    expect(await broadcastPushNotification("hello")).toEqual({ ok: true, devices: 1 });
+    expect(await broadcastPushNotification(message)).toEqual({ ok: true, devices: 1 });
     // Pruned on the way, like any other send.
     const rows = await db.select().from(pushSubscriptions);
     expect(rows.map((row) => row.endpoint)).toEqual(["https://push.test/live"]);
@@ -414,9 +453,81 @@ describe("broadcastPushNotification", () => {
   it("refuses a signed-out caller even with the flag on", async () => {
     process.env.PUSH_BROADCAST_ENABLED = "1";
     signedIn.user = null;
-    expect(await broadcastPushNotification("hello")).toEqual({
+    expect(await broadcastPushNotification(message)).toEqual({
       ok: false,
       error: "sessionExpired",
     });
+  });
+});
+
+describe("broadcastAnomalyNotification", () => {
+  it("sends the app's own anomaly push to everyone, in each device's language", async () => {
+    // Shares its payload with the test send, so what goes out on stage is what
+    // the app actually sends when a scan finds something.
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    locale.current = "de";
+    await savePushSubscription(subscriptionJson("https://push.test/phone"));
+
+    const other = await createUser("someone@example.com");
+    await db.insert(pushSubscriptions).values({
+      userId: other.id,
+      endpoint: "https://push.test/laptop",
+      p256dh: "x",
+      auth: "y",
+      locale: "en",
+    });
+
+    expect(await broadcastAnomalyNotification()).toEqual({ ok: true, devices: 2 });
+
+    const byEndpoint = new Map(sentPayloads().map((s) => [s.endpoint, s.payload]));
+    expect(byEndpoint.get("https://push.test/phone")).toMatchObject({
+      title: de.Push.anomalyTitle,
+      url: "/de/anomalies",
+    });
+    expect(byEndpoint.get("https://push.test/laptop")).toMatchObject({
+      title: en.Push.anomalyTitle,
+      url: "/en/anomalies",
+    });
+  });
+
+  it("is gated on the same flag as the custom broadcast", async () => {
+    await savePushSubscription(subscriptionJson("https://push.test/a"));
+    expect(await broadcastAnomalyNotification()).toEqual({
+      ok: false,
+      error: "notAllowed",
+    });
+    expect(push.sent).toHaveLength(0);
+  });
+
+  it("says so when nobody is subscribed", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    expect(await broadcastAnomalyNotification()).toEqual({
+      ok: false,
+      error: "noSubscription",
+    });
+  });
+});
+
+describe("broadcastUrlFor", () => {
+  it("sends an empty field to the entry page in the device's language", () => {
+    expect(broadcastUrlFor("", "de")).toBe("/de/home");
+    expect(broadcastUrlFor("   ", "en")).toBe("/en/home");
+  });
+
+  it("prefixes a bare path with the device's locale", () => {
+    // The point of the field: one thing typed, each phone lands in its own
+    // language.
+    expect(broadcastUrlFor("/anomalies", "de")).toBe("/de/anomalies");
+    expect(broadcastUrlFor("anomalies", "en")).toBe("/en/anomalies");
+  });
+
+  it("leaves a path that already names a locale alone", () => {
+    expect(broadcastUrlFor("/en/budget", "de")).toBe("/en/budget");
+  });
+
+  it("passes an absolute URL through untouched", () => {
+    expect(broadcastUrlFor("https://example.com/x", "de")).toBe(
+      "https://example.com/x",
+    );
   });
 });
