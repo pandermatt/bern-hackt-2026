@@ -221,6 +221,7 @@
     "emptyTitle": "Nothing to budget yet",
     "emptyBody": "Import a statement and this page will suggest a monthly limit for each category, from your own averages.",
     "radarHeading": "Spending against budget",
+    "radarCompressed": "The rings step up in multiples, not in equal amounts — on an even scale one outsized category would press the rest against the middle.",
     "radarNoLimits": "No limits set — the ring is your own monthly average",
     "radarMeta": "{spent} spent of {limit} in {month}",
     "limitsHeading": "Monthly limits",

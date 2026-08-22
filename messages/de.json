@@ -221,6 +221,7 @@
     "emptyTitle": "Noch nichts zu budgetieren",
     "emptyBody": "Importieren Sie einen Kontoauszug, und diese Seite schlägt aus Ihren eigenen Durchschnittswerten ein Monatslimit für jede Kategorie vor.",
     "radarHeading": "Ausgaben gegen Budget",
+    "radarCompressed": "Die Ringe wachsen in Vielfachen statt in gleichen Schritten — auf einer gleichmässigen Skala würde eine einzelne Ausreisser-Kategorie die übrigen in die Mitte drücken.",
     "radarNoLimits": "Keine Limits gesetzt — der Ring ist Ihr eigener Monatsdurchschnitt",
     "radarMeta": "{spent} von {limit} ausgegeben im {month}",
     "limitsHeading": "Monatslimits",

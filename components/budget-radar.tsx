@@ -475,6 +475,17 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
         label={t("chartLabel")}
       />
 
+      {/* A bent scale that does not say so is a lie told with a straight
+          face: every ring is still labelled in francs, but they no longer
+          climb in equal steps, and the shape reads differently because of it.
+          Only shown on the months that are actually compressed — a standing
+          caveat on a dial that is linear would be its own kind of wrong. */}
+      {dial.compressed && (
+        <p className="mx-auto -mt-1 max-w-[52ch] text-center text-[12px] leading-snug text-text-muted">
+          {t("radarCompressed")}
+        </p>
+      )}
+
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. */}
       <div className="sr-only">
