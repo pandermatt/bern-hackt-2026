@@ -49,7 +49,7 @@ export function BudgetMonthPicker({
             router.replace(`${basePath}?${params.toString()}`, { scroll: false }),
           );
         }}
-        className={`h-9 rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[13px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+        className={`h-9 rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[16px] sm:text-[13px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
           pending ? "opacity-60" : ""
         }`}
       >

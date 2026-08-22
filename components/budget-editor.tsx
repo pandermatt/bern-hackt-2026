@@ -190,7 +190,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                     }))
                   }
                   placeholder={t("noLimitPlaceholder")}
-                  className="h-9 w-[8.5rem] rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className="h-9 w-[8.5rem] rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 />
               </label>
             </li>

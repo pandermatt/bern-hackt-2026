@@ -256,7 +256,7 @@ export function ChatPanel({
             onChange={(event) => setInput(event.target.value)}
             placeholder={t("inputPlaceholder")}
             maxLength={2000}
-            className="h-10 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 text-[13.5px] text-text placeholder:text-text-subtle focus:ring-1 focus:ring-accent focus:outline-none"
+            className="h-10 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 text-[16px] sm:text-[13.5px] text-text placeholder:text-text-subtle focus:ring-1 focus:ring-accent focus:outline-none"
             aria-label={t("inputLabel")}
           />
           <button

@@ -60,7 +60,7 @@ export function SavingsGoalForm() {
           maxLength={60}
           onChange={(event) => setName(event.target.value)}
           placeholder={t("goalPlaceholder")}
-          className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[13.5px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[16px] sm:text-[13.5px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
       </label>
 
@@ -74,7 +74,7 @@ export function SavingsGoalForm() {
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
           placeholder="5000"
-          className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
       </label>
 
@@ -90,7 +90,7 @@ export function SavingsGoalForm() {
           type="date"
           value={targetOn}
           onChange={(event) => setTargetOn(event.target.value)}
-          className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[13px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[16px] sm:text-[13px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
       </label>
 

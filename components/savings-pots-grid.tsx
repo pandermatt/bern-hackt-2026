@@ -470,7 +470,7 @@ function TransferDialog({
               inputMode="decimal"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             />
           </label>
           <p className="mt-1.5 h-4 font-mono text-[11.5px] tabular-nums text-text-subtle">
@@ -627,7 +627,7 @@ function AllocationDialog({
               inputMode="decimal"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             />
           </label>
           <p className="mt-1.5 h-4 font-mono text-[11.5px] tabular-nums text-text-subtle">

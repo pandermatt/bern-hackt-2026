@@ -132,7 +132,7 @@ export function SavingsGoalEdit({
               inputMode="decimal"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             />
           </label>
           <p className="mt-1.5 h-4 font-mono text-[11.5px] tabular-nums text-text-subtle">
@@ -152,7 +152,7 @@ export function SavingsGoalEdit({
                 type="date"
                 value={due}
                 onChange={(event) => setDue(event.target.value)}
-                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[12.5px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[16px] sm:text-[12.5px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               />
             </label>
             <label>
@@ -165,7 +165,7 @@ export function SavingsGoalEdit({
                 value={monthly}
                 onChange={(event) => setMonthly(event.target.value)}
                 placeholder="0.00"
-                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               />
             </label>
           </div>
