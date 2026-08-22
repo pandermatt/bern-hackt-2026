@@ -24,8 +24,12 @@ export async function generateSyntheticTransactionsAction(options?: {
 
   try {
     const { count } = await saveGeneratedTransactionsForUser(user.id, options);
-    revalidatePath("/");
-    revalidatePath("/account");
+    // Every page sits under `/[locale]`, so the literal "/" and "/account"
+    // these used to name match nothing. The dashboard lives in a `(dashboard)`
+    // route group and its cache tag carries the group, so the pattern has to
+    // as well. Revalidating the pattern covers both languages at once.
+    revalidatePath("/[locale]/(dashboard)", "page");
+    revalidatePath("/[locale]/account", "page");
     const yearsText =
       options?.yearsCount && options.yearsCount > 1
         ? `${options.yearsCount} years (from ${options.startYear ?? 2025})`
@@ -55,8 +59,8 @@ export async function loadDemoCsvAction(): Promise<ActionState> {
 
   try {
     const { count } = await loadDemoCsvForUser(user.id);
-    revalidatePath("/");
-    revalidatePath("/account");
+    revalidatePath("/[locale]/(dashboard)", "page");
+    revalidatePath("/[locale]/account", "page");
     return {
       success: true,
       message: `Successfully loaded ${count} demo transactions from CSV files!`,
