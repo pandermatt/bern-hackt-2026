@@ -138,7 +138,7 @@
     "signedOut": "Signed out."
   },
   "Dashboard": {
-    "welcome": "Welcome",
+    "title": "Dashboard",
     "range": "{accounts} · {first} to {last}",
     "accountJoiner": " and ",
     "noMatches": "No transactions match these filters.",
