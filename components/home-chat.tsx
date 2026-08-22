@@ -70,15 +70,16 @@ export function HomeChat() {
       </div>
 
       {view === "debug" ? (
-        /* The debug list brings its own scroll; this wrapper only gives it the
-           same height cap the transcript gets, so the card cannot grow without
-           bound on a long log. */
-        <div className="flex max-h-[45svh] flex-col">
+        /* The debug list brings its own scroll; this wrapper gives it the same
+           fixed height the transcript has, so toggling the bug icon does not
+           resize the card under the reader. (The chat view is still taller by
+           its input row — that one is not a scroll area and has nowhere to go.) */
+        <div className="flex h-[30svh] flex-col lg:h-[60svh]">
           <ChatDebug />
         </div>
       ) : (
-         <ChatPanel chat={chat} scrollClassName="max-h-[30svh] lg:max-h-[60svh]" />
+        <ChatPanel chat={chat} scrollClassName="h-[30svh] lg:h-[60svh]" />
       )}
-         </div>
+    </div>
   );
 }
