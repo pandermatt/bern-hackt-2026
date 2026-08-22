@@ -22,7 +22,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   const user = await getCurrentUser();
   if (!user) return <Landing />;
 
-  const dashboard = await getDashboard(await searchParams);
+  const params = await searchParams;
+  const dashboard = await getDashboard(params);
   if (!dashboard) return <Landing />;
 
   const { facets, view, filters, monthly, stack, totals, categories, merchants } =
@@ -87,15 +88,21 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           {/* TransactionFilters reads useSearchParams, which needs a boundary it
               can suspend against. */}
           <Suspense fallback={null}>
-            <TransactionFilters facets={facets} filters={filters} />
+            <TransactionFilters
+              facets={facets}
+              filters={filters}
+              accountTotals={dashboard.accountTotals}
+            />
           </Suspense>
 
           <TransactionList
             rows={dashboard.transactions}
             anomalies={dashboard.anomalies}
-            page={dashboard.page}
-            pageCount={dashboard.pageCount}
+            monthTotals={dashboard.monthTotals}
+            nextOffset={dashboard.nextOffset}
+            continuesInto={dashboard.continuesInto}
             totalCount={dashboard.totalCount}
+            filters={params}
           />
         </div>
       </main>

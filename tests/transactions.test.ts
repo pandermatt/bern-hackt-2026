@@ -16,7 +16,7 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   getCurrentUser: async () => signedIn.user,
 }));
 
-const { getDashboard, listTransactions } = await import(
+const { getDashboard, getLedgerChunk, listTransactions } = await import(
   "@/app/actions/transactions"
 );
 
@@ -218,34 +218,58 @@ describe("filters", () => {
     expect(dashboard?.filters.from).toBeUndefined();
   });
 
-  it("reports page metadata for a result set that fits on one page", async () => {
+  it("reports no further chunk when the first one is the whole set", async () => {
     const dashboard = await getDashboard({});
-    expect(dashboard?.page).toBe(1);
-    expect(dashboard?.pageCount).toBe(1);
-    // Total across every page, not just `transactions.length` — the same two
+    // The ledger scrolls rather than pages: `nextOffset` is null once there is
+    // nothing left to append.
+    expect(dashboard?.nextOffset).toBeNull();
+    // The whole filtered set, not just `transactions.length` — the same two
     // non-transfer rows the other assertions above see.
     expect(dashboard?.totalCount).toBe(2);
   });
 
-  it("clamps an out-of-range page instead of leaving the list empty", async () => {
-    const dashboard = await getDashboard({ page: "99" });
-    expect(dashboard?.page).toBe(1);
-    expect(dashboard?.transactions).toHaveLength(2);
-  });
-
-  it("does not let a malformed page wipe out the other filters", async () => {
-    // Unlike `filterSchema`, which fails as one unit, `page` is parsed on its
-    // own — a junk value degrades to page 1 without discarding `category`.
+  it("ignores a leftover ?page without discarding the other filters", async () => {
+    // Nothing reads `page` any more, but a bookmark from the paginated version
+    // still carries one. It has to be inert, not fatal.
     const dashboard = await getDashboard({
       categories: "Housing",
       page: "not-a-number",
     });
 
-    expect(dashboard?.page).toBe(1);
     expect(dashboard?.filters.categories).toEqual(["Housing"]);
     expect(dashboard?.transactions).toHaveLength(1);
+    expect(dashboard?.nextOffset).toBeNull();
+  });
+
+  describe("getLedgerChunk", () => {
+    it("returns the same first chunk the dashboard renders", async () => {
+      const dashboard = await getDashboard({});
+      const chunk = await getLedgerChunk(0, {});
+
+      expect(chunk?.rows.map((r) => r.id)).toEqual(
+        dashboard?.transactions.map((r) => r.id),
+      );
+      expect(chunk?.nextOffset).toBe(dashboard?.nextOffset);
+    expect(chunk?.continuesFrom).toBe(false);
+    });
+
+    it("scopes to the session account, not to any argument", async () => {
+      // The only thing a caller gets to choose is how far in to start.
+      const chunk = await getLedgerChunk(0, {});
+      expect(chunk?.rows.every((r) => r.userId === alice.id)).toBe(true);
+    });
+
+    it("returns nothing once the offset is past the end", async () => {
+      expect(await getLedgerChunk(9999, {})).toBeNull();
+    });
+
+    it("survives a junk offset", async () => {
+      const chunk = await getLedgerChunk(Number.NaN, {});
+      expect(chunk?.rows).toHaveLength(2);
+    });
   });
 });
+
 
 describe("the unique index", () => {
   it("rejects the same statement line twice for one account", async () => {

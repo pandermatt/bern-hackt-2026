@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { Transaction } from "@/db/schema";
 import {
+  accountTotals,
   applyFilters,
   byCategory,
   facetsOf,
   formatDay,
   formatMoney,
+  monthParts,
   monthlySeries,
+  ledgerChunk,
+  monthTotals,
   slotsOf,
   stackByCategory,
   paginate,
@@ -129,6 +133,94 @@ describe("monthlySeries", () => {
 
   it("returns nothing when there is nothing to plot", () => {
     expect(monthlySeries([])).toEqual([]);
+  });
+});
+
+describe("accountTotals", () => {
+  it("nets each account out separately", () => {
+    expect(
+      accountTotals([
+        row({ account: "Privatkonto", kind: "income", amountMinor: 700000 }),
+        row({ account: "Privatkonto", amountMinor: -98200 }),
+        row({ account: "Sparkonto", amountMinor: -1530 }),
+      ]),
+    ).toEqual({ Privatkonto: 601800, Sparkonto: -1530 });
+  });
+
+  it("counts transfers, unlike summarize and monthTotals", () => {
+    // A transfer is not income or spending, but it is money leaving this
+    // account — drop it and both sides of every card payment disappear from
+    // the balances they actually moved between.
+    expect(
+      accountTotals([
+        row({ account: "Privatkonto", kind: "transfer", amountMinor: -50000 }),
+        row({ account: "Kreditkarte", kind: "transfer", amountMinor: 50000 }),
+      ]),
+    ).toEqual({ Privatkonto: -50000, Kreditkarte: 50000 });
+  });
+
+  it("returns nothing for no rows", () => {
+    expect(accountTotals([])).toEqual({});
+  });
+});
+
+describe("monthTotals", () => {
+  it("buckets money in and out by YYYY-MM", () => {
+    expect(
+      monthTotals([
+        row({ kind: "income", amountMinor: 700000, bookedOn: "2025-12-23" }),
+        row({ amountMinor: -98200, bookedOn: "2025-12-29" }),
+        row({ amountMinor: -1530, bookedOn: "2025-11-04" }),
+      ]),
+    ).toEqual({
+      "2025-12": { income: 700000, expense: 98200 },
+      "2025-11": { income: 0, expense: 1530 },
+    });
+  });
+
+  it("excludes transfers, the same as summarize and monthlySeries", () => {
+    // The heading can therefore report less than the visible rows appear to
+    // sum to when ?includeTransfers is on. That is deliberate.
+    expect(
+      monthTotals([
+        row({ kind: "transfer", amountMinor: -50000, bookedOn: "2025-01-05" }),
+        row({ amountMinor: -1000, bookedOn: "2025-01-06" }),
+      ]),
+    ).toEqual({ "2025-01": { income: 0, expense: 1000 } });
+  });
+
+  it("keeps a month that is only income", () => {
+    expect(
+      monthTotals([row({ kind: "income", amountMinor: 700000, bookedOn: "2025-06-25" })]),
+    ).toEqual({ "2025-06": { income: 700000, expense: 0 } });
+  });
+
+  it("does not invent months with no rows", () => {
+    // Unlike monthlySeries, which fills the gaps so the chart has no holes —
+    // a heading only exists above rows.
+    const totals = monthTotals([
+      row({ bookedOn: "2025-01-05" }),
+      row({ bookedOn: "2025-04-05" }),
+    ]);
+
+    expect(Object.keys(totals).sort()).toEqual(["2025-01", "2025-04"]);
+  });
+
+  it("returns nothing for no rows", () => {
+    expect(monthTotals([])).toEqual({});
+  });
+});
+
+describe("monthParts", () => {
+  it("spells the month out in full and keeps the year apart", () => {
+    expect(monthParts("2025-12")).toEqual({ name: "December", year: "2025" });
+    expect(monthParts("2025-09")).toEqual({ name: "September", year: "2025" });
+  });
+
+  it("agrees with MONTH_LABELS on which month it is", () => {
+    // The two arrays are separate literals; this is what keeps them in step.
+    expect(monthParts("2024-01").name).toBe("January");
+    expect(formatDay("2024-01-09")).toBe("9 Jan 2024");
   });
 });
 
@@ -407,6 +499,67 @@ describe("paginate", () => {
     expect(empty.page).toBe(1);
     expect(empty.pageCount).toBe(1);
     expect(empty.rows).toEqual([]);
+  });
+});
+
+describe("ledgerChunk", () => {
+  const across = (count: number, month: string) =>
+    Array.from({ length: count }, (_, i) =>
+      row({ bookedOn: `${month}-${String((i % 28) + 1).padStart(2, "0")}` }),
+    );
+
+  it("never hands back more than the limit, however big the month", () => {
+    // The whole point. An earlier version extended to the month's end, which at
+    // 25k transactions meant a 2000-row first chunk and a dashboard that never
+    // finished loading.
+    const chunk = ledgerChunk(across(2000, "2025-09"), 0, 50);
+    expect(chunk.rows).toHaveLength(50);
+    expect(chunk.nextOffset).toBe(50);
+  });
+
+  it("flags a cut that lands inside a month, at both ends", () => {
+    const rows = across(120, "2025-09");
+    const second = ledgerChunk(rows, 50, 50);
+
+    expect(second.continuesFrom).toBe(true);
+    expect(second.continuesInto).toBe(true);
+  });
+
+  it("does not flag a cut that lands on a month boundary", () => {
+    const rows = [...across(50, "2025-09"), ...across(50, "2025-08")];
+    const first = ledgerChunk(rows, 0, 50);
+    const second = ledgerChunk(rows, 50, 50);
+
+    expect(first.continuesInto).toBe(false);
+    expect(second.continuesFrom).toBe(false);
+  });
+
+  it("never continues from the very start, or into the very end", () => {
+    const rows = across(120, "2025-09");
+    expect(ledgerChunk(rows, 0, 50).continuesFrom).toBe(false);
+    expect(ledgerChunk(rows, 100, 50).continuesInto).toBe(false);
+    expect(ledgerChunk(rows, 100, 50).nextOffset).toBeNull();
+  });
+
+  it("walks the whole list exactly once, with no row lost or repeated", () => {
+    const rows = [...across(37, "2025-09"), ...across(64, "2025-08")];
+    const seen: number[] = [];
+    let offset: number | null = 0;
+
+    while (offset !== null) {
+      const chunk: ReturnType<typeof ledgerChunk> = ledgerChunk(rows, offset, 25);
+      seen.push(...chunk.rows.map((r) => r.id));
+      offset = chunk.nextOffset;
+    }
+
+    expect(seen).toEqual(rows.map((r) => r.id));
+  });
+
+  it("returns nothing past the end, or for a negative offset", () => {
+    const rows = across(10, "2025-09");
+    expect(ledgerChunk(rows, 999, 50).rows).toEqual([]);
+    expect(ledgerChunk(rows, 999, 50).nextOffset).toBeNull();
+    expect(ledgerChunk(rows, -5, 50).rows).toEqual([]);
   });
 });
 

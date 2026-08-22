@@ -1,28 +1,82 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useTransition, type ReactNode } from "react";
 
-import type { Facets, Filters } from "@/lib/insights";
+import { formatMoney, type Facets, type Filters } from "@/lib/insights";
 
 /**
- * The only client component in the app. Filter state lives in the URL rather
- * than in React state, so a view is shareable, bookmarkable, and survives a
- * reload — and the transaction list stays on the server.
+ * Two dropdowns, and nothing else.
  *
- * Reads `useSearchParams`, so the caller has to wrap it in a `<Suspense>`
- * boundary; `components/flash-toaster.tsx` sets the same precedent.
+ * This replaced a seven-control grid — search, account, merchant, a date range,
+ * direction, a row of category chips and a transfers toggle. The two that
+ * survived are the two a statement is actually read by: which account, and
+ * which way the money went.
+ *
+ * The others still work as URL parameters, because "Where it goes" and "Top
+ * merchants" link to them — `?categories=Housing` and `?merchant=Coop` narrow
+ * the ledger exactly as they always did. What went away is the UI for setting
+ * them by hand, not the filter. That is why **Clear** stays: without it a
+ * breakdown link would be a one-way trip.
+ *
+ * Filter state lives in the URL rather than in React state, so a view is
+ * shareable, bookmarkable and survives a reload. Reading `useSearchParams`
+ * means the caller has to wrap this in a `<Suspense>` boundary.
  */
 
+/**
+ * A pill, matching the header's controls. `text-[16px]` below `sm` is not a
+ * style choice — iOS Safari zooms the page when a focused control is set under
+ * 16px. `appearance-none` drops the platform arrow so `Field` can draw one in
+ * the accent instead.
+ */
 const CONTROL =
-  "h-11 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-9 sm:text-[13px]";
+  "h-11 w-full cursor-pointer appearance-none truncate rounded-full border border-line-strong bg-surface pl-4 pr-10 text-[16px] font-medium text-text transition-colors hover:border-accent hover:bg-surface-muted focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-10 sm:text-[14px]";
+
+/**
+ * Banking's own words for the two directions. A statement calls them credits
+ * and debits; "money in" and "money out" ride along in brackets so the term is
+ * never the only thing carrying the meaning.
+ */
+const DIRECTIONS = [
+  { value: "", label: "All transactions" },
+  { value: "income", label: "Credits (money in)" },
+  { value: "expense", label: "Debits (money out)" },
+] as const;
+
+/**
+ * The arrow is a real element rather than a `background-image` data URI, so it
+ * can wear `text-accent` and follow the theme — Blue Stone is `#005b61` on
+ * white and `#4cc3cc` on the dark ground, and a colour baked into a URI would
+ * be neither.
+ */
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="min-w-[13rem] flex-1">
+      <span className="mb-1.5 block pl-1 text-[12px] font-medium text-text-muted">
+        {label}
+      </span>
+      <span className="relative block">
+        {children}
+        <ChevronDown
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-accent"
+        />
+      </span>
+    </label>
+  );
+}
 
 export function TransactionFilters({
   facets,
   filters,
+  accountTotals,
 }: {
   facets: Facets;
   filters: Filters;
+  /** Net movement per account, shown against each name in the dropdown. */
+  accountTotals: Record<string, number>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -34,9 +88,6 @@ export function TransactionFilters({
     // in the URL and read as one.
     if (value) params.set(key, value);
     else params.delete(key);
-    // A filter change narrows or widens the result set, so a remembered page
-    // number no longer points at the same rows.
-    params.delete("page");
 
     startTransition(() => {
       const query = params.toString();
@@ -44,188 +95,63 @@ export function TransactionFilters({
     });
   }
 
-  function toggleCategory(category: string) {
-    const params = new URLSearchParams(searchParams);
-    const selected = params.getAll("categories");
-    const next = selected.includes(category)
-      ? selected.filter((value) => value !== category)
-      : [...selected, category];
-
-    params.delete("categories");
-    for (const value of next) params.append("categories", value);
-    params.delete("page");
-
-    startTransition(() => {
-      const query = params.toString();
-      router.replace(query ? `/?${query}` : "/", { scroll: false });
-    });
-  }
-
+  // Counts filters set from anywhere, the breakdown links included — those have
+  // no control here, so Clear is the only way back from one.
   const active = searchParams.toString().length > 0;
+
+  /** "Privatkonto · CHF 12’450.30", with a real minus for a negative balance. */
+  function accountLabel(account: string): string {
+    const total = accountTotals[account];
+    if (total === undefined) return account;
+    return `${account} · ${total < 0 ? "−" : ""}${formatMoney(total)}`;
+  }
 
   return (
     <section
-      className="card p-4"
+      className={`flex flex-wrap items-end gap-3 transition-opacity ${
+        pending ? "opacity-60" : ""
+      }`}
       aria-label="Filter transactions"
       data-pending={pending ? "true" : undefined}
     >
-      <div
-        className={`grid gap-3 transition-opacity sm:grid-cols-2 lg:grid-cols-4 ${
-          pending ? "opacity-60" : ""
-        }`}
-      >
-        <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-text-muted">
-            Search
-          </span>
-          <input
-            type="search"
-            className={CONTROL}
-            placeholder="Merchant or description"
-            defaultValue={filters.q ?? ""}
-            // `key` forces a remount when the URL changes from elsewhere (a
-            // breakdown link, the back button), so the box cannot go stale.
-            key={`q-${filters.q ?? ""}`}
-            onChange={(event) => update("q", event.target.value.trim())}
-          />
-        </label>
+      <Field label="Account">
+        <select
+          className={CONTROL}
+          value={filters.account ?? ""}
+          onChange={(event) => update("account", event.target.value)}
+        >
+          <option value="">All accounts</option>
+          {facets.accounts.map((account) => (
+            <option key={account} value={account}>
+              {accountLabel(account)}
+            </option>
+          ))}
+        </select>
+      </Field>
 
-        <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-text-muted">
-            Account
-          </span>
-          <select
-            className={CONTROL}
-            value={filters.account ?? ""}
-            onChange={(event) => update("account", event.target.value)}
-          >
-            <option value="">All accounts</option>
-            {facets.accounts.map((account) => (
-              <option key={account} value={account}>
-                {account}
-              </option>
-            ))}
-          </select>
-        </label>
+      <Field label="Direction">
+        <select
+          className={CONTROL}
+          value={filters.kind ?? ""}
+          onChange={(event) => update("kind", event.target.value)}
+        >
+          {DIRECTIONS.map((direction) => (
+            <option key={direction.value} value={direction.value}>
+              {direction.label}
+            </option>
+          ))}
+        </select>
+      </Field>
 
-        <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-text-muted">
-            Merchant
-          </span>
-          <select
-            className={CONTROL}
-            value={filters.merchant ?? ""}
-            onChange={(event) => update("merchant", event.target.value)}
-          >
-            <option value="">All merchants</option>
-            {facets.merchants.map((merchant) => (
-              <option key={merchant} value={merchant}>
-                {merchant}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-text-muted">
-            From
-          </span>
-          <input
-            type="date"
-            className={CONTROL}
-            min={facets.first}
-            max={facets.last}
-            value={filters.from ?? ""}
-            onChange={(event) => update("from", event.target.value)}
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-text-muted">
-            To
-          </span>
-          <input
-            type="date"
-            className={CONTROL}
-            min={facets.first}
-            max={facets.last}
-            value={filters.to ?? ""}
-            onChange={(event) => update("to", event.target.value)}
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-[12px] font-medium text-text-muted">
-            Direction
-          </span>
-          <select
-            className={CONTROL}
-            value={filters.kind ?? ""}
-            onChange={(event) => update("kind", event.target.value)}
-          >
-            <option value="">In and out</option>
-            <option value="expense">Money out</option>
-            <option value="income">Money in</option>
-          </select>
-        </label>
-
-        {/* Full-width: up to ~19 category chips need room to wrap, which a
-            quarter-width grid cell does not have. */}
-        <fieldset className="sm:col-span-2 lg:col-span-4">
-          <legend className="mb-1.5 block text-[12px] font-medium text-text-muted">
-            Categories
-          </legend>
-          <div className="flex flex-wrap gap-1.5">
-            {facets.categories.map((category) => {
-              const checked = filters.categories?.includes(category) ?? false;
-              return (
-                <label
-                  key={category}
-                  className={`cursor-pointer rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors sm:px-2.5 sm:py-1 ${
-                    checked
-                      ? "border-accent bg-accent-soft text-accent"
-                      : "border-line-strong bg-surface text-text-muted hover:bg-surface-muted"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={checked}
-                    onChange={() => toggleCategory(category)}
-                  />
-                  {category}
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
-
-        <div className="flex items-end justify-between gap-3 sm:col-span-2 lg:col-span-4">
-          <label className="flex min-h-10 cursor-pointer items-center gap-2 pb-2 text-[13px] text-text sm:min-h-0">
-            <input
-              type="checkbox"
-              className="size-5 accent-[var(--accent)] sm:size-4"
-              checked={filters.includeTransfers}
-              onChange={(event) =>
-                update("includeTransfers", event.target.checked ? "true" : "")
-              }
-            />
-            {/* Transfers move money between the owner's own accounts — counting
-                them as spending double-counts every card purchase. */}
-            Show transfers
-          </label>
-
-          {active && (
-            <button
-              type="button"
-              onClick={() => startTransition(() => router.replace("/", { scroll: false }))}
-              className="-mx-2 min-h-10 cursor-pointer px-2 pb-2 text-[13px] font-medium text-text-muted transition-colors hover:text-danger sm:mx-0 sm:min-h-0 sm:px-0"
-            >
-              Reset
-            </button>
-          )}
-        </div>
-      </div>
+      {active && (
+        <button
+          type="button"
+          onClick={() => startTransition(() => router.replace("/", { scroll: false }))}
+          className="h-11 shrink-0 cursor-pointer rounded-full border border-line-strong bg-surface px-4 text-[14px] font-medium text-text-muted transition-colors hover:border-danger hover:text-danger sm:h-10"
+        >
+          Clear
+        </button>
+      )}
     </section>
   );
 }

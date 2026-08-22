@@ -35,6 +35,9 @@ export type Totals = {
   count: number;
 };
 
+/** Money in and out for one `YYYY-MM`, as the ledger's headings report it. */
+export type MonthTotal = { income: number; expense: number };
+
 export type MonthPoint = {
   month: string;
   label: string;
@@ -99,6 +102,31 @@ export const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
+
+/**
+ * The long form, for the ledger's month headings. Hardcoded for the same reason
+ * `MONTH_LABELS` is: a heading should not be the one place in the app that
+ * spells a month differently from the charts, and `Intl` is exactly what would
+ * make that happen.
+ */
+export const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
+
+/**
+ * "2025-12" → `{ name: "December", year: "2025" }`.
+ *
+ * Split rather than joined because the ledger's month heading sets the two at
+ * very different sizes — the month is the thing you are scanning for, the year
+ * only disambiguates it.
+ */
+export function monthParts(month: string): { name: string; year: string } {
+  return {
+    name: MONTH_NAMES[Number(month.slice(5, 7)) - 1],
+    year: month.slice(0, 4),
+  };
+}
 
 const FORMATTERS = new Map<string, Intl.NumberFormat>();
 
@@ -217,6 +245,58 @@ export function summarize(rows: Transaction[]): Totals {
   }
 
   totals.net = totals.income - totals.expense;
+  return totals;
+}
+
+/**
+ * Money in and out per `YYYY-MM`, over exactly the rows given.
+ *
+ * The ledger's month headings. Unlike `monthlySeries` this fills nothing in —
+ * a heading only ever exists above rows, so a month with no rows has no heading
+ * to carry a zero.
+ *
+ * Transfers are skipped, the same as `summarize` and `monthlySeries`: money
+ * moved between your own accounts is neither income nor spending. That holds
+ * even when `?includeTransfers` puts those rows on screen, so a heading can
+ * report less than the rows beneath it appear to sum to — which is the contract
+ * the summary tiles and the trend chart's footnote already state.
+ *
+ * A `Record` rather than a `Map`, so it survives the server-action boundary if
+ * `Dashboard` is ever read from a client component.
+ */
+export function monthTotals(rows: Transaction[]): Record<string, MonthTotal> {
+  const totals: Record<string, MonthTotal> = {};
+
+  for (const row of rows) {
+    if (row.kind === "transfer") continue;
+    // `slice`, not a Date: a booking date is a date, not an instant.
+    const month = row.bookedOn.slice(0, 7);
+    const bucket = (totals[month] ??= { income: 0, expense: 0 });
+    if (row.kind === "income") bucket.income += row.amountMinor;
+    else bucket.expense -= row.amountMinor;
+  }
+
+  return totals;
+}
+
+/**
+ * Net movement per account, in minor units.
+ *
+ * Unlike `summarize` and `monthTotals` this counts **transfers**, and counts
+ * them on purpose: a transfer is not income or spending, but it is unambiguously
+ * money leaving one of your accounts and arriving in another, so an account's
+ * own balance has to include it. Leave it out and the two sides of every
+ * credit-card payment vanish from the accounts they actually moved between.
+ *
+ * Meant to be given the **unfiltered** rows. The figure sits in the account
+ * dropdown, and a total that moved when you picked an account would be
+ * describing the filter rather than the account.
+ */
+export function accountTotals(rows: Transaction[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of rows) {
+    totals[row.account] = (totals[row.account] ?? 0) + row.amountMinor;
+  }
   return totals;
 }
 
@@ -458,6 +538,51 @@ export type Page<T> = {
    * header counts, as opposed to `rows.length`, which is at most `pageSize`. */
   totalCount: number;
 };
+
+/**
+ * One chunk of the ledger's infinite scroll: `limit` rows from `from`.
+ *
+ * **Bounded, deliberately.** An earlier version extended each chunk to the end
+ * of whatever month it landed in, so that a month was always delivered whole and
+ * its rounded panel could never be split. That is fine at 500 rows a year and
+ * catastrophic at 25 000: the biggest month there is over 2 000 rows, so the
+ * first chunk was 2 000 rows rendered before first paint and the dashboard
+ * simply never finished loading.
+ *
+ * So a month *can* now span chunks, and the two flags are how the seam is
+ * hidden: the continuation renders no second heading, and the panels either
+ * side of the cut drop the radius on the edge where they meet, so they read as
+ * one panel. `rows` must be in the ledger's own order (`bookedOn` descending),
+ * which is what `ownedRows` and `applyFilters` already produce, so a month is a
+ * contiguous run and comparing neighbours is enough to spot the cut.
+ */
+export function ledgerChunk(
+  rows: Transaction[],
+  from: number,
+  limit: number = PAGE_SIZE,
+): {
+  rows: Transaction[];
+  nextOffset: number | null;
+  /** Opens mid-month: the previous chunk already headed this month. */
+  continuesFrom: boolean;
+  /** Closes mid-month: the next chunk carries the rest of it. */
+  continuesInto: boolean;
+} {
+  const monthOf = (row: Transaction) => row.bookedOn.slice(0, 7);
+
+  if (from >= rows.length || from < 0) {
+    return { rows: [], nextOffset: null, continuesFrom: false, continuesInto: false };
+  }
+
+  const end = Math.min(from + limit, rows.length);
+
+  return {
+    rows: rows.slice(from, end),
+    nextOffset: end < rows.length ? end : null,
+    continuesFrom: from > 0 && monthOf(rows[from - 1]) === monthOf(rows[from]),
+    continuesInto: end < rows.length && monthOf(rows[end - 1]) === monthOf(rows[end]),
+  };
+}
 
 export function paginate<T>(
   rows: T[],

@@ -87,27 +87,26 @@ export default function Loading() {
           ))}
         </div>
 
-        <div className="card mt-4 p-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((field) => (
-              <Bar key={field} className="h-[60px] w-full sm:h-[52px]" />
-            ))}
-          </div>
-          {/* The category chip row, collapsed to one bar rather than one per
-              chip — the skeleton approximates fields, it doesn't enumerate
-              them. */}
-          <Bar className="mt-3 h-[30px] w-full" />
+        {/* Two dropdown pills, no card. */}
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          {[0, 1].map((field) => (
+            <div key={field} className="min-w-[13rem] flex-1">
+              <Bar className="h-[12px] w-[58px]" />
+              <Bar className="mt-1.5 h-11 w-full rounded-full sm:h-10" />
+            </div>
+          ))}
         </div>
 
-        <div className="card mt-4 overflow-hidden">
-          <div className="border-b border-line px-4 py-3.5 sm:px-5">
-            <Bar className="h-[15px] w-[110px]" />
-          </div>
+        {/* No card and no header bar: the ledger leads with a big month
+            heading, flush left, then that month's rows as a rounded grey panel
+            with white dividers. */}
+        <div className="flex items-baseline justify-between gap-3 pt-6 pb-2.5">
+          <Bar className="h-[26px] w-[190px] sm:h-[30px]" />
+          <Bar className="h-[12px] w-[150px]" />
+        </div>
+        <div className="divide-y divide-surface overflow-clip rounded-lg bg-surface-muted">
           {[0, 1, 2, 3, 4].map((row) => (
-            <div
-              key={row}
-              className="flex items-center gap-3 border-b border-line px-4 py-4 last:border-b-0 sm:px-5"
-            >
+            <div key={row} className="flex items-center gap-3 px-4 py-4 sm:px-5">
               <Bar
                 className="h-[14px]"
                 style={{ width: `${[42, 31, 48, 36, 27][row]}%` }}
@@ -115,12 +114,10 @@ export default function Loading() {
               <Bar className="ml-auto h-[13px] w-[80px] shrink-0" />
             </div>
           ))}
-          {/* The Previous / page N of M / Next footer. */}
-          <div className="flex items-center justify-between gap-4 border-t border-line px-4 py-3 sm:px-5">
-            <Bar className="h-10 w-[44px] sm:h-8 sm:w-[76px]" />
-            <Bar className="h-[12px] w-[90px]" />
-            <Bar className="h-10 w-[44px] sm:h-8 sm:w-[52px]" />
-          </div>
+        </div>
+        {/* The line count at the foot. */}
+        <div className="flex justify-end pt-3">
+          <Bar className="h-[12px] w-[64px]" />
         </div>
       </div>
     </main>

@@ -3,7 +3,6 @@
 import {
   and,
   asc,
-  count,
   desc,
   eq,
   gte,
@@ -25,19 +24,21 @@ import {
 } from "@/app/actions/anomalies";
 import { type AnomalyInsight } from "@/lib/anomaly-engine";
 import {
+  accountTotals,
   applyFilters,
   byCategory,
   facetsOf,
+  ledgerChunk,
   monthlySeries,
+  monthTotals,
   stackByCategory,
-  paginate,
-  PAGE_SIZE,
   summarize,
   topMerchants,
   type CategoryStack,
   type Facets,
   type Filters,
   type MonthPoint,
+  type MonthTotal,
   type Slice,
   type Totals,
 } from "@/lib/insights";
@@ -80,6 +81,9 @@ const filterSchema = z.object({
 export type Dashboard = {
   filters: Filters;
   facets: Facets;
+  /** Net movement per account, transfers included — the figure beside each
+   * account in the filter dropdown. */
+  accountTotals: Record<string, number>;
   /**
    * The same shape as `facets`, but over the rows the filters actually kept —
    * what the header says you are looking at. `facets` cannot answer that: it is
@@ -89,6 +93,14 @@ export type Dashboard = {
   view: Facets;
   totals: Totals;
   monthly: MonthPoint[];
+  /**
+   * Money in and out per `YYYY-MM`, for the ledger's month headings. Filtered,
+   * like `totals` — the headings sit above filtered rows, so they have to say
+   * what those rows are part of. Every month across the whole filtered set, not
+   * just the chunk on screen, so a heading reads the same however far the
+   * reader has scrolled.
+   */
+  monthTotals: Record<string, MonthTotal>;
   /** Whole-range spending per category per month — the chart pair upstairs. */
   stack: CategoryStack;
   categories: Slice[];
@@ -100,8 +112,12 @@ export type Dashboard = {
    */
   anomalyScan: { hasCompletedScan: boolean; running: boolean };
   anomalies: AnomalyInsight[];
-  page: number;
-  pageCount: number;
+  /** Where the ledger's second chunk starts, or `null` when the first one was
+   * the lot. The ledger scrolls rather than pages, so there is no page number
+   * to carry — see components/transaction-feed.tsx. */
+  nextOffset: number | null;
+  /** The first chunk stops mid-month, so its last panel must not round off. */
+  continuesInto: boolean;
   totalCount: number;
 };
 
@@ -109,21 +125,6 @@ function parseFilters(raw: unknown): Filters {
   return filterSchema.safeParse(raw).data ?? filterSchema.parse({});
 }
 
-/**
- * Parsed independently of `filterSchema`: that schema fails (and falls back
- * to *every* filter defaulting) as one unit, and a mistyped or stale `?page=`
- * — someone hand-edits the URL, or a filter change shrinks the result set out
- * from under a remembered page number — shouldn't wipe out the rest of the
- * filters to fix itself.
- */
-function parsePage(raw: unknown): number {
-  const value =
-    raw && typeof raw === "object" && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>).page
-      : undefined;
-  const page = Math.floor(Number(Array.isArray(value) ? value[0] : value));
-  return Number.isFinite(page) && page > 0 ? page : 1;
-}
 
 /**
  * Builds the array of SQL conditions matching the applied user filters.
@@ -166,47 +167,6 @@ function buildFilterConditions(userId: number, filters: Filters): SQL[] {
 }
 
 /**
- * Loads only the current page of transactions directly from the database
- * using SQL LIMIT and OFFSET.
- */
-async function getPaginatedTransactionsFromDb(
-  userId: number,
-  filters: Filters,
-  page: number,
-  pageSize: number = PAGE_SIZE,
-): Promise<{ rows: Transaction[]; totalCount: number; pageCount: number; page: number }> {
-  const conditions = buildFilterConditions(userId, filters);
-  const whereClause = and(...conditions);
-
-  // Count total matching rows in database
-  const [countResult] = await db
-    .select({ total: count() })
-    .from(transactions)
-    .where(whereClause);
-
-  const totalCount = countResult?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
-  const clampedPage = Math.min(Math.max(1, page), pageCount);
-  const offset = (clampedPage - 1) * pageSize;
-
-  // Query only the rows in view for the current page directly from the database
-  const rows = await db
-    .select()
-    .from(transactions)
-    .where(whereClause)
-    .orderBy(desc(transactions.bookedOn), asc(transactions.id))
-    .limit(pageSize)
-    .offset(offset);
-
-  return {
-    rows,
-    totalCount,
-    pageCount,
-    page: clampedPage,
-  };
-}
-
-/**
  * Every row this account owns. Scoped by `userId` like every other query in
  * the app — rows with a NULL owner match nobody, by construction.
  */
@@ -231,16 +191,18 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
   if (!user) return null;
 
   const filters = parseFilters(raw);
-  const targetPage = parsePage(raw);
 
-  // 1. Load only the current page of transactions from the database
-  const paged = await getPaginatedTransactionsFromDb(user.id, filters, targetPage);
-
-  // 2. Fetch full historical baseline rows for calculations (facets, monthly trend, totals, anomaly baseline)
   const rows = await ownedRows();
   if (!rows) return null;
 
   const filtered = applyFilters(rows, filters);
+
+  // The ledger's first chunk. This replaced a separate LIMIT/OFFSET query:
+  // `filtered` is already the whole ordered result set (the facets, the trend
+  // and the totals all need it anyway), so paging it in SQL meant maintaining
+  // the same filter twice — once in `buildFilterConditions` and once in
+  // `applyFilters` — with nothing checking that the two agreed.
+  const chunk = ledgerChunk(filtered, 0);
 
   return {
     filters,
@@ -248,22 +210,64 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     // narrow themselves into a dead end, and the year's shape is the point of
     // the chart even when you are looking at one month.
     facets: facetsOf(rows),
+    // Unfiltered, like the facets themselves: this figure labels the account in
+    // the dropdown, and a total that moved when you picked one would be
+    // describing the filter instead of the account.
+    accountTotals: accountTotals(rows),
     view: facetsOf(filtered),
     monthly: monthlySeries(rows),
     stack: stackByCategory(rows),
     totals: summarize(filtered),
+    monthTotals: monthTotals(filtered),
     categories: byCategory(filtered),
     merchants: topMerchants(filtered, 8),
-    transactions: paged.rows, // only the rows in view loaded from the database
+    transactions: chunk.rows,
     // Read back from the last scan instead of re-deriving. Running the engine
     // here meant every page view paid for a full-history analysis; on a large
     // account that took minutes and took the server down with it. Scans are
     // now triggered from the account page — see app/actions/anomalies.ts.
-    anomalies: await getStoredAnomaliesForPage(paged.rows.map((r) => r.id)),
+    anomalies: await getStoredAnomaliesForPage(chunk.rows.map((r) => r.id)),
     anomalyScan: await getAnomalyScanState(),
-    page: paged.page,
-    pageCount: paged.pageCount,
-    totalCount: paged.totalCount,
+    nextOffset: chunk.nextOffset,
+    continuesInto: chunk.continuesInto,
+    totalCount: filtered.length,
+  };
+}
+
+/**
+ * The data behind one chunk of the infinite-scrolling ledger.
+ *
+ * Resolves the account from the session, never from an argument — every export
+ * of a `"use server"` module is an endpoint the browser can call with arguments
+ * it chooses, so an offset is all the caller gets to decide. `raw` only ever
+ * narrows a set that is already scoped to the caller, and it is parsed with the
+ * same `safeParse(…) ?? default` contract as the page.
+ *
+ * Filtering goes through `applyFilters` rather than SQL for the same reason
+ * `getDashboard` does: both have to agree on which row is at which offset, and
+ * the only way to guarantee that is to use the one implementation.
+ *
+ * `app/actions/ledger.tsx` wraps this and returns the rendered element, which
+ * is what keeps the rows off the client.
+ */
+export async function getLedgerChunk(offset: number, raw: unknown) {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const rows = await ownedRows();
+  if (!rows) return null;
+
+  const filtered = applyFilters(rows, parseFilters(raw));
+  const chunk = ledgerChunk(filtered, Math.max(0, Math.floor(offset) || 0));
+  if (chunk.rows.length === 0) return null;
+
+  return {
+    rows: chunk.rows,
+    nextOffset: chunk.nextOffset,
+    continuesFrom: chunk.continuesFrom,
+    continuesInto: chunk.continuesInto,
+    monthTotals: monthTotals(filtered),
+    anomalies: await getStoredAnomaliesForPage(chunk.rows.map((r) => r.id)),
   };
 }
 
