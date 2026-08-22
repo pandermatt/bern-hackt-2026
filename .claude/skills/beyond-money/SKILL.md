@@ -263,17 +263,35 @@ Unchanged from the template this app grew out of, and still exactly true.
   theme changes; it returns `null` until mounted, so the first frame is already
   in the right palette. Don't duplicate the palette into TypeScript — that is
   what breaks "restyle by editing tokens".
-- **The budget radar's rim is refitted per month, but capped.** The rings are
-  francs on one shared scale, and the rim follows that month's own peak so a
-  quiet month draws a dial it fills — bounded at `OUTLIER_CAP` × the largest
-  limit. Both halves are load-bearing: a fixed rim leaves most months drawing
-  a tiny shape in a big empty dial, and an uncapped one lets a single runaway
-  category (CHF 8'200 against limits averaging CHF 770) push every dashed ring
-  into a knot at the hub, which is the one thing the chart exists to show.
-  Past the rim the spending clamps, the outer tick grows a `+`, and the real
-  figure is printed under the category name, in the tooltip, and in the
-  `sr-only` table. A percent-of-budget scale solves the framing outright but
-  was rejected: the axis has to read in francs.
+- **The budget radar's dial is refitted per month, and bends when a month
+  needs it.** `lib/budget-scale.ts` owns that arithmetic; the component only
+  draws through the `toDial` / `toMinor` pair it hands back. While the month's
+  peak stays inside `OUTLIER_CAP` × the largest budget the rings are the plain
+  linear franc steps they always were. Past that they go logarithmic, with the
+  knee **solved** so the largest budget keeps the radius the cap would have
+  given it — which is what makes the two modes continuous and stops the dial
+  popping as you page months. Both halves are load-bearing: a fixed rim leaves
+  most months drawing a tiny shape in a big empty dial, and a linear one fitted
+  to a single runaway category (CHF 8'200 against limits averaging CHF 770)
+  pushes every dashed ring into a knot at the hub, which is the one thing the
+  chart exists to show.
+- **The rings are chosen first and the curve fitted through them.** Round
+  francs at every ring (`0 · 440 · 1'200 · 2'500 · 4'800 · 8'900` for the month
+  above), then piecewise interpolation between them — so a tick never prints
+  `CHF 1'237`, and the printed figure is the *exact* value of the ring it sits
+  on rather than a tidied-up approximation. `roundish` rounds the rim **up**,
+  so nothing ever falls outside the dial.
+- **Nothing clips any more.** The dial used to stop at the cap and clamp
+  everything past it onto the rim behind a `+` on the outer tick, which threw
+  away the one figure the reader was looking at and drew CHF 3'000 and
+  CHF 8'200 as the same spoke. **Don't reintroduce a clamp** — bending the
+  scale is what replaced it. The `+` went with it: every tick now means what
+  it says.
+- **A compressed month says so, and a linear one does not.** `radarCompressed`
+  renders under the chart only when `dial.compressed`. A scale that reads
+  differently than it looks has to admit it; a standing caveat under a dial
+  that is in fact linear is its own kind of wrong. A percent-of-budget scale
+  solves the framing outright but was rejected: the axis has to read in francs.
 - **The radar's radius is measured, not a percentage.** ECharts resolves
   `radius: "65%"` against `min(width, height) / 2`, but what has to fit outside
   the dial is a *text label*, and text does not scale with the container. One
