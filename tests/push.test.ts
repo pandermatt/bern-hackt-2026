@@ -82,8 +82,12 @@ vi.mock("web-push", () => {
   };
 });
 
-const { deletePushSubscription, savePushSubscription, sendTestPushNotification } =
-  await import("@/app/actions/push");
+const {
+  broadcastPushNotification,
+  deletePushSubscription,
+  savePushSubscription,
+  sendTestPushNotification,
+} = await import("@/app/actions/push");
 const { sendPushToUser } = await import("@/lib/push");
 
 /** What `PushSubscription.toJSON()` hands back in the browser. */
@@ -117,6 +121,7 @@ beforeEach(async () => {
   locale.current = "de";
   process.env.VAPID_PUBLIC_KEY = "test-public-key";
   process.env.VAPID_PRIVATE_KEY = "test-private-key";
+  delete process.env.PUSH_BROADCAST_ENABLED;
 
   signedIn.user = await createUser("jeanine@example.com");
 });
@@ -308,5 +313,110 @@ describe("sendPushToUser", () => {
 
     expect(push.sent).toHaveLength(0);
     expect(push.vapid).toHaveLength(0);
+  });
+});
+describe("broadcastPushNotification", () => {
+  /** A second account with a device of its own, to prove the reach. */
+  async function otherDevice(endpoint: string) {
+    const other = await createUser("someone@example.com");
+    await db.insert(pushSubscriptions).values({
+      userId: other.id,
+      endpoint,
+      p256dh: "x",
+      auth: "y",
+      locale: "en",
+    });
+  }
+
+  it("refuses unless the server flag is set, however it is called", async () => {
+    // The gate has to live in the action, not only in the page: a "use server"
+    // export is reachable by POST whether or not a button points at it.
+    await savePushSubscription(subscriptionJson("https://push.test/a"));
+
+    expect(await broadcastPushNotification("hello")).toEqual({
+      ok: false,
+      error: "notAllowed",
+    });
+    expect(push.sent).toHaveLength(0);
+
+    process.env.PUSH_BROADCAST_ENABLED = "0";
+    expect(await broadcastPushNotification("hello")).toEqual({
+      ok: false,
+      error: "notAllowed",
+    });
+  });
+
+  it("reaches every account's devices, not just the sender's", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    await savePushSubscription(subscriptionJson("https://push.test/mine"));
+    await otherDevice("https://push.test/theirs");
+
+    expect(await broadcastPushNotification("Look at your phone")).toEqual({
+      ok: true,
+      devices: 2,
+    });
+    expect(push.sent.map((s) => s.endpoint).sort()).toEqual([
+      "https://push.test/mine",
+      "https://push.test/theirs",
+    ]);
+  });
+
+  it("puts the typed line in the title, where a lock screen sets it bold", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    await savePushSubscription(subscriptionJson("https://push.test/a"));
+
+    await broadcastPushNotification("  Look at your phone  ");
+
+    const [{ payload }] = sentPayloads();
+    // Trimmed, so stray whitespace does not ship as part of the message.
+    expect(payload.title).toBe("Look at your phone");
+    // Its own tag, or a broadcast would collapse into an anomaly push.
+    expect(payload).toMatchObject({ tag: "broadcast", url: "/de/home" });
+  });
+
+  it("sends at once rather than on the test send's delay", async () => {
+    // The point on stage: the phones go off while you are still talking.
+    vi.useFakeTimers();
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    await savePushSubscription(subscriptionJson("https://push.test/a"));
+
+    await broadcastPushNotification("now");
+    expect(push.sent).toHaveLength(1);
+  });
+
+  it("refuses an empty message and one past the length cap", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    await savePushSubscription(subscriptionJson("https://push.test/a"));
+
+    expect(await broadcastPushNotification("   ")).toEqual({
+      ok: false,
+      error: "empty",
+    });
+    expect(await broadcastPushNotification("x".repeat(121))).toEqual({
+      ok: false,
+      error: "empty",
+    });
+    expect(push.sent).toHaveLength(0);
+  });
+
+  it("reports only the devices it actually reached", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    await savePushSubscription(subscriptionJson("https://push.test/live"));
+    await otherDevice("https://push.test/dead");
+    push.gone.add("https://push.test/dead");
+
+    expect(await broadcastPushNotification("hello")).toEqual({ ok: true, devices: 1 });
+    // Pruned on the way, like any other send.
+    const rows = await db.select().from(pushSubscriptions);
+    expect(rows.map((row) => row.endpoint)).toEqual(["https://push.test/live"]);
+  });
+
+  it("refuses a signed-out caller even with the flag on", async () => {
+    process.env.PUSH_BROADCAST_ENABLED = "1";
+    signedIn.user = null;
+    expect(await broadcastPushNotification("hello")).toEqual({
+      ok: false,
+      error: "sessionExpired",
+    });
   });
 });

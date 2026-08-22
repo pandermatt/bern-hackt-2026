@@ -667,9 +667,24 @@
     "error_invalid": "Dein Browser hat eine Registrierung zurückgegeben, die wir nicht lesen konnten.",
     "error_subscribeFailed": "Mitteilungen konnten nicht aktiviert werden. Prüfe die Berechtigungen deines Browsers und versuche es erneut."
   },
+  "PushBroadcast": {
+    "title": "Nachricht an alle",
+    "note": "Sendet den eingegebenen Text sofort an jedes Gerät, das auf diesem Server für Mitteilungen registriert ist — nicht nur an deine. Ein Demo-Werkzeug.",
+    "placeholder": "Schau auf dein Handy",
+    "action": "Senden",
+    "sending": "Wird gesendet…",
+    "sent": "An {devices} Geräte gesendet.",
+    "error_sessionExpired": "Deine Sitzung ist abgelaufen. Melde dich erneut an.",
+    "error_notConfigured": "Push-Mitteilungen sind auf diesem Server nicht konfiguriert.",
+    "error_notAllowed": "Das Senden an alle ist auf diesem Server ausgeschaltet.",
+    "error_empty": "Gib zuerst eine Nachricht ein.",
+    "error_noSubscription": "Noch kein Gerät ist für Mitteilungen registriert.",
+    "error_invalid": "Diese Nachricht konnte nicht gesendet werden."
+  },
   "Push": {
     "anomalyTitle": "Neue Auffälligkeit gefunden",
-    "anomalyBody": "Bei deinen Ausgaben gibt es etwas anzuschauen. Tippe, um zu sehen was."
+    "anomalyBody": "Bei deinen Ausgaben gibt es etwas anzuschauen. Tippe, um zu sehen was.",
+    "broadcastBody": "Beyond Money"
   },
   "DangerZone": {
     "trigger": "Konto löschen",

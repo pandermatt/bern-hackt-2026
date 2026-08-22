@@ -8,13 +8,14 @@ import { DemoDataControls } from "@/components/demo-data-controls";
 import { InstallApp } from "@/components/install-app";
 import { LanguageSelector } from "@/components/language-selector";
 import { ProfileSettings } from "@/components/profile-settings";
+import { PushBroadcast } from "@/components/push-broadcast";
 import { PushNotifications } from "@/components/push-notifications";
 import { Section } from "@/components/section";
 import { SETTINGS_GROUP, SettingsRow } from "@/components/settings-row";
 import { ThemeSetting } from "@/components/theme-setting";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { pushPublicKey } from "@/lib/push";
+import { pushBroadcastEnabled, pushPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,13 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
               baked into the build. Null means push is not configured, and
               the row says so instead of offering a button that throws. */}
           <PushNotifications publicKey={pushPublicKey()} />
+
+          {/* A demo control, off unless PUSH_BROADCAST_ENABLED=1 says
+              otherwise — it pushes to every subscribed device on the
+              deployment, not just this account's. The action checks the same
+              flag, since not rendering a button does not make a server
+              action unreachable. */}
+          {pushBroadcastEnabled() && <PushBroadcast />}
         </Section>
 
         {/* `/anomalies` links here twice. The anchor sits on the group rather

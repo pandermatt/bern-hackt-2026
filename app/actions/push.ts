@@ -8,7 +8,14 @@ import { db } from "@/db";
 import { pushSubscriptions } from "@/db/schema";
 import { defaultLocale, isAppLocale, locales, type AppLocale } from "@/i18n/routing";
 import { getCurrentUser } from "@/lib/auth";
-import { getPushSubscriptions, pushConfigured, sendPushToUser, type PushPayload } from "@/lib/push";
+import {
+  broadcastPush,
+  getPushSubscriptions,
+  pushBroadcastEnabled,
+  pushConfigured,
+  sendPushToUser,
+  type PushPayload,
+} from "@/lib/push";
 import { TEST_PUSH_DELAY_MS } from "@/lib/push-config";
 
 /**
@@ -30,9 +37,16 @@ export type PushError =
   | "sessionExpired"
   | "notConfigured"
   | "noSubscription"
+  | "notAllowed"
+  | "empty"
   | "invalid";
 
 export type PushResult = { ok: true } | { ok: false; error: PushError };
+
+/** A broadcast reports how many devices it reached — see `broadcastPush`. */
+export type BroadcastResult =
+  | { ok: true; devices: number }
+  | { ok: false; error: PushError };
 
 /** Exactly the shape `PushSubscription.toJSON()` produces in the browser. */
 const subscriptionSchema = z.object({
@@ -171,4 +185,59 @@ export async function sendTestPushNotification(): Promise<PushResult> {
   }, TEST_PUSH_DELAY_MS);
 
   return { ok: true };
+}
+/** Room enough for a sentence on a lock screen, and no room for an essay. */
+const MESSAGE_MAX = 120;
+
+/**
+ * Sends a typed message to every subscribed device on the deployment, now.
+ *
+ * A demo control, gated on `PUSH_BROADCAST_ENABLED` — with the flag unset this
+ * refuses regardless of who is calling, which matters because a `"use server"`
+ * export is reachable by POST whether or not the UI renders a button for it.
+ * The flag is checked here rather than only in the page for exactly that
+ * reason.
+ *
+ * No delay, unlike the test send: on stage the point is that the phones buzz
+ * while you are still talking, and the presenter owns the timing. It is
+ * awaited rather than floated so the button can report the number of devices
+ * reached instead of leaving that to guesswork.
+ */
+export async function broadcastPushNotification(
+  message: string,
+): Promise<BroadcastResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "sessionExpired" };
+  if (!pushConfigured()) return { ok: false, error: "notConfigured" };
+  if (!pushBroadcastEnabled()) return { ok: false, error: "notAllowed" };
+
+  const parsed = z.string().trim().min(1).max(MESSAGE_MAX).safeParse(message);
+  if (!parsed.success) return { ok: false, error: "empty" };
+
+  // The typed line is the *title*: that is the part a lock screen sets in
+  // bold, and a broadcast is one sentence. The body carries the app's name so
+  // a notification with no context still says where it came from.
+  const bodies = await Promise.all(
+    locales.map(async (locale) => {
+      const t = await getTranslations({ locale, namespace: "Push" });
+      return [locale, t("broadcastBody")] as const;
+    }),
+  );
+  const bodyFor = Object.fromEntries(bodies) as Record<AppLocale, string>;
+
+  const devices = await broadcastPush((subscription) => {
+    const locale = isAppLocale(subscription.locale)
+      ? subscription.locale
+      : defaultLocale;
+    return {
+      title: parsed.data,
+      body: bodyFor[locale],
+      url: `/${locale}/home`,
+      // Its own tag, so a broadcast never collapses into an anomaly push.
+      tag: "broadcast",
+    };
+  });
+
+  if (devices === 0) return { ok: false, error: "noSubscription" };
+  return { ok: true, devices };
 }

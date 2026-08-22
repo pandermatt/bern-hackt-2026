@@ -667,9 +667,24 @@
     "error_invalid": "Your browser handed back a subscription we could not read.",
     "error_subscribeFailed": "Could not turn notifications on. Check your browser's permissions and try again."
   },
+  "PushBroadcast": {
+    "title": "Broadcast a message",
+    "note": "Sends what you type to every device subscribed to notifications on this server — not just yours — straight away. A demo control.",
+    "placeholder": "Look at your phone",
+    "action": "Send",
+    "sending": "Sending…",
+    "sent": "Sent to {devices} devices.",
+    "error_sessionExpired": "Your session expired. Sign in again.",
+    "error_notConfigured": "Push notifications are not configured on this server.",
+    "error_notAllowed": "Broadcasting is switched off on this server.",
+    "error_empty": "Type a message first.",
+    "error_noSubscription": "No device is subscribed to notifications yet.",
+    "error_invalid": "That message could not be sent."
+  },
   "Push": {
     "anomalyTitle": "Found new anomaly",
-    "anomalyBody": "Something in your spending is worth a look. Tap to see what."
+    "anomalyBody": "Something in your spending is worth a look. Tap to see what.",
+    "broadcastBody": "Beyond Money"
   },
   "DangerZone": {
     "trigger": "Delete account",

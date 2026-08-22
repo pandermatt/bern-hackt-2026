@@ -50,6 +50,19 @@ export function pushPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY || null;
 }
 
+/**
+ * Whether the account page offers the broadcast field.
+ *
+ * Off unless the host says otherwise, and deliberately an env flag rather than
+ * a role: it lets *any* signed-in account push to *every* subscribed device on
+ * the deployment, which is a demo affordance and not a feature. It exists so a
+ * presenter can make a room full of phones buzz on cue. Turn it off afterwards
+ * and the control disappears along with the capability.
+ */
+export function pushBroadcastEnabled(): boolean {
+  return process.env.PUSH_BROADCAST_ENABLED === "1" && pushConfigured();
+}
+
 /*
  * Configured on first send rather than at module load: the keys are read at
  * run time on the host (they are deliberately not NEXT_PUBLIC_ and so are not
@@ -142,4 +155,35 @@ export async function sendPushToUser(
       .delete(pushSubscriptions)
       .where(inArray(pushSubscriptions.endpoint, gone));
   }
+}
+/**
+ * Sends to every subscribed device on the deployment, regardless of account.
+ *
+ * The delivery half of `pushBroadcastEnabled` — see the warning there. Shares
+ * `deliver` with `sendPushToUser`, so a device that answers gone is pruned
+ * here too, and returns the number of devices actually reached so the button
+ * can say so rather than leaving a presenter guessing.
+ */
+export async function broadcastPush(
+  payloadFor: (subscription: PushSubscriptionRow) => PushPayload,
+): Promise<number> {
+  if (!pushConfigured()) return 0;
+
+  const subscriptions = await db.select().from(pushSubscriptions);
+  if (subscriptions.length === 0) return 0;
+
+  applyVapidDetails();
+
+  const results = await Promise.all(
+    subscriptions.map((subscription) => deliver(subscription, payloadFor(subscription))),
+  );
+
+  const gone = results.filter((endpoint): endpoint is string => endpoint !== null);
+  if (gone.length > 0) {
+    await db
+      .delete(pushSubscriptions)
+      .where(inArray(pushSubscriptions.endpoint, gone));
+  }
+
+  return subscriptions.length - gone.length;
 }
