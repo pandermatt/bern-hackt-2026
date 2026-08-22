@@ -116,7 +116,8 @@ function Dot({ dot, label }: { dot: DayDot; label: string }) {
       // Tailwind cannot generate a class from a runtime slot; this is the same
       // inline `var(--chart-N)` idiom the merchant bars use.
       style={{
-        background: dot.slot === 0 ? "var(--chart-other)" : `var(--chart-${dot.slot})`,
+        background:
+          dot.slot === 0 ? "var(--chart-other)" : `var(--chart-${dot.slot})`,
       }}
     />
   );
@@ -203,7 +204,9 @@ function DayCell({
             key={index}
             dot={dot}
             label={
-              tCategories.has(dot.category) ? tCategories(dot.category) : dot.category
+              tCategories.has(dot.category)
+                ? tCategories(dot.category)
+                : dot.category
             }
           />
         ))}
@@ -339,30 +342,36 @@ function MonthGrid({
       </div>
 
       {/* The same contract every chart here ships: the identical figures as
-          text, for anyone the dots and the tints do not reach. */}
-      <table className="sr-only">
-        <caption>{t("tableCaption")}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t("colDate")}</th>
-            <th scope="col">{t("colCount")}</th>
-            <th scope="col">{t("colIn")}</th>
-            <th scope="col">{t("colOut")}</th>
-            <th scope="col">{t("colFinding")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {month.days.map((day) => (
-            <tr key={day.date}>
-              <th scope="row">{day.date}</th>
-              <td>{day.count}</td>
-              <td>{formatMoney(day.income)}</td>
-              <td>{formatMoney(day.expense)}</td>
-              <td>{day.kind ? t(KIND_MESSAGE_KEYS[day.kind]) : t("kindNone")}</td>
+          text, for anyone the dots and the tints do not reach. The wrapper div
+          takes `sr-only` (a table ignores its 1px width) and the name rides
+          `aria-label`, not `<caption>` — a caption box escapes the clipped
+          area and Safari paints it as a stray line under the chart. */}
+      <div className="sr-only">
+        <table aria-label={t("tableCaption")}>
+          <thead>
+            <tr>
+              <th scope="col">{t("colDate")}</th>
+              <th scope="col">{t("colCount")}</th>
+              <th scope="col">{t("colIn")}</th>
+              <th scope="col">{t("colOut")}</th>
+              <th scope="col">{t("colFinding")}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {month.days.map((day) => (
+              <tr key={day.date}>
+                <th scope="row">{day.date}</th>
+                <td>{day.count}</td>
+                <td>{formatMoney(day.income)}</td>
+                <td>{formatMoney(day.expense)}</td>
+                <td>
+                  {day.kind ? t(KIND_MESSAGE_KEYS[day.kind]) : t("kindNone")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
@@ -511,7 +520,8 @@ export function TransactionCalendar({
       ) : (
         <>
           {months.map((month) => {
-            const inThisMonth = open !== null && open.slice(0, 7) === month.month;
+            const inThisMonth =
+              open !== null && open.slice(0, 7) === month.month;
             return (
               <MonthGrid
                 key={month.month}
