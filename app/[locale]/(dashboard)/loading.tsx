@@ -82,9 +82,20 @@ export default function Loading() {
         <SectionHeading titleWidth="w-[210px]" metaWidth="w-[180px]" />
         <div className="h-[394px] rounded-lg bg-surface-muted" />
 
+        {/* One category chart per breakpoint, mirroring the page: the donut's
+            box below `sm`, the top-categories box from `sm` up. */}
         {/* The whole year: the same, without the footnote. */}
-        <SectionHeading titleWidth="w-[170px]" metaWidth="w-[230px]" />
-        <div className="h-[360px] rounded-lg bg-surface-muted" />
+        <div className="sm:hidden">
+          <SectionHeading titleWidth="w-[170px]" metaWidth="w-[230px]" />
+          <div className="h-[360px] rounded-lg bg-surface-muted" />
+        </div>
+
+        {/* Top categories: the period badge and a two-row chip strip, 300px
+            of canvas, p-5 either side, plus the footnote line and its margin. */}
+        <div className="hidden sm:block">
+          <SectionHeading titleWidth="w-[220px]" metaWidth="w-[250px]" />
+          <div className="h-[454px] rounded-lg bg-surface-muted" />
+        </div>
 
         {/* Top merchants: eight rows over two columns, so four rows tall. */}
         <SectionHeading titleWidth="w-[190px]" />

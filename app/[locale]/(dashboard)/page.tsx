@@ -8,6 +8,7 @@ import { ChatSidebar } from "@/components/chat-sidebar";
 import { Landing } from "@/components/landing";
 import { MonthlyTrend } from "@/components/monthly-trend";
 import { SummaryCards } from "@/components/summary-cards";
+import { TopCategoryBars } from "@/components/top-category-bars";
 import { AnomalySuggestion } from "@/components/anomaly-suggestion";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
@@ -68,7 +69,18 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
 
           <MonthlyTrend series={monthly} />
 
-          <CategoryPie stack={stack} />
+          {/* One category story per breakpoint, not two stacked tellings of
+              it: the donut on a phone, where eight labelled bars have no room
+              and hover barely exists; the split-on-hover bars from `sm` up,
+              where they can breathe. CSS decides, not JS, so the server HTML
+              carries both and neither flashes in. Colours come from the same
+              slot map, so a category looks identical wherever it shows. */}
+          <div className="sm:hidden">
+            <CategoryPie stack={stack} />
+          </div>
+          <div className="hidden sm:block">
+            <TopCategoryBars data={dashboard.topCategories} stack={stack} />
+          </div>
 
           <BreakdownList
             heading={tm("heading")}

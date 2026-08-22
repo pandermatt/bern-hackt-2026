@@ -16,8 +16,11 @@ import {
   stackByCategory,
   paginate,
   summarize,
+  categorySpendPeriods,
   topMerchants,
   CATEGORY_SLOTS,
+  FOLDED_MERCHANTS,
+  MERCHANT_SEGMENTS,
   type Filters,
 } from "@/lib/insights";
 
@@ -597,5 +600,139 @@ describe("formatting", () => {
     // for anyone west of London.
     expect(formatDay("2025-01-01")).toBe("1 Jan 2025");
     expect(formatDay("2025-09-05")).toBe("5 Sep 2025");
+  });
+});
+
+describe("categorySpendPeriods", () => {
+  it("reads the latest expense month and ranks its categories", () => {
+    const result = categorySpendPeriods([
+      row({ bookedOn: "2025-01-10", category: "Food & Drink", amountMinor: -5000 }),
+      row({ bookedOn: "2025-02-05", category: "Housing", amountMinor: -180000 }),
+      row({ bookedOn: "2025-02-12", category: "Food & Drink", amountMinor: -4000 }),
+      row({ bookedOn: "2025-02-20", category: "Transport", amountMinor: -9000 }),
+      // Income in a later month must not drag "this month" forward.
+      row({ bookedOn: "2025-03-25", kind: "income", category: "Salary", amountMinor: 746400 }),
+    ]);
+
+    expect(result?.month.month).toBe("2025-02");
+    expect(result?.month.monthCount).toBe(1);
+    expect(result?.month.categories.map((c) => c.key)).toEqual([
+      "Housing",
+      "Transport",
+      "Food & Drink",
+    ]);
+    expect(result?.month.categories[0].total).toBe(180000);
+  });
+
+  it("sums the year-to-date period from January, leaving last year out", () => {
+    const result = categorySpendPeriods([
+      // Last year's spending must not leak into this year's YTD.
+      row({ bookedOn: "2024-11-20", amountMinor: -99000 }),
+      row({ bookedOn: "2025-01-10", amountMinor: -5000 }),
+      row({ bookedOn: "2025-02-12", amountMinor: -4000 }),
+    ]);
+
+    expect(result?.ytd.month).toBe("2025-02");
+    expect(result?.ytd.monthCount).toBe(2);
+    expect(result?.ytd.categories).toHaveLength(1);
+    expect(result?.ytd.categories[0].total).toBe(9000);
+    // The running-month period stays the single latest month.
+    expect(result?.month.categories[0].total).toBe(4000);
+  });
+
+  it("returns null when there are no expenses at all", () => {
+    expect(categorySpendPeriods([])).toBeNull();
+    expect(
+      categorySpendPeriods([
+        row({ kind: "income", category: "Salary", amountMinor: 100 }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("takes the median over the preceding months, counting empty ones as zero", () => {
+    // History: Jan 10, Feb 0 (no Food & Drink row), Mar 30 → median 10.
+    const result = categorySpendPeriods([
+      row({ bookedOn: "2025-01-05", amountMinor: -1000 }),
+      row({ bookedOn: "2025-02-14", category: "Transport", amountMinor: -500 }),
+      row({ bookedOn: "2025-03-09", amountMinor: -3000 }),
+      row({ bookedOn: "2025-04-01", amountMinor: -2000 }),
+    ]);
+
+    const food = result?.month.categories.find((c) => c.key === "Food & Drink");
+    expect(food?.median).toBe(1000);
+  });
+
+  it("hands both periods the same per-month median", () => {
+    // The YTD chart scales the median by monthCount itself; the aggregate must
+    // not bake a different statistic into the other period.
+    const result = categorySpendPeriods([
+      row({ bookedOn: "2025-01-05", amountMinor: -1000 }),
+      row({ bookedOn: "2025-02-09", amountMinor: -3000 }),
+    ]);
+
+    expect(result?.month.categories[0].median).toBe(1000);
+    expect(result?.ytd.categories[0].median).toBe(1000);
+  });
+
+  it("has no median when this month is the only month", () => {
+    const result = categorySpendPeriods([row({ amountMinor: -1000 })]);
+    expect(result?.month.categories[0].median).toBeNull();
+  });
+
+  it("splits the period by merchant, biggest first, summing to the total", () => {
+    const result = categorySpendPeriods([
+      row({ merchant: "Coop", amountMinor: -2000 }),
+      row({ merchant: "Migros", amountMinor: -5000 }),
+      row({ merchant: "Migros", amountMinor: -1000 }),
+    ]);
+
+    const [category] = result!.month.categories;
+    expect(category.merchants).toEqual([
+      { merchant: "Migros", amount: 6000 },
+      { merchant: "Coop", amount: 2000 },
+    ]);
+    expect(category.merchants.reduce((sum, m) => sum + m.amount, 0)).toBe(
+      category.total,
+    );
+  });
+
+  it("splits YTD by merchant over the whole period, not just the last month", () => {
+    const result = categorySpendPeriods([
+      row({ bookedOn: "2025-01-08", merchant: "Coop", amountMinor: -2000 }),
+      row({ bookedOn: "2025-02-15", merchant: "Migros", amountMinor: -5000 }),
+    ]);
+
+    expect(result?.ytd.categories[0].merchants).toEqual([
+      { merchant: "Migros", amount: 5000 },
+      { merchant: "Coop", amount: 2000 },
+    ]);
+    expect(result?.month.categories[0].merchants).toEqual([
+      { merchant: "Migros", amount: 5000 },
+    ]);
+  });
+
+  it("folds the merchant tail once the split runs out of segments", () => {
+    const rows = Array.from({ length: MERCHANT_SEGMENTS + 3 }, (_, index) =>
+      row({ merchant: `Shop ${index}`, amountMinor: -(1000 + index) }),
+    );
+
+    const [category] = categorySpendPeriods(rows)!.month.categories;
+    expect(category.merchants).toHaveLength(MERCHANT_SEGMENTS);
+    expect(category.merchants.at(-1)?.merchant).toBe(FOLDED_MERCHANTS);
+    expect(category.merchants.reduce((sum, m) => sum + m.amount, 0)).toBe(
+      category.total,
+    );
+  });
+
+  it("carries every category, ranked — the chart slices its own top five", () => {
+    const rows = ["A", "B", "C", "D", "E", "F", "G"].map((category, index) =>
+      row({ category, amountMinor: -(1000 + index) }),
+    );
+
+    const result = categorySpendPeriods(rows)!;
+    expect(result.month.categories).toHaveLength(7);
+    expect(result.month.categories.map((c) => c.key)).toEqual([
+      "G", "F", "E", "D", "C", "B", "A",
+    ]);
   });
 });
