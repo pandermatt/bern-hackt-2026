@@ -1,4 +1,5 @@
 import { SavingsGoalDelete } from "@/components/savings-goal-delete";
+import { goalIcon, iconPath } from "@/lib/goal-icon";
 import { formatMoney, potFill, type SavingsPot as Pot } from "@/lib/insights";
 
 /**
@@ -6,32 +7,62 @@ import { formatMoney, potFill, type SavingsPot as Pot } from "@/lib/insights";
  *
  * Inline SVG in a server component rather than a chart: this is one number
  * between 0 and 1, and reaching for the ECharts boundary to draw it would put
- * a hydration boundary and a canvas around a rectangle. The jar is a clip
- * path; the "money" is a plain rect whose top edge moves.
+ * a hydration boundary and a canvas around a rectangle. The jar is a
+ * `clipPath`; the money is a rect whose top edge moves, capped with an ellipse
+ * so the level reads as a surface rather than a cut.
  *
  * The fill takes the goal's palette slot from `potSlot`, which is keyed on the
  * row id — so a pot keeps its colour when the one above it is deleted.
  */
 
-/** The jar's inner span, in viewBox units. The fill moves between these. */
-const RIM_Y = 26;
-const FLOOR_Y = 96;
+/* Cylinder geometry, in viewBox units. `RY` is the perspective squash: the
+   same ellipse is reused for the mouth, the liquid's surface and the base, so
+   the whole vessel is drawn from one viewing angle. */
+const CX = 60;
+const RX = 40;
+const RY = 11;
+const MOUTH_Y = 22;
+/** The glyph's centre, high on the wall so it clears the base ellipse. */
+const ICON_CENTRE_Y = 55;
+const BASE_Y = 104;
 
+/** The pot's silhouette: two walls closed by the base ellipse. */
 const BODY =
-  `M 12 ${RIM_Y} L 12 ${FLOOR_Y - 8} Q 12 ${FLOOR_Y} 20 ${FLOOR_Y} ` +
-  `L 60 ${FLOOR_Y} Q 68 ${FLOOR_Y} 68 ${FLOOR_Y - 8} L 68 ${RIM_Y} Z`;
+  `M ${CX - RX} ${MOUTH_Y} L ${CX - RX} ${BASE_Y} ` +
+  `A ${RX} ${RY} 0 0 0 ${CX + RX} ${BASE_Y} ` +
+  `L ${CX + RX} ${MOUTH_Y} Z`;
 
 export function SavingsPot({ pot }: { pot: Pot }) {
   const fill = potFill(pot.savedMinor, pot.targetMinor);
   const full = fill >= 1;
-  const surface = FLOOR_Y - (FLOOR_Y - RIM_Y) * fill;
+  // Where the liquid's surface sits. Measured between the two ellipse centres,
+  // so an empty pot's surface is the base and a full one's is the mouth.
+  const surface = BASE_Y - (BASE_Y - MOUTH_Y) * fill;
   const colour = `var(--chart-${pot.slot})`;
+  const icon = iconPath(goalIcon(pot.name));
+
   // Ids have to be unique per pot or every jar clips against the first one's
   // path. The row id is already unique per account.
-  const clip = `pot-clip-${pot.id}`;
+  const bodyClip = `pot-body-${pot.id}`;
+  const dryClip = `pot-dry-${pot.id}`;
+  const wetClip = `pot-wet-${pot.id}`;
+
+  // The glyph is drawn on the pot wall at a fixed height, so the level rises
+  // past it as the goal fills. That means it has to survive being underwater:
+  // it is drawn twice, clipped at the surface — ink above, and a soft shadow
+  // below, which stays readable over all ten fills without needing to know
+  // which one it is sitting on.
+  //
+  // Fitted to its own box rather than assumed square: `fa-laptop` is 640×512,
+  // and forcing that into a square squashes it.
+  const ICON_BOX = 34;
+  const iconScale = ICON_BOX / Math.max(icon.width, icon.height);
+  const iconAt =
+    `translate(${CX - (icon.width * iconScale) / 2} ` +
+    `${ICON_CENTRE_Y - (icon.height * iconScale) / 2}) scale(${iconScale})`;
 
   return (
-    <li className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 py-4 text-center">
+    <li className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
       {/* Always visible rather than revealed on hover: a hover affordance is
           not reachable on a touch screen. */}
       <span className="absolute top-1.5 right-1.5">
@@ -43,71 +74,148 @@ export function SavingsPot({ pot }: { pot: Pot }) {
       </span>
 
       <svg
-        viewBox="0 0 80 104"
-        className="h-[104px] w-20 shrink-0"
+        viewBox="0 0 120 128"
+        className="h-[118px] w-[110px] shrink-0"
         role="img"
         aria-label={`${pot.name}: ${formatMoney(pot.savedMinor)} of ${formatMoney(
           pot.targetMinor,
         )} saved, ${Math.round(fill * 100)} per cent full.`}
       >
         <defs>
-          <clipPath id={clip}>
+          <clipPath id={bodyClip}>
             <path d={BODY} />
+          </clipPath>
+          <clipPath id={dryClip}>
+            <rect x="0" y="0" width="120" height={surface} />
+          </clipPath>
+          <clipPath id={wetClip}>
+            <rect x="0" y={surface} width="120" height={128 - surface} />
           </clipPath>
         </defs>
 
-        {/* Empty jar first, so the fill sits inside a visible vessel even at
-            zero — an unfunded pot should still read as a pot. */}
+        {/* Contact shadow. Grounds the pot instead of letting it float. */}
+        <ellipse
+          cx={CX}
+          cy={BASE_Y + RY + 3}
+          rx={RX - 4}
+          ry="4"
+          fill="var(--chart-ink)"
+          opacity="0.10"
+        />
+
+        {/* The empty vessel, so an unfunded pot still reads as a pot. */}
         <path d={BODY} fill="var(--surface-muted)" />
 
-        <g clipPath={`url(#${clip})`}>
-          <rect x="0" y={surface} width="80" height={FLOOR_Y} fill={colour} />
-          {/* A brighter band at the waterline. Several of the ramp's hues are
-              pale enough that a flat fill alone reads as a tint of the jar. */}
+        <g clipPath={`url(#${bodyClip})`}>
+          {/* Money, from the surface down. */}
+          <rect x="0" y={surface} width="120" height={BASE_Y + RY} fill={colour} />
+          {/* The surface itself, lifted with a white wash — the same trick the
+              light catches on a real liquid, and it is what turns a flat block
+              into a level. */}
           {fill > 0 && (
-            <rect
-              x="0"
-              y={surface}
-              width="80"
-              height="2.5"
-              fill="var(--chart-ink)"
-              opacity="0.22"
-            />
+            <>
+              <ellipse cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
+              <ellipse
+                cx={CX}
+                cy={surface}
+                rx={RX}
+                ry={RY}
+                fill="#ffffff"
+                opacity="0.22"
+              />
+            </>
           )}
+          {/* A soft inner shadow down the left wall, so the cylinder turns. */}
+          <rect
+            x={CX - RX}
+            y={MOUTH_Y}
+            width="12"
+            height={BASE_Y + RY}
+            fill="var(--chart-ink)"
+            opacity="0.06"
+          />
         </g>
 
-        <path
-          d={BODY}
-          fill="none"
-          stroke="var(--line-strong)"
-          strokeWidth="1.5"
-        />
-        {/* The rim, drawn over the body so the jar has a lip to fill up to. */}
-        <rect
-          x="8"
-          y="16"
-          width="64"
-          height="11"
-          rx="4"
+        {/* The clip has to sit on an *untransformed* group: a clipPath is
+            resolved in the user space of the element that references it, so
+            clipping the scaled group would scale the waterline with it. */}
+        <g clipPath={`url(#${dryClip})`}>
+          <g transform={iconAt}>
+            <path d={icon.d} fill="var(--accent)" opacity="0.9" />
+          </g>
+        </g>
+        <g clipPath={`url(#${wetClip})`}>
+          <g transform={iconAt}>
+            <path d={icon.d} fill="var(--accent)" opacity="0.35" />
+          </g>
+        </g>
+
+        {/* Outline last, so the walls read as edges over the fill. */}
+        <path d={BODY} fill="none" stroke="var(--line-strong)" strokeWidth="1.6" />
+        {/* The mouth: the rim, and the inside of the far wall showing through. */}
+        <ellipse
+          cx={CX}
+          cy={MOUTH_Y}
+          rx={RX}
+          ry={RY}
           fill="var(--surface)"
           stroke="var(--line-strong)"
-          strokeWidth="1.5"
+          strokeWidth="1.6"
+        />
+        <ellipse
+          cx={CX}
+          cy={MOUTH_Y + 1.5}
+          rx={RX - 5}
+          ry={RY - 3.5}
+          fill="var(--surface-muted)"
         />
       </svg>
 
-      <p className="mt-2.5 line-clamp-2 text-[13.5px] leading-snug font-medium text-text">
+      <p className="mt-2 line-clamp-2 text-[13.5px] leading-snug font-semibold text-text">
         {pot.name}
       </p>
-      <p
-        className={`mt-1 font-mono text-[12.5px] tabular-nums ${
-          full ? "text-positive" : "text-text"
-        }`}
-      >
-        {formatMoney(pot.savedMinor)}
-      </p>
-      <p className="font-mono text-[11.5px] tabular-nums text-text-subtle">
+
+      <Amount minor={pot.savedMinor} full={full} />
+
+      <p className="mt-0.5 font-mono text-[11.5px] tabular-nums text-text-subtle">
         of {formatMoney(pot.targetMinor)} · {Math.round(fill * 100)}%
       </p>
+
+      {/* The same number the pot draws, as a bar. A cylinder is a poor
+          instrument for reading a proportion — the eye is much better at
+          comparing lengths on a shared baseline than areas in a jar — so the
+          pot carries the identity and this carries the precision. */}
+      <div
+        className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-muted"
+        aria-hidden
+      >
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${Math.max(fill * 100, fill > 0 ? 3 : 0)}%`, background: colour }}
+        />
+      </div>
     </li>
+  );
+}
+
+/**
+ * "CHF 1'074.00" split so the code can sit quiet beside a loud number.
+ *
+ * de-CH joins them with a non-breaking space, which is the seam — and the only
+ * one, since `formatMoney` never emits a sign.
+ */
+function Amount({ minor, full }: { minor: number; full: boolean }) {
+  const [code, ...rest] = formatMoney(minor).split(" ");
+  return (
+    <p className="mt-1 flex items-baseline justify-center gap-1">
+      <span className="font-mono text-[10.5px] text-text-subtle">{code}</span>
+      <span
+        className={`font-mono text-[15px] font-semibold tabular-nums ${
+          full ? "text-positive" : "text-accent"
+        }`}
+      >
+        {rest.join(" ")}
+      </span>
+    </p>
   );
 }

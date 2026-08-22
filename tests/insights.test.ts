@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Transaction } from "@/db/schema";
+import { goalIcon } from "@/lib/goal-icon";
 import {
   applyFilters,
   byCategory,
@@ -386,6 +387,40 @@ describe("potFill", () => {
   it("treats a zero target as full only once something is in it", () => {
     expect(potFill(0, 0)).toBe(0);
     expect(potFill(100, 0)).toBe(1);
+  });
+});
+
+describe("goalIcon", () => {
+  const name = (goal: string) => goalIcon(goal).iconName;
+
+  it("reads the goal's own language", () => {
+    // The app is Swiss; half the names people type will be German.
+    expect(name("Ferien")).toBe("umbrella-beach");
+    expect(name("Holiday")).toBe("umbrella-beach");
+    expect(name("Auto")).toBe("car");
+    expect(name("New car")).toBe("car");
+    expect(name("Computer")).toBe("laptop");
+    expect(name("Haus")).toBe("house");
+  });
+
+  it("matches inside a longer word", () => {
+    expect(name("Ferienkasse 2027")).toBe("umbrella-beach");
+  });
+
+  it("takes the more specific rule first", () => {
+    // "Motorrad" contains "rad", which is the bicycle keyword.
+    expect(name("Motorrad")).toBe("motorcycle");
+  });
+
+  it("does not let a two-letter keyword hunt through unrelated names", () => {
+    // "pc" is inside "Upcycling"; a plain substring test hands it a laptop.
+    expect(name("Upcycling")).toBe("piggy-bank");
+    expect(name("Neuer PC")).toBe("laptop");
+  });
+
+  it("falls back to a piggy bank rather than guessing", () => {
+    expect(name("Sparbüchse")).toBe("piggy-bank");
+    expect(name("")).toBe("piggy-bank");
   });
 });
 
