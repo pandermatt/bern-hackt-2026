@@ -8,11 +8,13 @@ import { DemoDataControls } from "@/components/demo-data-controls";
 import { InstallApp } from "@/components/install-app";
 import { LanguageSelector } from "@/components/language-selector";
 import { ProfileSettings } from "@/components/profile-settings";
+import { PushNotifications } from "@/components/push-notifications";
 import { Section } from "@/components/section";
 import { SETTINGS_GROUP, SettingsRow } from "@/components/settings-row";
 import { ThemeSetting } from "@/components/theme-setting";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { pushPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -35,9 +37,10 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/account"
  *
  * - **Profile** — the account itself. The only thing here that writes to
  *   `users`.
- * - **Preferences** — this browser only, which is literally what all three
- *   rows say: the theme applies here, the language is remembered here, and
- *   installing puts the app on this device.
+ * - **Preferences** — this browser only, which is literally what every row
+ *   says: the theme applies here, the language is remembered here, installing
+ *   puts the app on this device, and a push subscription belongs to this
+ *   browser rather than to the account.
  * - **Data** — the statements in the account and what has been made of them:
  *   the anomaly scan, then the two ways of importing rows.
  * - **Danger zone** — deleting the account.
@@ -90,6 +93,12 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
           </SettingsRow>
 
           <InstallApp />
+
+          {/* Read here rather than in the component: the key is a runtime
+              value on the host, so it must not be a NEXT_PUBLIC_ variable
+              baked into the build. Null means push is not configured, and
+              the row says so instead of offering a button that throws. */}
+          <PushNotifications publicKey={pushPublicKey()} />
         </Section>
 
         {/* `/anomalies` links here twice. The anchor sits on the group rather

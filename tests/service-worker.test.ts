@@ -44,9 +44,24 @@ class FakeCache {
   }
 }
 
+/** What `event.notification` is, reduced to what the click handler touches. */
+class FakeNotification {
+  closed = false;
+
+  constructor(public readonly data: unknown) {}
+
+  close() {
+    this.closed = true;
+  }
+}
+
 class FakeEvent {
   waited: Promise<unknown> | null = null;
   responded: Promise<Response> | null = null;
+  /** Set on a push event. `json()` throws for the unparseable case. */
+  data?: { json: () => unknown };
+  /** Set on a notificationclick event. */
+  notification?: FakeNotification;
 
   constructor(public readonly request?: { method: string; mode: string; url: string }) {}
 
@@ -69,6 +84,31 @@ interface WorkerHarness {
   claimed: boolean;
   /** Flip to make every subsequent `fetch` reject, as a dead network does. */
   offline: boolean;
+  /** Everything `registration.showNotification` was asked to display. */
+  notifications: { title: string; options: Record<string, unknown> }[];
+  /** Open windows `clients.matchAll` will report, and what happened to them. */
+  windows: FakeWindowClient[];
+  /** URLs `clients.openWindow` was called with. */
+  opened: string[];
+}
+
+/** One entry from `clients.matchAll`, recording what the handler did to it. */
+class FakeWindowClient {
+  navigated: string | null = null;
+  focused = false;
+
+  constructor(public url: string) {}
+
+  async navigate(url: string) {
+    this.navigated = url;
+    this.url = url;
+    return this;
+  }
+
+  async focus() {
+    this.focused = true;
+    return this;
+  }
 }
 
 /**
@@ -77,7 +117,7 @@ interface WorkerHarness {
  * provide — everything it reaches for is either `self.x` or a global passed in
  * here.
  */
-function loadWorker(precacheStatus = 200): WorkerHarness {
+function loadWorker(precacheStatus = 200, dev = false): WorkerHarness {
   const handlers = new Map<string, Handler>();
   const cacheStore = new Map<string, FakeCache>();
   const fetched: string[] = [];
@@ -89,15 +129,33 @@ function loadWorker(precacheStatus = 200): WorkerHarness {
     served,
     claimed: false,
     offline: false,
+    notifications: [],
+    windows: [],
+    opened: [],
   };
 
   const self = {
-    location: { origin: "https://beyond.test" },
+    location: {
+      origin: "https://beyond.test",
+      // `href` carries the registration's query string, which is the worker's
+      // only channel for a build-time fact — see DEV in public/sw.js.
+      href: dev ? "https://beyond.test/sw.js?dev=1" : "https://beyond.test/sw.js",
+    },
     addEventListener: (type: string, handler: Handler) => handlers.set(type, handler),
     skipWaiting: async () => undefined,
+    registration: {
+      showNotification: async (title: string, options: Record<string, unknown>) => {
+        harness.notifications.push({ title, options });
+      },
+    },
     clients: {
       claim: async () => {
         harness.claimed = true;
+      },
+      matchAll: async () => harness.windows,
+      openWindow: async (url: string) => {
+        harness.opened.push(url);
+        return new FakeWindowClient(url);
       },
     },
   };
@@ -157,6 +215,44 @@ async function navigateOffline(harness: WorkerHarness, path: string): Promise<Re
   });
   harness.handlers.get("fetch")!(event);
   return event.responded!;
+}
+
+/** Drives an asset request through the fetch handler. */
+function requestAsset(harness: WorkerHarness, path: string): FakeEvent {
+  const event = new FakeEvent({
+    method: "GET",
+    mode: "no-cors",
+    url: `https://beyond.test${path}`,
+  });
+  harness.handlers.get("fetch")!(event);
+  return event;
+}
+
+/** Delivers a push. `payload === undefined` stands for a push with no body. */
+async function push(harness: WorkerHarness, payload: unknown): Promise<void> {
+  const event = new FakeEvent();
+  if (payload !== undefined) {
+    event.data = {
+      json: () => {
+        if (payload === "unparseable") throw new SyntaxError("not JSON");
+        return payload;
+      },
+    };
+  }
+  harness.handlers.get("push")!(event);
+  await event.waited;
+}
+
+/** Taps a notification carrying `data`. */
+async function clickNotification(
+  harness: WorkerHarness,
+  data: unknown,
+): Promise<FakeNotification> {
+  const event = new FakeEvent();
+  event.notification = new FakeNotification(data);
+  harness.handlers.get("notificationclick")!(event);
+  await event.waited;
+  return event.notification;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,5 +335,100 @@ describe("a navigation that fails", () => {
     expect(await (await navigateOffline(harness, "/")).text()).toBe(
       `body of /${routing.defaultLocale}/offline`,
     );
+  });
+});
+
+describe("the dev registration", () => {
+  it("keeps cache-first off /_next/static/, where dev chunks are not hashed", () => {
+    // The whole reason the worker may now register outside production. A
+    // cached dev chunk is yesterday's module served over today's HMR.
+    const event = requestAsset(loadWorker(200, true), "/_next/static/chunks/main.js");
+    expect(event.responded).toBeNull();
+  });
+
+  it("still caches build output when registered without ?dev=1", () => {
+    const event = requestAsset(loadWorker(), "/_next/static/chunks/main.js");
+    expect(event.responded).not.toBeNull();
+  });
+});
+
+describe("push", () => {
+  it("shows the payload it was sent", async () => {
+    const harness = loadWorker();
+    await push(harness, {
+      title: "Found new anomaly",
+      body: "Something is worth a look.",
+      url: "/en/anomalies",
+      tag: "anomaly",
+    });
+
+    expect(harness.notifications).toHaveLength(1);
+    const [{ title, options }] = harness.notifications;
+    expect(title).toBe("Found new anomaly");
+    expect(options.body).toBe("Something is worth a look.");
+    expect(options.tag).toBe("anomaly");
+    // The click handler reads the URL back off here, so it has to survive.
+    expect(options.data).toEqual({ url: "/en/anomalies" });
+  });
+
+  it("shows something for a push with no body", async () => {
+    // A push that displays nothing is what Chrome counts against the origin
+    // before revoking the permission outright, so there is no silent path.
+    const harness = loadWorker();
+    await push(harness, undefined);
+
+    expect(harness.notifications).toHaveLength(1);
+    expect(harness.notifications[0].title).toBeTruthy();
+  });
+
+  it("shows something for a payload that is not our JSON", async () => {
+    const harness = loadWorker();
+    await push(harness, "unparseable");
+
+    expect(harness.notifications).toHaveLength(1);
+    expect(harness.notifications[0].title).toBeTruthy();
+  });
+});
+
+describe("notificationclick", () => {
+  it("opens the payload's URL when nothing is open", async () => {
+    const harness = loadWorker();
+    const notification = await clickNotification(harness, { url: "/de/anomalies" });
+
+    expect(harness.opened).toEqual(["/de/anomalies"]);
+    // Left on screen, it would still be there after the page had opened.
+    expect(notification.closed).toBe(true);
+  });
+
+  it("navigates and focuses an open window rather than opening a second", async () => {
+    // An installed PWA has exactly one window, and openWindow on top of it is
+    // how you end up with two.
+    const harness = loadWorker();
+    const open = new FakeWindowClient("https://beyond.test/de/dashboard");
+    harness.windows.push(open);
+
+    await clickNotification(harness, { url: "/de/anomalies" });
+
+    expect(open.navigated).toBe("/de/anomalies");
+    expect(open.focused).toBe(true);
+    expect(harness.opened).toEqual([]);
+  });
+
+  it("ignores a window from another origin", async () => {
+    const harness = loadWorker();
+    const foreign = new FakeWindowClient("https://elsewhere.test/");
+    harness.windows.push(foreign);
+
+    await clickNotification(harness, { url: "/de/anomalies" });
+
+    expect(foreign.focused).toBe(false);
+    expect(harness.opened).toEqual(["/de/anomalies"]);
+  });
+
+  it("falls back to the root for a notification carrying no URL", async () => {
+    const harness = loadWorker();
+    await clickNotification(harness, undefined);
+
+    expect(harness.opened).toEqual(["/"]);
   });
 });

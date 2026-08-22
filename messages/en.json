@@ -645,6 +645,32 @@
     "iosStep2": "Scroll down the list and choose “Add to Home Screen”.",
     "iosStep3": "Tap “Add”. Beyond Money appears on your home screen."
   },
+  "PushNotifications": {
+    "title": "Push notifications",
+    "note": "Get a notification on this device when a scan finds something worth a look. Applies to this browser only.",
+    "enable": "Enable",
+    "enabled": "Enabled",
+    "enabledNote": "This device will get a notification when a scan finds something worth a look.",
+    "enabledToast": "Notifications are on for this device.",
+    "disable": "Turn off",
+    "blockedNote": "Notifications are blocked for this site. Your browser's site settings are the only place that can undo that.",
+    "unsupportedNote": "This browser cannot receive push notifications.",
+    "iosInstallNote": "On iPhone and iPad, notifications only work once Beyond Money is on your home screen — add it from the row above first.",
+    "notConfiguredNote": "Push notifications are not configured on this server.",
+    "testTitle": "Test notification",
+    "testNote": "Sends “Found new anomaly” in about {seconds} seconds — enough time to close the app. Tapping it opens your anomalies.",
+    "testAction": "Send test notification",
+    "testQueued": "On its way — it arrives in about {seconds} seconds.",
+    "error_sessionExpired": "Your session expired. Sign in again.",
+    "error_notConfigured": "Push notifications are not configured on this server.",
+    "error_noSubscription": "This device is not subscribed to notifications.",
+    "error_invalid": "Your browser handed back a subscription we could not read.",
+    "error_subscribeFailed": "Could not turn notifications on. Check your browser's permissions and try again."
+  },
+  "Push": {
+    "anomalyTitle": "Found new anomaly",
+    "anomalyBody": "Something in your spending is worth a look. Tap to see what."
+  },
   "DangerZone": {
     "trigger": "Delete account",
     "title": "Delete your account?",

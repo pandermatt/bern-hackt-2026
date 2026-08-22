@@ -645,6 +645,32 @@
     "iosStep2": "Scrollen Sie die Liste hinunter und wählen Sie „Zum Startbildschirm“.",
     "iosStep3": "Tippen Sie auf „Hinzufügen“. Beyond Money erscheint auf Ihrem Startbildschirm."
   },
+  "PushNotifications": {
+    "title": "Push-Mitteilungen",
+    "note": "Erhalte auf diesem Gerät eine Mitteilung, wenn ein Scan etwas Auffälliges findet. Gilt nur für diesen Browser.",
+    "enable": "Aktivieren",
+    "enabled": "Aktiviert",
+    "enabledNote": "Dieses Gerät erhält eine Mitteilung, wenn ein Scan etwas Auffälliges findet.",
+    "enabledToast": "Mitteilungen sind für dieses Gerät aktiviert.",
+    "disable": "Ausschalten",
+    "blockedNote": "Mitteilungen sind für diese Seite blockiert. Das lässt sich nur in den Website-Einstellungen deines Browsers rückgängig machen.",
+    "unsupportedNote": "Dieser Browser kann keine Push-Mitteilungen empfangen.",
+    "iosInstallNote": "Auf iPhone und iPad funktionieren Mitteilungen erst, wenn Beyond Money auf dem Home-Bildschirm liegt — füge es zuerst über die Zeile oben hinzu.",
+    "notConfiguredNote": "Push-Mitteilungen sind auf diesem Server nicht konfiguriert.",
+    "testTitle": "Testmitteilung",
+    "testNote": "Sendet «Neue Auffälligkeit gefunden» in rund {seconds} Sekunden — genug Zeit, um die App zu schliessen. Ein Tipp darauf öffnet deine Auffälligkeiten.",
+    "testAction": "Testmitteilung senden",
+    "testQueued": "Unterwegs — sie kommt in rund {seconds} Sekunden an.",
+    "error_sessionExpired": "Deine Sitzung ist abgelaufen. Melde dich erneut an.",
+    "error_notConfigured": "Push-Mitteilungen sind auf diesem Server nicht konfiguriert.",
+    "error_noSubscription": "Dieses Gerät ist nicht für Mitteilungen registriert.",
+    "error_invalid": "Dein Browser hat eine Registrierung zurückgegeben, die wir nicht lesen konnten.",
+    "error_subscribeFailed": "Mitteilungen konnten nicht aktiviert werden. Prüfe die Berechtigungen deines Browsers und versuche es erneut."
+  },
+  "Push": {
+    "anomalyTitle": "Neue Auffälligkeit gefunden",
+    "anomalyBody": "Bei deinen Ausgaben gibt es etwas anzuschauen. Tippe, um zu sehen was."
+  },
   "DangerZone": {
     "trigger": "Konto löschen",
     "title": "Konto wirklich löschen?",

@@ -451,6 +451,47 @@ export const savingsAllocations = sqliteTable(
   ],
 );
 
+/**
+ * One browser's Web Push subscription — the endpoint a push service will
+ * deliver to, plus the two keys that encrypt the payload for it.
+ *
+ * Created empty like `budgets`, so `userId` is NOT NULL here too; see the note
+ * on `transactions.userId` for why that column is the exception rather than
+ * this one.
+ *
+ * A subscription belongs to a **device**, not to an account: someone signed in
+ * on a phone and a laptop has two rows, and both should ring. `endpoint` is
+ * therefore the unique key rather than `userId` — it is what the push service
+ * issues and what identifies the browser — which is also what makes
+ * re-subscribing an upsert instead of a slowly growing pile of stale rows.
+ *
+ * `locale` is stored per subscription because the push is composed on the
+ * server long after the request that created it has gone. The device that
+ * chose English has to keep getting English even when the send is triggered by
+ * a background scan that has no request locale of its own.
+ */
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The push service's delivery URL. Opaque, and long — up to ~500 chars. */
+    endpoint: text("endpoint").notNull().unique(),
+    /** The subscription's public key, base64url, from `PushSubscription.toJSON()`. */
+    p256dh: text("p256dh").notNull(),
+    /** The subscription's auth secret, base64url, from the same place. */
+    auth: text("auth").notNull(),
+    /** An `AppLocale` — the language this device's notifications speak. */
+    locale: text("locale").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [index("push_subscriptions_user_idx").on(table.userId)],
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
@@ -461,3 +502,5 @@ export type AnomalyRun = typeof anomalyRuns.$inferSelect;
 export type Budget = typeof budgets.$inferSelect;
 export type SavingsGoal = typeof savingsGoals.$inferSelect;
 export type SavingsAllocation = typeof savingsAllocations.$inferSelect;
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
