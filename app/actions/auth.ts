@@ -118,6 +118,11 @@ export async function login(
  * arguments it chooses, and a `userId` parameter here would let anyone rename
  * anyone.
  */
+const updateProfileSchema = z.object({
+  name: displayNameField,
+  email: credentials.shape.email,
+});
+
 export async function updateProfile(
   _prev: AuthState,
   formData: FormData,
@@ -125,12 +130,27 @@ export async function updateProfile(
   const user = await getCurrentUser();
   if (!user) return { error: "You must be signed in to do that." };
 
-  const parsed = displayNameField.safeParse(formData.get("name") ?? undefined);
+  const parsed = updateProfileSchema.safeParse({
+    name: formData.get("name") ?? undefined,
+    email: formData.get("email"),
+  });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  if (parsed.data.email !== user.email) {
+    const existing = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, parsed.data.email))
+      .limit(1);
+
+    if (existing.length > 0) {
+      return { error: "An account with that email already exists." };
+    }
+  }
 
   await db
     .update(users)
-    .set({ name: parsed.data })
+    .set({ name: parsed.data.name, email: parsed.data.email })
     .where(eq(users.id, user.id));
 
   // The header renders the name from the root layout and the dashboard greets

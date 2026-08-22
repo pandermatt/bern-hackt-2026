@@ -25,12 +25,8 @@ export default async function AccountPage() {
           <h2 className="text-[14.5px] font-semibold text-text">Profile</h2>
         </div>
         <div className="px-4 py-4 sm:px-5">
-          <p className="text-[13px] text-text-muted">
-            Used to greet you on the dashboard and in the header. Leave it empty
-            and we&rsquo;ll use your email instead.
-          </p>
           <div className="mt-3">
-            <ProfileSettings name={user.name} />
+            <ProfileSettings user={user} />
           </div>
         </div>
       </div>

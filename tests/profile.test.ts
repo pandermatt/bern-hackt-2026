@@ -97,23 +97,24 @@ describe("register", () => {
 });
 
 describe("updateProfile", () => {
-  it("sets the name on the signed-in account", async () => {
+  it("sets the name and email on the signed-in account", async () => {
     const user = await signIn();
 
-    await expect(updateProfile(undefined, form({ name: "Jeanine" }))).resolves.toEqual({
+    await expect(updateProfile(undefined, form({ name: "Jeanine", email: "new@example.com" }))).resolves.toEqual({
       saved: true,
     });
 
     const [updated] = await db.select().from(users);
     expect(updated.id).toBe(user.id);
     expect(updated.name).toBe("Jeanine");
+    expect(updated.email).toBe("new@example.com");
   });
 
   /* Clearing the field is a real reset, not a no-op. */
   it("clears the name back to NULL when the field is empty", async () => {
     await signIn("Jeanine");
 
-    await expect(updateProfile(undefined, form({ name: "" }))).resolves.toEqual({
+    await expect(updateProfile(undefined, form({ name: "", email: "a@example.com" }))).resolves.toEqual({
       saved: true,
     });
 
@@ -131,10 +132,22 @@ describe("updateProfile", () => {
       passwordHash: await hashPassword("correct horse"),
     });
 
-    const result = await updateProfile(undefined, form({ name: "Someone else" }));
+    const result = await updateProfile(undefined, form({ name: "Someone else", email: "a@example.com" }));
 
     expect(result?.error).toBe("You must be signed in to do that.");
     const [untouched] = await db.select().from(users);
     expect(untouched.name).toBe("Jeanine");
+  });
+
+  it("prevents changing email to one that already exists", async () => {
+    const user = await signIn();
+    await db.insert(users).values({
+      email: "existing@example.com",
+      passwordHash: await hashPassword("correct horse"),
+    });
+
+    const result = await updateProfile(undefined, form({ name: "Jeanine", email: "existing@example.com" }));
+
+    expect(result?.error).toBe("An account with that email already exists.");
   });
 });

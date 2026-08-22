@@ -15,7 +15,11 @@ import { FIELD } from "@/components/auth-form";
  * are server-rendered from a per-request cached `getCurrentUser`, so a client
  * refresh alone would not move them.
  */
-export function ProfileSettings({ name }: { name: string | null }) {
+export function ProfileSettings({
+  user,
+}: {
+  user: { name: string | null; email: string };
+}) {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     updateProfile,
     undefined,
@@ -28,37 +32,54 @@ export function ProfileSettings({ name }: { name: string | null }) {
   useEffect(() => {
     if (state?.saved && announced.current !== state) {
       announced.current = state;
-      toast.success("Name updated.");
+      toast.success("Profile updated.");
     }
   }, [state]);
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <label htmlFor="profile-name" className="text-[13px] font-medium text-text">
-          Your name
-        </label>
-        <input
-          id="profile-name"
-          name="name"
-          type="text"
-          maxLength={80}
-          autoComplete="name"
-          // Uncontrolled, seeded from the server. Clearing it and saving is a
-          // real reset — the action stores an empty field as NULL.
-          defaultValue={name ?? ""}
-          placeholder="What should we call you?"
-          className={FIELD}
-        />
-      </div>
+    <form action={formAction} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <label htmlFor="profile-name" className="text-[13px] font-medium text-text">
+            Your name
+          </label>
+          <input
+            id="profile-name"
+            name="name"
+            type="text"
+            maxLength={80}
+            autoComplete="name"
+            // Uncontrolled, seeded from the server. Clearing it and saving is a
+            // real reset — the action stores an empty field as NULL.
+            defaultValue={user.name ?? ""}
+            placeholder="What should we call you?"
+            className={FIELD}
+          />
+        </div>
+        
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <label htmlFor="profile-email" className="text-[13px] font-medium text-text">
+            Email address
+          </label>
+          <input
+            id="profile-email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            defaultValue={user.email}
+            className={FIELD}
+          />
+        </div>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="h-10 shrink-0 cursor-pointer rounded-md bg-accent px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-60"
-      >
-        {pending ? "Saving…" : "Save"}
-      </button>
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-10 shrink-0 cursor-pointer rounded-md bg-accent px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-60"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+      </div>
 
       {state?.error && (
         <p
@@ -71,3 +92,4 @@ export function ProfileSettings({ name }: { name: string | null }) {
     </form>
   );
 }
+
