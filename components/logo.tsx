@@ -1,27 +1,32 @@
 
 import { Link } from "@/i18n/navigation";
-import { SIGNET_PATH, SIGNET_VIEWBOX } from "@/lib/signet";
 import { site } from "@/lib/site";
 
-/* `pathLength={1}` normalizes the signet outline to a 0–1 range so the
-   `trend-draw` keyframes (globals.css) can animate dashoffset without knowing
-   the path's real length. The stroke is only drawn while the animation runs, so
-   the resting state — a solid teal signet — is unchanged. */
+/**
+ * The dragon mark, on a white tile.
+ *
+ * The supplied artwork (`res/logos`) is raster and has **no alpha** — it is
+ * drawn for a white ground, exactly like the merchant marks in
+ * `components/merchant-avatar.tsx`. So it gets the treatment that file already
+ * documents: `bg-logo-tile`, which is `#ffffff` in both themes on purpose, and
+ * a `ring-line` so the tile does not float on the dark page. Dropped straight
+ * onto `--surface` it would be a white square on a #1c1c1c header.
+ *
+ * This replaced an inline SVG signet that could be filled with `var(--accent)`
+ * and stroke-animated on hover. Both went with the vector: a PNG has no path
+ * to draw and no fill to re-point. A gentle scale stands in for the flourish;
+ * if the dragon is ever redrawn as an SVG, the old animation is worth back.
+ */
 function Mark() {
   return (
-    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-brand">
-      <svg viewBox={SIGNET_VIEWBOX} className="h-4 w-auto" aria-hidden>
-        <path d={SIGNET_PATH} fill="var(--accent)" />
-        <path
-          d={SIGNET_PATH}
-          pathLength={1}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth="1.2"
-          className="group-hover:[animation:trend-draw_0.6s_ease-out]"
-        />
-      </svg>
-    </span>
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src="/icon-192.png"
+      alt=""
+      width={192}
+      height={192}
+      className="size-7 shrink-0 rounded-md bg-logo-tile object-contain ring-1 ring-line transition-transform duration-200 group-hover:scale-105"
+    />
   );
 }
 
@@ -40,7 +45,7 @@ export function Logo({ href = "/" }: { href?: "/" | "/home" }) {
       <span className="text-[15px] font-semibold tracking-tight text-text">
         {/* The wordmark is the first thing to go on a phone: at 402px this
             header also has to carry four nav tabs and the account controls,
-            and the signet on its own is a sufficient logo. The `sr-only` name
+            and the mark on its own is a sufficient logo. The `sr-only` name
             below is deliberately outside this, so it survives at every width. */}
         <span aria-hidden="true" className="hidden items-center sm:inline-flex">
           {site.name}

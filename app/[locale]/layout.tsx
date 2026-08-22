@@ -60,7 +60,13 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
      * back in the `<head>`. `app/favicon.ico` still rides its own convention.
      */
     icons: {
-      icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+      /* PNG rather than SVG: the dragon artwork in `res/logos` is raster, so
+         there is no vector to serve. `app/favicon.ico` still rides its own
+         file convention and carries the same mark. */
+      icon: [
+        { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+        { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+      ],
       apple: "/apple-icon.png",
     },
     /*

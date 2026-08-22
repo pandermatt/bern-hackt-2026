@@ -639,7 +639,9 @@ Unchanged from the template this app grew out of, and still exactly true.
 - **Only Blue Stone works as text.** It is `--accent` and carries every
   interactive surface, in both directions (white-on-teal buttons included).
   Supernova and Pistachio are under 2:1 on white and are **fills only** —
-  `--brand` is the signet tile in `components/logo.tsx`. Never set type in
+  `--brand` is the assistant's Sparkles tile and the anomaly prompt's ground —
+  it used to be the logo tile, until the mark became a raster the tile could
+  not hold. Never set type in
   either. (On the dark ground both clear AA, which is why `--positive` is
   Pistachio itself there rather than the darkened step.)
 - **A Pistachio fill needs `--pistachio-edge` as a stroke.** At 2:1 the fill
@@ -718,10 +720,13 @@ Unchanged from the template this app grew out of, and still exactly true.
   diagrams' text, connectors and outlines.
 - Neutrals are **untinted**. Concrete is a pure neutral (HSL 0, 0, 95) and a
   teal-tinted grey scale fights it.
-- The signet path lives once in `lib/signet.ts` and is consumed by
-  `components/logo.tsx`, `app/opengraph-image.tsx` (as a data URI — Satori only
-  renders SVG reliably through an `<img>`), and `app/icon.svg` (its own copy,
-  being a static file).
+- **The mark is raster and has no alpha.** The dragon in `res/logos` is drawn
+  for a white ground, so every surface that shows it puts it on one:
+  `bg-logo-tile` + `ring-line` in `components/logo.tsx` (the treatment
+  `merchant-avatar.tsx` already documents), and a white rounded tile on the OG
+  card. It cannot be re-tinted per theme and cannot be stroke-animated — both
+  went with the vector signet it replaced. There is no `icon.svg`; do not add
+  an SVG entry to the manifest until someone draws the mark as paths.
 - **Two themes.** `:root` is light, `.dark` is dark, and `next-themes` puts the
   class on `<html>` — which is why `<html>` needs `suppressHydrationWarning`
   and why `color-scheme` is set alongside each (without it, a native

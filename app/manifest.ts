@@ -29,17 +29,20 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#FFCC00",
     /*
      * Chrome wants a 192 and a 512 PNG before it treats the app as
-     * installable; the maskable copy is the square-cornered variant, so
-     * Android can apply its own adaptive-icon shape without clipping the
-     * signet. All three are rasterized from public/icon.svg — see the README.
+     * installable; the maskable copy insets the mark into Android's safe zone,
+     * so its adaptive shape crops the white ground rather than the dragon.
+     * They come from `res/logos` — see the README.
+     *
+     * **No SVG entry.** There used to be one, rasterized into these PNGs, but
+     * the dragon artwork is raster-only: there is no vector source to serve.
+     * Add one back the day someone draws the mark as paths.
      *
      * Every path here is a root path, and has to be: a manifest is fetched
-     * without a locale and resolves its icons against `scope`. `/icon.svg`
-     * used to point at `app/[locale]/icon.svg`, which the file convention
-     * serves at `/de/icon.svg` — so this entry was a silent 404.
+     * without a locale and resolves its icons against `scope`. An entry
+     * pointing at a file under `app/[locale]/` is served at `/de/…` and is a
+     * silent 404 here.
      */
     icons: [
-      { src: "/icon.svg", type: "image/svg+xml", sizes: "any" },
       { src: "/icon-192.png", type: "image/png", sizes: "192x192" },
       { src: "/icon-512.png", type: "image/png", sizes: "512x512" },
       {

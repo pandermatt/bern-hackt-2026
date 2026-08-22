@@ -72,13 +72,11 @@ Everything that names the app lives in `lib/site.ts`. To rebrand a clone:
    forms the session cookie name, so changing it signs out existing sessions
    once.
 2. **`package.json`** — the `name` field.
-3. **`public/icon.svg`** — then regenerate `app/favicon.ico`,
-   `public/apple-icon.png` and the three `public/icon-*.png` files from it (see
-   Icons below).
+3. **`res/logos/`** — the mark. Copy a new set into `public/` (see Icons below).
 4. **`LICENSE`** — the copyright holder.
 5. `components/landing.tsx` — the three selling points are still hardcoded.
-6. `lib/signet.ts` and `app/globals.css` — the PostFinance mark and palette.
-   Swap the signet path and the `:root` tokens; no component hardcodes a colour.
+6. `app/globals.css` — the palette. Swap the `:root` tokens; no component
+   hardcodes a colour.
 
 ### Palette
 
@@ -87,7 +85,7 @@ The five PostFinance brand colours, and what each one is allowed to do:
 | Hex | Name | Used for |
 | --- | --- | --- |
 | `#005B61` | Blue Stone | `--accent` — every interactive surface, links, focus rings. The only brand colour that passes a text contrast threshold (7.9:1 on white) |
-| `#FFCC00` | Supernova | `--brand` — the signet tile, and nothing else |
+| `#FFCC00` | Supernova | `--brand` — the assistant's tile, the anomaly prompt's ground, landing accents |
 | `#A5C400` | Pistachio | `--pistachio` — inflow bars, always with a `--pistachio-edge` stroke |
 | `#F2F2F2` | Concrete | `--bg`, the page ground |
 | `#FFFFFF` | White | `--surface`, cards |
@@ -124,36 +122,39 @@ Nothing else hardcodes the product name.
 
 ### Icons
 
-`public/icon.svg` is the source of truth; everything else is rasterized from it.
+The mark is the **dragon** in `res/logos/`, supplied as a ready-made PNG set.
+Everything under `public/` is a copy of one of those files; there is nothing to
+rasterize.
 
 All of these are **root paths under `public/`**, and have to be. Next's metadata
 file convention emits an icon's `<link>` relative to the segment the file sits
-in, so an `icon.svg` under `app/[locale]/` is only ever served at `/de/icon.svg`
-— and `app/manifest.ts` is locale-independent and cannot name a path like that.
-The layout declares both files explicitly in `generateMetadata` instead.
-`app/favicon.ico` is the one that stays on a convention: it is already at the
-`app/` root.
+in, so an icon under `app/[locale]/` is only ever served at `/de/…` — and
+`app/manifest.ts` is locale-independent and cannot name a path like that. The
+layout declares them explicitly in `generateMetadata` instead. `app/favicon.ico`
+is the one that stays on a convention: it is already at the `app/` root.
 
 ```bash
-rsvg-convert -w 32 -h 32 public/icon.svg -o /tmp/i32.png   # also 16, 48
-magick /tmp/i16.png /tmp/i32.png /tmp/i48.png app/favicon.ico
-sed 's/ rx="7"//' public/icon.svg | rsvg-convert -w 180 -h 180 -o public/apple-icon.png
-rsvg-convert -w 192 -h 192 public/icon.svg -o public/icon-192.png
-rsvg-convert -w 512 -h 512 public/icon.svg -o public/icon-512.png
-rsvg-convert -w 512 -h 512 /tmp/maskable.svg -o public/icon-maskable-512.png
+cp res/logos/beyond-money-icon-192x192.png public/icon-192.png
+cp res/logos/beyond-money-icon-512x512.png public/icon-512.png
+cp res/logos/beyond-money-icon-180x180.png public/apple-icon.png
+cp res/logos/favicon.ico                    app/favicon.ico
 ```
 
-`apple-icon.png` drops the rounded corners because iOS applies its own mask.
-`public/icon-maskable-512.png` is square-cornered *and* scales the signet to
-78%, keeping it inside the circular safe zone Android crops to — at full size
-the arms graze the edge. Build its source SVG by taking `public/icon.svg`, dropping
-the `rx`, and multiplying the group's `scale` by `0.78`.
+`public/icon-maskable-512.png` is the one that is not a straight copy: Android
+applies its own adaptive shape and crops to roughly the central 80%, and the
+supplied icon runs nearly edge to edge. It is the 1024 master scaled to 400px,
+centred on a 512 white square — the crop then eats the white, not the dragon.
 
-Rasterizing needs `librsvg2-bin` and `imagemagick`:
+**There is no `icon.svg`.** The artwork is raster-only, so there is no vector to
+serve and no SVG entry in the manifest or in `generateMetadata`. `public/sw.js`
+precaches `/icon-192.png` for the same reason — and note that `cache.addAll`
+rejects as a whole if any entry 404s, so a dead path in `PRECACHE` takes the
+service worker's install down with it.
 
-```bash
-apt-get install -y librsvg2-bin imagemagick
-```
+The artwork has **no alpha**: it is drawn for a white ground. That is why
+`components/logo.tsx` puts it on `bg-logo-tile` with a `ring-line`, the same
+treatment `components/merchant-avatar.tsx` documents for merchant marks, and
+why the OG card gives it a white rounded tile rather than letting it bleed.
 
 ### Merchant logos
 

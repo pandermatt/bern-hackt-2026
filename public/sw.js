@@ -31,7 +31,11 @@ const DEFAULT_LOCALE = "de";
 const OFFLINE_URLS = LOCALES.map((locale) => `/${locale}/offline`);
 const DEFAULT_OFFLINE_URL = `/${DEFAULT_LOCALE}/offline`;
 
-const PRECACHE = [...OFFLINE_URLS, "/icon.svg", "/icon-192.png"];
+/* `/icon.svg` is gone — the dragon artwork is raster and there is no vector to
+   serve. It mattered here: `cache.addAll` rejects as a whole if any one entry
+   404s, so leaving a dead path in this list would have failed the service
+   worker's install and taken the offline page down with it. */
+const PRECACHE = [...OFFLINE_URLS, "/icon-192.png"];
 
 /** The offline page matching a navigation's locale, else the default's. */
 function offlineUrlFor(pathname) {
