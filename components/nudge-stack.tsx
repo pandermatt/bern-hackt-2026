@@ -12,12 +12,12 @@ import { useTranslations } from "next-intl";
  * this used to be. The cap of three in `rankNudges` is what makes the deck
  * legible: a deck of eight is a pile, and an entry page is not an inbox.
  *
- * **It owns the speaker as well as the bubble**, and that is not tidiness. The
- * toggle cannot sit under the deck, because the trail of nubs runs from the
- * dragon's head up to the bubble's bottom corner and a pill parked in that
- * channel breaks the one thing the arrangement exists to say. So the toggle
- * goes beside the dragon, which means one component has to hold the open/closed
- * state, the cards and the mascot.
+ * **It owns the speaker as well as the bubble**, and that is not tidiness: the
+ * trail of nubs has to be aimed at the dragon's head from the bubble's own
+ * geometry, so one component has to hold the open/closed state, the cards and
+ * the mascot. The mascot is centred under the deck and the trail runs down
+ * onto its head, which is what lets the toggle sit below it — the channel is
+ * above the dragon now, not beside it.
  *
  * **The cards arrive as `children`, deliberately.** `NudgeCard` is a
  * synchronous *server* component and it stays one — it reaches for
@@ -118,33 +118,48 @@ export function NudgeStack({
         ))}
       </div>
 
-      <div className="mt-1 flex items-end gap-2">
-        <div className="relative h-28 w-36 shrink-0">
-          {/* Aimed at the dragon's head rather than laid out beside it: the
-              head sits about a fifth of the way down its own box and left of
-              centre, which only absolute coordinates can point at. The nubs
-              shrink towards the speaker, which is what makes the trail read in
-              the right direction. A triangular tail was the other option and
-              would have had the card's own 1px bottom border drawn straight
-              across its neck; circles have no such seam, and they do not care
-              that the bubble changes height when it unfolds. */}
+      {/* The mascot, centred under what it is saying, in a box it actually
+          fits. It used to sit `absolute` inside a fixed 112×144 slot while
+          being 160px wide — 240px from `lg` — so it overflowed upwards across
+          its own trail and sideways into the toggle beside it, and the two
+          sizes were only ever reconciled by hand at the phone breakpoint. Now
+          the image sizes its own wrapper and everything else is positioned off
+          that, so one arrangement holds at both sizes. */}
+      <div className="mt-4 flex flex-col items-center lg:mt-8">
+        <div className="relative">
+          {/* Aimed at the head, which sits left of the asset's centre — between
+              34% and 43% across the four moods — and under a mane that leaves
+              the top tenth of the frame transparent, which is what the nubs
+              rise into. Percentages of this wrapper, which is the image's own
+              width, so the trail stays aimed when the image steps up at `lg`;
+              the absolute px it used to carry were tuned at the phone size and
+              pointed at empty air on a desk. The nubs shrink towards the
+              speaker, which is what makes the trail read downwards. Still
+              circles rather than a triangular tail: a tail would have the
+              card's own 1px bottom border drawn straight across its neck, and
+              circles do not care that the bubble changes height when it
+              unfolds. */}
           <span aria-hidden>
-            <span className="absolute top-0 left-2 size-3 rounded-full border border-line bg-surface" />
-            <span className="absolute top-5 left-7 size-2 rounded-full border border-line bg-surface" />
+            <span className="absolute -top-[7%] left-[33%] size-3 rounded-full border border-line bg-surface" />
+            <span className="absolute top-[1%] left-[39%] size-2 rounded-full border border-line bg-surface" />
           </span>
-          <div className="absolute bottom-0 left-6">{speaker}</div>
+          {speaker}
         </div>
 
         {stacked && (
           /* A pill, like the all-clear line, and for the same reason: this sits
              over the pistachio, and Pistachio is a fill — 2:1 on white — never
-             a ground for type. */
+             a ground for type. It can sit under the deck now that the trail
+             runs down the centre onto the dragon's head rather than up to the
+             bubble's corner, so nothing is parked in the channel. Below the
+             mascot rather than beside it because a centred mascot leaves under
+             90px either side at `lg`, which the German string does not fit. */
           <button
             type="button"
             onClick={() => setExpanded((open) => !open)}
             aria-expanded={expanded}
             aria-controls={listId}
-            className="mb-10 cursor-pointer rounded-full bg-surface/85 px-3 py-1 text-[12.5px] text-text-muted backdrop-blur-sm transition-colors hover:text-text"
+            className="mt-2 cursor-pointer rounded-full bg-surface/85 px-3 py-1 text-[12.5px] text-text-muted backdrop-blur-sm transition-colors hover:text-text"
           >
             {expanded ? t("showLess") : t("showAll", { count: cards.length })}
           </button>
