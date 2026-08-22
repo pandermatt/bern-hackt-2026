@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { EmptyState } from "@/components/empty-state";
 import { LedgerChunk } from "@/components/ledger-chunk";
 import { TransactionFeed } from "@/components/transaction-feed";
@@ -44,6 +46,8 @@ export function TransactionList({
   /** The raw search params, forwarded to the load-more action. */
   filters: Record<string, string | string[] | undefined>;
 }) {
+  const t = useTranslations("Ledger");
+
   return (
     <section
       id={LEDGER_ANCHOR_ID}
@@ -51,7 +55,7 @@ export function TransactionList({
       // not scroll the first month heading underneath it.
       className="scroll-mt-20"
       // No visible heading any more, so the landmark needs its name here.
-      aria-label="Transactions"
+      aria-label={t("sectionLabel")}
     >
       {rows.length === 0 ? (
         <div className="mt-6 overflow-clip rounded-lg bg-surface-muted">
@@ -80,8 +84,7 @@ export function TransactionList({
           infinite scroll the foot is where you find out you have reached the
           end of it. */}
       <p className="pt-3 text-right font-mono text-[12px] tabular-nums text-text-muted">
-        {totalCount.toLocaleString("de-CH")}{" "}
-        {totalCount === 1 ? "line" : "lines"}
+        {t("lines", { count: totalCount })}
       </p>
     </section>
   );

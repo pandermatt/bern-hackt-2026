@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
@@ -20,6 +21,7 @@ export function ProfileSettings({
 }: {
   user: { name: string | null; email: string };
 }) {
+  const t = useTranslations("Profile");
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     updateProfile,
     undefined,
@@ -32,16 +34,16 @@ export function ProfileSettings({
   useEffect(() => {
     if (state?.saved && announced.current !== state) {
       announced.current = state;
-      toast.success("Profile updated.");
+      toast.success(t("updated"));
     }
-  }, [state]);
+  }, [state, t]);
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <label htmlFor="profile-name" className="text-[13px] font-medium text-text">
-            Your name
+            {t("yourName")}
           </label>
           <input
             id="profile-name"
@@ -52,14 +54,14 @@ export function ProfileSettings({
             // Uncontrolled, seeded from the server. Clearing it and saving is a
             // real reset — the action stores an empty field as NULL.
             defaultValue={user.name ?? ""}
-            placeholder="What should we call you?"
+            placeholder={t("namePlaceholder")}
             className={FIELD}
           />
         </div>
         
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <label htmlFor="profile-email" className="text-[13px] font-medium text-text">
-            Email address
+            {t("emailAddress")}
           </label>
           <input
             id="profile-email"
@@ -77,7 +79,7 @@ export function ProfileSettings({
           disabled={pending}
           className="h-10 shrink-0 cursor-pointer rounded-md bg-accent px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-60"
         >
-          {pending ? "Saving…" : "Save"}
+          {pending ? t("saving") : t("save")}
         </button>
       </div>
 

@@ -80,6 +80,24 @@ export const SYSTEM_PROMPT = [
   "After your answer, propose 2 or 3 short follow-up questions the user could ask next, each on its own line starting with FOLLOWUP: — nothing else on those lines.",
 ].join("\n");
 
+/**
+ * The reply has to come back in the language the dashboard is being read in.
+ * Everything else on the page is translated, and an English paragraph in the
+ * middle of a German page is the one bit of the app that would still look
+ * untranslated — so the locale is appended to the system prompt per turn rather
+ * than baked into it.
+ */
+const LANGUAGE_NAMES: Record<string, string> = {
+  de: "German",
+  en: "English",
+};
+
+export function systemPromptFor(locale: string): string {
+  const language = LANGUAGE_NAMES[locale];
+  if (!language) return SYSTEM_PROMPT;
+  return `${SYSTEM_PROMPT}\nAnswer in ${language}, including the FOLLOWUP lines. Keep the amounts formatted exactly as the tools return them.`;
+}
+
 export const TOOL_NAMES = [
   "get_overview",
   "get_spending_by_category",

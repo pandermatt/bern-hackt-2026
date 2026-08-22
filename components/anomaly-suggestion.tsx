@@ -1,5 +1,7 @@
 import { Sparkles } from "lucide-react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+
+import { Link } from "@/i18n/navigation";
 
 /**
  * Prompts for a first anomaly scan.
@@ -20,6 +22,8 @@ export function AnomalySuggestion({
   running: boolean;
   transactionCount: number;
 }) {
+  const t = useTranslations("AnomalySuggestion");
+
   return (
     // `.on-brand` re-points the text tokens for a Supernova ground, so this
     // stays legible in both themes without hardcoding a colour — see the note
@@ -38,24 +42,15 @@ export function AnomalySuggestion({
           />
           <div>
             <p className="text-[14px] font-semibold text-text">
-              {running
-                ? "Scanning your transactions for anomalies"
-                : "Spot the odd ones out"}
+              {running ? t("runningTitle") : t("title")}
             </p>
             <p className="mt-0.5 max-w-[64ch] text-[13px] text-text-muted">
-              {running ? (
-                <>
-                  A scan is running now. Findings will appear against the
-                  transactions below as soon as it finishes.
-                </>
-              ) : (
-                <>
-                  Nothing has been analysed yet. Run a scan to flag duplicate
-                  charges, unusual amounts and missed recurring payments across
-                  your{" "}
-                  {transactionCount.toLocaleString("de-CH")} transactions.
-                </>
-              )}
+              {running
+                ? t("runningBody")
+                : /* One message, not three fragments: German puts the verb at
+                     the end, so a sentence spliced around a number in English
+                     word order cannot be translated into it. */
+                  t("body", { count: transactionCount.toLocaleString("de-CH") })}
             </p>
           </div>
         </div>
@@ -65,7 +60,7 @@ export function AnomalySuggestion({
             href="/account#anomaly-scan"
             className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-text px-3.5 text-[13px] font-medium text-bg transition-opacity hover:opacity-85 max-sm:w-full sm:h-9"
           >
-            Run a scan
+            {t("cta")}
           </Link>
         )}
       </div>

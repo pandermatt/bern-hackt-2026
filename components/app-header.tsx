@@ -1,9 +1,11 @@
-import Link from "next/link";
 import { LogIn, LogOut, User as UserIcon, ArrowRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { logout } from "@/app/actions/auth";
+import { LanguageSelector } from "@/components/language-selector";
 import { Logo } from "@/components/logo";
 import type { User } from "@/db/schema";
+import { Link } from "@/i18n/navigation";
 import { displayName } from "@/lib/user";
 
 /**
@@ -21,6 +23,8 @@ const CONTROL =
  * `user` is null for signed-out visitors, who see a sign-in link and CTA.
  */
 export function AppHeader({ user }: { user: User | null }) {
+  const t = useTranslations('AppHeader');
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
@@ -28,9 +32,10 @@ export function AppHeader({ user }: { user: User | null }) {
 
         {user ? (
           <div className="flex items-center gap-2.5">
+            <LanguageSelector />
             <Link
               href="/account"
-              aria-label="Account settings"
+              aria-label={t('accountSettings')}
               className={`flex min-h-10 shrink-0 items-center gap-2 sm:min-h-0 ${CONTROL}`}
             >
               <UserIcon className="size-3.5 text-text-subtle" />
@@ -44,18 +49,19 @@ export function AppHeader({ user }: { user: User | null }) {
                 className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
               >
                 <LogOut className="size-3.5 text-text-subtle" />
-                <span>Sign out</span>
+                <span>{t('signOut')}</span>
               </button>
             </form>
           </div>
         ) : (
           <div className="flex items-center gap-3">
+            <LanguageSelector />
             <Link
               href="/login"
               className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
             >
               <LogIn className="size-3.5 text-text-subtle" />
-              <span>Sign in</span>
+              <span>{t('signIn')}</span>
             </Link>
             {/* A maximum-contrast pill rather than a brand-coloured one — the
                 redesign's choice, kept. `bg-text`/`text-bg` is that intent
@@ -65,7 +71,7 @@ export function AppHeader({ user }: { user: User | null }) {
               href="/register"
               className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-text px-4 py-1.5 text-[13px] font-semibold text-bg shadow-2xs transition-all hover:opacity-85 active:scale-95"
             >
-              <span>Get started</span>
+              <span>{t('getStarted')}</span>
               <ArrowRight className="size-3.5" />
             </Link>
           </div>

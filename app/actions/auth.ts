@@ -1,13 +1,14 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { getLocale, getTranslations } from "next-intl/server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { flashUrl } from "@/lib/flash";
+import { redirect } from "@/i18n/navigation";
+import { FLASH_PARAM } from "@/lib/flash";
 import {
   createSession,
   destroySession,
@@ -18,13 +19,46 @@ import {
 
 export type AuthState = { error?: string; saved?: boolean } | undefined;
 
+/**
+ * The schemas carry message *keys*, not messages.
+ *
+ * They are built once at module scope, long before a request — and therefore
+ * before there is a locale to resolve against — so what a failed `safeParse`
+ * hands back is a key into the `AuthErrors` namespace, which `errorFor` below
+ * turns into words in the caller's language.
+ */
 const credentials = z.object({
-  email: z.string().trim().toLowerCase().email("Enter a valid email address."),
-  password: z
-    .string()
-    .min(8, "Use at least 8 characters.")
-    .max(200, "That password is too long."),
+  email: z.string().trim().toLowerCase().email("invalidEmail"),
+  password: z.string().min(8, "passwordTooShort").max(200, "passwordTooLong"),
 });
+
+type AuthErrorKey =
+  | "invalidEmail"
+  | "passwordTooShort"
+  | "passwordTooLong"
+  | "nameTooLong"
+  | "notSignedIn"
+  | "invalidCredentials"
+  | "emailTaken";
+
+/** One key → one localised sentence, in the locale this request came in on. */
+async function errorFor(key: AuthErrorKey | string): Promise<AuthState> {
+  const t = await getTranslations("AuthErrors");
+  // A key the catalog does not know would throw inside a server action and
+  // surface as a 500 rather than a form error, so unknown keys fall back.
+  const known: AuthErrorKey[] = [
+    "invalidEmail",
+    "passwordTooShort",
+    "passwordTooLong",
+    "nameTooLong",
+    "notSignedIn",
+    "invalidCredentials",
+    "emailTaken",
+  ];
+  return {
+    error: t(known.includes(key as AuthErrorKey) ? (key as AuthErrorKey) : "invalidCredentials"),
+  };
+}
 
 /**
  * Optional everywhere. An empty field means "no name", stored as NULL rather
@@ -34,7 +68,7 @@ const credentials = z.object({
 const displayNameField = z
   .string()
   .trim()
-  .max(80, "That name is too long.")
+  .max(80, "nameTooLong")
   .optional()
   .transform((value) => value || null);
 
@@ -55,7 +89,7 @@ export async function register(
     password: formData.get("password"),
     name: formData.get("name") ?? undefined,
   });
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (!parsed.success) return errorFor(parsed.error.issues[0].message);
 
   const { email, password, name } = parsed.data;
 
@@ -65,9 +99,7 @@ export async function register(
     .where(eq(users.email, email))
     .limit(1);
 
-  if (existing.length > 0) {
-    return { error: "An account with that email already exists." };
-  }
+  if (existing.length > 0) return errorFor("emailTaken");
 
   const [created] = await db
     .insert(users)
@@ -75,7 +107,7 @@ export async function register(
     .returning({ id: users.id });
 
   await createSession(created.id);
-  redirect("/");
+  return redirect({ href: "/", locale: await getLocale() });
 }
 
 export async function login(
@@ -87,7 +119,7 @@ export async function login(
     password: formData.get("password"),
   });
   // Don't leak which half was wrong.
-  if (!parsed.success) return { error: "Incorrect email or password." };
+  if (!parsed.success) return errorFor("invalidCredentials");
 
   const { email, password } = parsed.data;
 
@@ -104,10 +136,10 @@ export async function login(
     "scrypt:0000000000000000000000000000000000000000000000000000000000000000:00";
   const ok = await verifyPassword(password, stored);
 
-  if (!user || !ok) return { error: "Incorrect email or password." };
+  if (!user || !ok) return errorFor("invalidCredentials");
 
   await createSession(user.id);
-  redirect("/");
+  return redirect({ href: "/", locale: await getLocale() });
 }
 
 /**
@@ -128,13 +160,13 @@ export async function updateProfile(
   formData: FormData,
 ): Promise<AuthState> {
   const user = await getCurrentUser();
-  if (!user) return { error: "You must be signed in to do that." };
+  if (!user) return errorFor("notSignedIn");
 
   const parsed = updateProfileSchema.safeParse({
     name: formData.get("name") ?? undefined,
     email: formData.get("email"),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (!parsed.success) return errorFor(parsed.error.issues[0].message);
 
   if (parsed.data.email !== user.email) {
     const existing = await db
@@ -143,9 +175,7 @@ export async function updateProfile(
       .where(eq(users.email, parsed.data.email))
       .limit(1);
 
-    if (existing.length > 0) {
-      return { error: "An account with that email already exists." };
-    }
+    if (existing.length > 0) return errorFor("emailTaken");
   }
 
   await db
@@ -156,26 +186,36 @@ export async function updateProfile(
   // The header renders the name from the root layout and the dashboard greets
   // with it, so both have to be rebuilt — `getCurrentUser` is cached per
   // request, which is exactly why a plain `router.refresh()` is not enough.
-  revalidatePath("/");
-  revalidatePath("/account");
+  //
+  // Every page now sits under `/[locale]`, so the literal paths this used to
+  // name match nothing. Revalidating the segment's layout covers both
+  // languages at once, which is what a signed-in reader switching locale
+  // needs anyway.
+  revalidatePath("/[locale]", "layout");
 
   return { saved: true };
 }
 
 export async function logout(): Promise<never> {
+  const locale = await getLocale();
   await destroySession();
   // Home, not /login: "/" is public and shows the landing page when signed
-  // out, so signing out lands somewhere useful instead of a form.
-  redirect(flashUrl("/", "signed-out"));
+  // out, so signing out lands somewhere useful instead of a form. Through the
+  // locale-aware redirect, so signing out does not also switch the language.
+  return redirect({
+    href: { pathname: "/", query: { [FLASH_PARAM]: "signed-out" } },
+    locale,
+  });
 }
 
 export async function deleteAccount(): Promise<never> {
+  const locale = await getLocale();
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) return redirect({ href: "/login", locale });
 
   // `sessions` and `todos` both reference `users` with onDelete: "cascade",
   // so this one statement also clears every session and transaction.
   await db.delete(users).where(eq(users.id, user.id));
   await destroySession();
-  redirect("/login");
+  return redirect({ href: "/login", locale });
 }

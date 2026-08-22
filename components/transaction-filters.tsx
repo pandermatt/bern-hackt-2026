@@ -1,9 +1,11 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { useTransition, type ReactNode } from "react";
 
+import { useRouter } from "@/i18n/navigation";
 import { formatMoney, type Facets, type Filters } from "@/lib/insights";
 
 /**
@@ -39,12 +41,14 @@ const CONTROL =
 /**
  * Banking's own words for the two directions. A statement calls them credits
  * and debits; "money in" and "money out" ride along in brackets so the term is
- * never the only thing carrying the meaning.
+ * never the only thing carrying the meaning. The words themselves live in the
+ * `Filters` namespace — only the query values are fixed here, because those are
+ * what the URL carries and they must not change with the language.
  */
 const DIRECTIONS = [
-  { value: "", label: "All transactions" },
-  { value: "income", label: "Credits (money in)" },
-  { value: "expense", label: "Debits (money out)" },
+  { value: "", key: "all" },
+  { value: "income", key: "credits" },
+  { value: "expense", key: "debits" },
 ] as const;
 
 /**
@@ -80,6 +84,7 @@ export function TransactionFilters({
   /** Net movement per account, shown against each name in the dropdown. */
   accountTotals: Record<string, number>;
 }) {
+  const t = useTranslations("Filters");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
@@ -92,8 +97,12 @@ export function TransactionFilters({
     else params.delete(key);
 
     startTransition(() => {
-      const query = params.toString();
-      router.replace(query ? `/?${query}` : "/", { scroll: false });
+      // Through the locale-aware router, so changing a filter cannot drop the
+      // language the way a bare `/?…` did.
+      router.replace(
+        { pathname: "/", query: Object.fromEntries(params) },
+        { scroll: false },
+      );
     });
   }
 
@@ -113,16 +122,16 @@ export function TransactionFilters({
       className={`flex flex-wrap items-end gap-3 transition-opacity ${
         pending ? "opacity-60" : ""
       }`}
-      aria-label="Filter transactions"
+      aria-label={t("sectionLabel")}
       data-pending={pending ? "true" : undefined}
     >
-      <Field label="Account">
+      <Field label={t("account")}>
         <select
           className={CONTROL}
           value={filters.account ?? ""}
           onChange={(event) => update("account", event.target.value)}
         >
-          <option value="">All accounts</option>
+          <option value="">{t("allAccounts")}</option>
           {facets.accounts.map((account) => (
             <option key={account} value={account}>
               {accountLabel(account)}
@@ -131,7 +140,7 @@ export function TransactionFilters({
         </select>
       </Field>
 
-      <Field label="Direction">
+      <Field label={t("direction")}>
         <select
           className={CONTROL}
           value={filters.kind ?? ""}
@@ -139,7 +148,7 @@ export function TransactionFilters({
         >
           {DIRECTIONS.map((direction) => (
             <option key={direction.value} value={direction.value}>
-              {direction.label}
+              {t(direction.key)}
             </option>
           ))}
         </select>
@@ -148,10 +157,12 @@ export function TransactionFilters({
       {active && (
         <button
           type="button"
-          onClick={() => startTransition(() => router.replace("/", { scroll: false }))}
+          onClick={() =>
+            startTransition(() => router.replace("/", { scroll: false }))
+          }
           className="h-11 shrink-0 cursor-pointer rounded-full border border-line-strong bg-surface px-4 text-[14px] font-medium text-text-muted transition-colors hover:border-danger hover:text-danger sm:h-10"
         >
-          Clear
+          {t("clear")}
         </button>
       )}
     </section>

@@ -5,14 +5,26 @@ import { sessions, users } from "@/db/schema";
 import { createSession, hashPassword } from "@/lib/auth";
 import { displayName } from "@/lib/user";
 
-/* Same shape as tests/auth-actions.test.ts: the real `redirect` throws a
- * Next-internal control-flow error, so a throw carrying the URL is what lets a
- * test assert where an action sent the user. */
-vi.mock("next/navigation", () => ({
-  redirect: (url: string) => {
-    throw new Error(`REDIRECT:${url}`);
-  },
-}));
+/* Same shape as tests/auth-actions.test.ts — see the note there. */
+vi.mock("@/i18n/navigation", async () => {
+  const { redirectUrl } = await import("./stubs/i18n");
+  return {
+    redirect: (args: Parameters<typeof redirectUrl>[0]) => {
+      throw new Error(`REDIRECT:${redirectUrl(args)}`);
+    },
+  };
+});
+
+/* Outside a request there is no locale to resolve and no message catalog
+ * loaded, so both are supplied here — from `messages/en.json`, so the error
+ * strings asserted below are the ones the app really ships. */
+vi.mock("next-intl/server", async () => {
+  const { translator } = await import("./stubs/i18n");
+  return {
+    getLocale: async () => "en",
+    getTranslations: async (namespace: string) => translator(namespace),
+  };
+});
 
 const { register, updateProfile } = await import("@/app/actions/auth");
 
@@ -67,7 +79,7 @@ describe("register", () => {
   it("stores the name when one is given", async () => {
     await expect(
       register(undefined, form({ email: "a@example.com", password: "correct horse", name: " Jeanine " })),
-    ).rejects.toThrow("REDIRECT:/");
+    ).rejects.toThrow("REDIRECT:/en");
 
     const [user] = await db.select().from(users);
     expect(user.name).toBe("Jeanine");
@@ -79,7 +91,7 @@ describe("register", () => {
   it("accepts an empty name and stores NULL", async () => {
     await expect(
       register(undefined, form({ email: "a@example.com", password: "correct horse", name: "" })),
-    ).rejects.toThrow("REDIRECT:/");
+    ).rejects.toThrow("REDIRECT:/en");
 
     const [user] = await db.select().from(users);
     expect(user.name).toBeNull();

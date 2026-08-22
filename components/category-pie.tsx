@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
 import {
@@ -12,6 +13,7 @@ import {
 } from "@/components/echart";
 import { Section } from "@/components/section";
 import { formatMoney, type CategoryStack } from "@/lib/insights";
+import { useCategoryLabel } from "@/lib/use-category-label";
 import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
@@ -40,6 +42,7 @@ function buildOption(
   stack: CategoryStack,
   tokens: ChartTokens,
   narrow: boolean,
+  categoryLabel: (key: string) => string,
 ): EChartsOption {
   return {
     animationDuration: 600,
@@ -112,7 +115,7 @@ function buildOption(
           label: { color: tokens.text, fontWeight: "bold" },
         },
         data: stack.bands.map((band) => ({
-          name: band.key,
+          name: categoryLabel(band.key),
           value: band.total,
           itemStyle: { color: slotColor(tokens, band.slot) },
           label: {
@@ -134,32 +137,38 @@ function buildOption(
 }
 
 export function CategoryPie({ stack }: { stack: CategoryStack }) {
+  const t = useTranslations("Pie");
+  const categoryLabel = useCategoryLabel();
   const tokens = useChartTokens();
   const narrow = useIsNarrow();
-  const option = useMemo(
-    () => (tokens ? buildOption(stack, tokens, narrow) : null),
-    [stack, tokens, narrow],
-  );
 
-  if (stack.bands.length === 0) return null;
+  const option = useMemo(
+    () => (tokens ? buildOption(stack, tokens, narrow, categoryLabel) : null),
+    [stack, tokens, narrow, categoryLabel],
+  );
 
   const span =
     stack.months.length > 0
-      ? `${stack.months[0]} to ${stack.months[stack.months.length - 1]}`
+      ? t("span", {
+          first: stack.months[0],
+          last: stack.months[stack.months.length - 1],
+        })
       : "";
+
+  if (stack.bands.length === 0) return null;
 
   return (
     <Section
       id="pie"
-      heading="The whole year"
-      meta={`Every category, unfiltered · ${span}`}
+      heading={t("heading")}
+      meta={t("meta", { span })}
       panelClassName="p-4 sm:p-5"
     >
       <div className="relative">
         <EChart
           option={option}
           height={HEIGHT}
-          label={`Share of total spending by category over ${span}. The table below the chart carries the same figures.`}
+          label={t("chartLabel", { span })}
         />
 
         {/* The donut's middle, as real HTML rather than an ECharts graphic: it
@@ -170,7 +179,7 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
           aria-hidden
         >
           <p className="text-[11.5px] font-medium tracking-wide text-text-subtle uppercase">
-            Total out
+            {t("totalOut")}
           </p>
           <p className="font-mono text-[13px] font-medium tabular-nums text-text sm:text-[15px]">
             {formatMoney(stack.total)}
@@ -180,21 +189,18 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
 
       {/* No <caption>: the caption box lives outside the table's clipped box,
           so it escapes sr-only's 1px clip and floats visibly on the page. */}
-      <table
-        className="sr-only"
-        aria-label="Share of spending by category, whole range"
-      >
+      <table className="sr-only" aria-label={t("tableLabel")}>
         <thead>
           <tr>
-            <th scope="col">Category</th>
-            <th scope="col">Total</th>
-            <th scope="col">Share</th>
+            <th scope="col">{t("category")}</th>
+            <th scope="col">{t("total")}</th>
+            <th scope="col">{t("share")}</th>
           </tr>
         </thead>
         <tbody>
           {stack.bands.map((band) => (
             <tr key={band.key}>
-              <th scope="row">{band.key}</th>
+              <th scope="row">{categoryLabel(band.key)}</th>
               <td>{formatMoney(band.total)}</td>
               <td>
                 {stack.total > 0

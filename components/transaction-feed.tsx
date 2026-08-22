@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   Fragment,
   useCallback,
@@ -39,6 +40,7 @@ export function TransactionFeed({
   /** The raw search params, forwarded to the action verbatim. */
   filters: Record<string, string | string[] | undefined>;
 }) {
+  const t = useTranslations("Ledger");
   const [chunks, setChunks] = useState<ReactNode[]>([]);
   const [nextOffset, setNextOffset] = useState(initialNextOffset);
   const [failed, setFailed] = useState(false);
@@ -114,10 +116,10 @@ export function TransactionFeed({
             onClick={() => void loadMore()}
             className="inline-flex h-10 cursor-pointer items-center rounded-md border border-line-strong bg-surface px-3.5 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted"
           >
-            Could not load more — retry
+            {t("retry")}
           </button>
         ) : done ? null : (
-          <p className="font-mono text-[12px] text-text-subtle">Loading more…</p>
+          <p className="font-mono text-[12px] text-text-subtle">{t("loadingMore")}</p>
         )}
       </div>
     </>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
 import { Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useState, useTransition } from "react";
 
 import { clearAssistantLogAction, getAssistantLog } from "@/app/actions/chat";
 // Type-only import — the module itself is `server-only`, but types are erased.
@@ -14,6 +15,7 @@ import type { AssistantLogView } from "@/lib/assistant-log";
  * always scoped to the signed-in account.
  */
 export function ChatDebug() {
+  const t = useTranslations("ChatDebug");
   const [entries, setEntries] = useState<AssistantLogView[] | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -37,8 +39,7 @@ export function ChatDebug() {
     <div className="flex-1 overflow-y-auto px-4 py-3">
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-text-muted">
-          Requests to the model endpoint, newest first. Kept in server memory
-          only.
+          {t("intro")}
         </p>
         <div className="ml-3 flex shrink-0 items-center gap-1">
           <button
@@ -46,7 +47,7 @@ export function ChatDebug() {
             onClick={refresh}
             disabled={pending}
             className="cursor-pointer rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-text disabled:opacity-40"
-            aria-label="Refresh log"
+            aria-label={t("refresh")}
           >
             {pending ? (
               <Loader2 className="size-3.5 animate-spin" />
@@ -59,7 +60,7 @@ export function ChatDebug() {
             onClick={clear}
             disabled={pending || !entries?.length}
             className="cursor-pointer rounded-md p-1.5 text-text-muted transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-40"
-            aria-label="Clear log"
+            aria-label={t("clear")}
           >
             <Trash2 className="size-3.5" />
           </button>
@@ -68,7 +69,7 @@ export function ChatDebug() {
 
       {entries !== null && entries.length === 0 && (
         <p className="mt-4 text-[13px] text-text-muted">
-          No requests yet — ask the assistant something first.
+          {t("empty")}
         </p>
       )}
 
@@ -86,14 +87,15 @@ export function ChatDebug() {
                     : "bg-danger-soft text-danger"
                 }`}
               >
-                {entry.status === "ok" ? "OK" : "Error"}
+                {entry.status === "ok" ? t("ok") : t("error")}
                 {entry.httpStatus !== undefined && ` · ${entry.httpStatus}`}
               </span>
               <span className="font-mono text-[11px] tabular-nums text-text-subtle">
                 {new Date(entry.at).toLocaleTimeString()}
               </span>
               <span className="ml-auto font-mono text-[11px] tabular-nums text-text-subtle">
-                {entry.durationMs}&#8202;ms
+                {entry.durationMs}
+                {t("milliseconds")}
               </span>
             </div>
 
@@ -108,10 +110,11 @@ export function ChatDebug() {
               {entry.note && (
                 <span className="font-medium text-accent">{entry.note} · </span>
               )}
-              {entry.model} · max {entry.maxTokens} tok
+              {entry.model} {t("max")} {entry.maxTokens} {t("tokens")}
               {entry.usage &&
                 ` · ${entry.usage.promptTokens ?? "?"} in / ${entry.usage.completionTokens ?? "?"} out`}
-              {entry.messageCount > 0 && ` · ${entry.messageCount} messages`}
+              {entry.messageCount > 0 &&
+                ` · ${t("messages", { count: entry.messageCount })}`}
             </p>
 
             {entry.error && (
@@ -121,14 +124,14 @@ export function ChatDebug() {
             {(entry.request || entry.response) && (
               <details className="group mt-1.5 border-t border-line">
                 <summary className="cursor-pointer list-none px-3 py-1.5 text-[11.5px] font-medium text-accent select-none hover:underline">
-                  <span className="group-open:hidden">Show payloads</span>
-                  <span className="hidden group-open:inline">Hide payloads</span>
+                  <span className="group-open:hidden">{t("showPayloads")}</span>
+                  <span className="hidden group-open:inline">{t("hidePayloads")}</span>
                 </summary>
                 <div className="space-y-2 px-3 pb-2.5">
                   {entry.request && (
                     <div>
                       <p className="text-[10.5px] font-semibold tracking-wide text-text-subtle uppercase">
-                        Request
+                        {t("request")}
                       </p>
                       <pre className="mt-1 max-h-48 overflow-auto rounded-md bg-surface p-2 font-mono text-[10.5px] leading-relaxed whitespace-pre-wrap text-text-muted">
                         {entry.request}
@@ -138,7 +141,7 @@ export function ChatDebug() {
                   {entry.response && (
                     <div>
                       <p className="text-[10.5px] font-semibold tracking-wide text-text-subtle uppercase">
-                        Response
+                        {t("response")}
                       </p>
                       <pre className="mt-1 max-h-48 overflow-auto rounded-md bg-surface p-2 font-mono text-[10.5px] leading-relaxed whitespace-pre-wrap text-text-muted">
                         {entry.response}

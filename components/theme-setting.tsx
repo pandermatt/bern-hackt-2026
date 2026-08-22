@@ -1,6 +1,7 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 
 import { useHydrated } from "@/lib/use-hydrated";
@@ -18,11 +19,12 @@ import { useHydrated } from "@/lib/use-hydrated";
  */
 
 const OPTIONS = [
-  { value: "light", label: "Light", Icon: Sun },
-  { value: "dark", label: "Dark", Icon: Moon },
+  { value: "light", Icon: Sun },
+  { value: "dark", Icon: Moon },
 ] as const;
 
 export function ThemeSetting() {
+  const t = useTranslations("Theme");
   const { resolvedTheme, setTheme } = useTheme();
   const hydrated = useHydrated();
 
@@ -33,10 +35,10 @@ export function ThemeSetting() {
   return (
     <div
       role="radiogroup"
-      aria-label="Colour theme"
+      aria-label={t("groupLabel")}
       className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface-muted/50 p-1"
     >
-      {OPTIONS.map(({ value, label, Icon }) => {
+      {OPTIONS.map(({ value, Icon }) => {
         const selected = current === value;
         return (
           <button
@@ -56,7 +58,7 @@ export function ThemeSetting() {
             }`}
           >
             <Icon className="size-3.5" aria-hidden />
-            <span>{label}</span>
+            <span>{t(value)}</span>
           </button>
         );
       })}

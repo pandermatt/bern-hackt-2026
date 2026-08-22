@@ -1,7 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
+
+import { Link } from "@/i18n/navigation";
 
 /**
  * The floor under any uncaught render or server-action error. Static markup on
@@ -16,6 +18,8 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations("Errors");
+
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -24,17 +28,16 @@ export default function Error({
     <main className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-5 py-16">
       <div className="card w-full max-w-md p-6">
         <h1 className="text-[18px] font-semibold tracking-tight text-text">
-          Something went wrong
+          {t("title")}
         </h1>
         <p className="mt-2 text-[13.5px] leading-relaxed text-text-muted">
-          The page hit an unexpected error. Trying again often clears it — the
-          data itself is untouched.
+          {t("body")}
         </p>
 
         {error.digest && (
           <p
             className="mt-4 font-mono text-[12px] text-text-subtle"
-            title="Server-side error identifier"
+            title={t("digestTitle")}
           >
             {error.digest}
           </p>
@@ -46,13 +49,13 @@ export default function Error({
             onClick={reset}
             className="inline-flex h-10 cursor-pointer items-center rounded-md bg-accent px-4 text-[14px] font-medium text-white transition-colors hover:bg-accent-hover"
           >
-            Try again
+            {t("tryAgain")}
           </button>
           <Link
             href="/"
             className="inline-flex h-10 items-center rounded-md border border-line-strong bg-surface px-4 text-[14px] font-medium text-text transition-colors hover:bg-surface-muted"
           >
-            Back to your list
+            {t("backToDashboard")}
           </Link>
         </div>
       </div>

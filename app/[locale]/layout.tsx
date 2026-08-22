@@ -1,22 +1,27 @@
+import { hasLocale, NextIntlClientProvider } from "next-intl";
+import { getMessages, setRequestLocale } from "next-intl/server";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import localFont from "next/font/local";
+import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
+import { LocaleSync } from "@/components/locale-sync";
 import { ServiceWorkerRegistrar } from "@/components/sw-register";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { routing } from "@/i18n/routing";
 import { getCurrentUser } from "@/lib/auth";
 import { site } from "@/lib/site";
-import "./globals.css";
+import "../globals.css";
 
 const googleSansFlex = localFont({
   src: [
     {
-      path: "../public/fonts/google-sans-flex-latin-wght-normal.woff2",
+      path: "../../public/fonts/google-sans-flex-latin-wght-normal.woff2",
       weight: "100 1000",
       style: "normal",
     },
@@ -68,17 +73,30 @@ export const viewport: Viewport = {
   ],
 };
 
-/**
- * The header and footer live here rather than in each page, so a new route
- * inherits the chrome for free. Resolving the user here is what makes every
- * route dynamic — see the note in the README.
- */
-export default async function RootLayout({ children }: LayoutProps<"/">) {
+// Every locale in `routing` gets a shell at build time; anything else 404s
+// below rather than rendering an untranslated page.
+export function generateStaticParams() {
+  return routing.locales.map((locale) => ({ locale }));
+}
+
+// The header and footer live here rather than in each page, so a new route
+// inherits the chrome for free. Resolving the user here is what makes every
+// route dynamic — see the note in the README.
+export default async function RootLayout({ children, params }: LayoutProps<"/[locale]">) {
+  const { locale } = await params;
+
+  // `hasLocale` narrows the segment to a known locale, which is what lets the
+  // rest of the tree treat it as one instead of casting through `any`.
+  if (!hasLocale(routing.locales, locale)) notFound();
+
+  setRequestLocale(locale);
+
+  const messages = await getMessages();
   const user = await getCurrentUser();
 
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${googleSansFlex.variable} ${plexMono.variable} h-full antialiased`}
       // next-themes' pre-paint script sets `class="dark"` on this element
       // before React hydrates, so the class it finds never matches the one the
@@ -90,17 +108,20 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           identically in light mode while still following the dark theme. A
           literal here would keep the page white on a dark ground. */}
       <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased">
-        <ThemeProvider>
-          <AppHeader user={user} />
-        {children}
-        <AppFooter user={user} />
-        <Toaster position="bottom-right" />
-        {/* useSearchParams needs a boundary it can suspend against. */}
-        <Suspense fallback={null}>
-          <FlashToaster />
-        </Suspense>
-        <ServiceWorkerRegistrar />
-        </ThemeProvider>
+        <NextIntlClientProvider messages={messages}>
+          <ThemeProvider>
+            <AppHeader user={user} />
+            {children}
+            <AppFooter user={user} />
+            <Toaster position="bottom-right" />
+            {/* useSearchParams needs a boundary it can suspend against. */}
+            <Suspense fallback={null}>
+              <FlashToaster />
+            </Suspense>
+            <ServiceWorkerRegistrar />
+            <LocaleSync locale={locale} />
+          </ThemeProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

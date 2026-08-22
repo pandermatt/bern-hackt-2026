@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import {
   Sparkles,
   FileSpreadsheet,
@@ -13,17 +14,27 @@ import {
   Layers,
 } from "lucide-react";
 import { toast } from "sonner";
-import Link from "next/link";
 
 import {
   generateSyntheticTransactionsAction,
   loadDemoCsvAction,
 } from "@/app/actions/demo-data";
+import { Link } from "@/i18n/navigation";
 
 const LOG_COUNT_STEPS = [50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000] as const;
+
+/** A filename inside a sentence, for the `csvDescription` rich-text slots. */
+function Filename({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="text-xs bg-surface-muted px-1 py-0.5 rounded font-mono">
+      {children}
+    </code>
+  );
+}
 const START_YEARS = [2021, 2022, 2023, 2024, 2025, 2026] as const;
 
 export function DemoDataControls() {
+  const t = useTranslations("DemoData");
   const router = useRouter();
   const [isFakerPending, startFakerTransition] = useTransition();
   const [isCsvPending, startCsvTransition] = useTransition();
@@ -51,7 +62,7 @@ export function DemoDataControls() {
           toast.error(result.message);
         }
       } catch {
-        toast.error("An unexpected error occurred while generating data.");
+        toast.error(t("generateError"));
       }
     });
   };
@@ -68,7 +79,7 @@ export function DemoDataControls() {
           toast.error(result.message);
         }
       } catch {
-        toast.error("An unexpected error occurred while importing demo CSV.");
+        toast.error(t("csvError"));
       }
     });
   };
@@ -80,10 +91,10 @@ export function DemoDataControls() {
       <div className="border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5 flex items-center justify-between">
         <div>
           <h2 className="text-[14.5px] font-semibold text-text">
-            Demo & Synthetic Data Studio
+            {t("heading")}
           </h2>
           <p className="text-[12.5px] text-text-muted">
-            Populate your account with customizable scale synthetic banking transactions or official statement CSVs.
+            {t("subtitle")}
           </p>
         </div>
       </div>
@@ -98,7 +109,7 @@ export function DemoDataControls() {
             href="/"
             className="inline-flex items-center gap-1 font-medium text-accent hover:underline text-xs"
           >
-            View Dashboard <ArrowRight className="size-3" />
+            {t("viewDashboard")} <ArrowRight className="size-3" />
           </Link>
         </div>
       )}
@@ -113,12 +124,11 @@ export function DemoDataControls() {
                   <Sparkles className="size-4" />
                 </span>
                 <p className="text-[14px] font-medium text-text">
-                  Synthetic Transactions Generator (Log-Scale & Anomalies)
+                  {t("syntheticTitle")}
                 </p>
               </div>
               <p className="text-[13px] text-text-muted max-w-2xl">
-                Generates realistic multi-year Swiss bank activity with regular income, fixed bills,
-                variable daily spending, and embedded financial anomalies for analysis.
+                {t("syntheticDescription")}
               </p>
             </div>
 
@@ -131,12 +141,12 @@ export function DemoDataControls() {
               {isFakerPending ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin" />
-                  <span>Generating {targetCount.toLocaleString()}…</span>
+                  <span>{t("generating", { count: targetCount.toLocaleString("de-CH") })}</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="size-3.5" />
-                  <span>Generate {targetCount.toLocaleString()} Transactions</span>
+                  <span>{t("generate", { count: targetCount.toLocaleString("de-CH") })}</span>
                 </>
               )}
             </button>
@@ -148,7 +158,7 @@ export function DemoDataControls() {
               {/* Start Year Selector */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-text mb-1.5">
-                  <Calendar className="size-3.5 text-text-muted" /> Start Year
+                  <Calendar className="size-3.5 text-text-muted" /> {t("startYear")}
                 </label>
                 <select
                   value={startYear}
@@ -167,7 +177,7 @@ export function DemoDataControls() {
               {/* Number of Years */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-text mb-1.5">
-                  <Layers className="size-3.5 text-text-muted" /> Duration
+                  <Layers className="size-3.5 text-text-muted" /> {t("duration")}
                 </label>
                 <select
                   value={yearsCount}
@@ -175,10 +185,10 @@ export function DemoDataControls() {
                   disabled={isBusy}
                   className="w-full h-10 rounded-md border border-line-strong bg-surface px-2.5 text-[16px] text-text focus:outline-none focus:ring-1 focus:ring-accent sm:h-8 sm:text-[13px]"
                 >
-                  <option value={1}>1 Year ({startYear})</option>
-                  <option value={2}>2 Years ({startYear} – {startYear + 1})</option>
-                  <option value={3}>3 Years ({startYear} – {startYear + 2})</option>
-                  <option value={5}>5 Years ({startYear} – {startYear + 4})</option>
+                  <option value={1}>{t("year1", { range: `${startYear}` })}</option>
+                  <option value={2}>{t("year2", { range: `${startYear} – ${startYear + 1}` })}</option>
+                  <option value={3}>{t("year3", { range: `${startYear} – ${startYear + 2}` })}</option>
+                  <option value={5}>{t("year5", { range: `${startYear} – ${startYear + 4}` })}</option>
                 </select>
               </div>
             </div>
@@ -187,13 +197,13 @@ export function DemoDataControls() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-text flex items-center gap-1.5">
-                  <span>Target Transaction Count (Logarithmic Scale):</span>
+                  <span>{t("targetCount")}</span>
                   <span className="font-semibold text-accent bg-accent-soft px-1.5 py-0.5 rounded text-xs">
-                    {targetCount.toLocaleString()} transactions
+                    {t("transactionsBadge", { count: targetCount.toLocaleString("de-CH") })}
                   </span>
                 </label>
                 <span className="text-[11px] text-text-muted">
-                  Step {stepIndex + 1} of {LOG_COUNT_STEPS.length}
+                  {t("step", { step: stepIndex + 1, total: LOG_COUNT_STEPS.length })}
                 </span>
               </div>
 
@@ -206,7 +216,7 @@ export function DemoDataControls() {
                 onChange={(e) => setStepIndex(Number(e.target.value))}
                 disabled={isBusy}
                 className="w-full cursor-pointer accent-accent"
-                aria-label="Transaction count slider in log scale"
+                aria-label={t("sliderLabel")}
               />
 
               <div className="flex justify-between text-[11px] text-text-muted font-mono px-0.5 [&>*:nth-child(even)]:hidden sm:[&>*:nth-child(even)]:block">
@@ -229,26 +239,26 @@ export function DemoDataControls() {
             <div className="rounded-md border border-line bg-surface p-3 text-xs space-y-1.5">
               <div className="flex items-center gap-1.5 font-medium text-text">
                 <Flame className="size-3.5 text-amber-500" />
-                <span>Included Bank & Fraud Anomalies</span>
+                <span>{t("includedTitle")}</span>
               </div>
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-text-muted text-[11.5px]">
                 <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> Outlier luxury watch purchases (CHF 4.5k–9.5k)
+                  <span className="text-accent">•</span> {t("included1")}
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> Duplicate charge glitches (same day double-bills)
+                  <span className="text-accent">•</span> {t("included2")}
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> Rapid micro-transaction card testing bursts
+                  <span className="text-accent">•</span> {t("included3")}
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> Casino and unexpected tax penalty spikes
+                  <span className="text-accent">•</span> {t("included4")}
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> Large lottery & insurance windfall inflows (CHF 10k+)
+                  <span className="text-accent">•</span> {t("included5")}
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span className="text-accent">•</span> 10x subscription billing error shocks
+                  <span className="text-accent">•</span> {t("included6")}
                 </li>
               </ul>
             </div>
@@ -263,19 +273,17 @@ export function DemoDataControls() {
                 <FileSpreadsheet className="size-4" />
               </span>
               <p className="text-[14px] font-medium text-text">
-                Load Official Demo CSV Statements
+                {t("csvTitle")}
               </p>
             </div>
+            {/* One sentence with the two filenames interpolated, rather than
+                five fragments spliced around them: only the whole sentence can
+                be reordered into German. `t.rich` keeps the <code> wrappers. */}
             <p className="text-[13px] text-text-muted max-w-xl">
-              Imports 513 original PostFinance statement records from{" "}
-              <code className="text-xs bg-surface-muted px-1 py-0.5 rounded font-mono">
-                jeanine_2025_Account1_2025.csv
-              </code>{" "}
-              and{" "}
-              <code className="text-xs bg-surface-muted px-1 py-0.5 rounded font-mono">
-                jeanine_2025_Account3_2025.csv
-              </code>
-              .
+              {t.rich("csvDescription", {
+                file: (chunks) => <Filename>{chunks}</Filename>,
+                file2: (chunks) => <Filename>{chunks}</Filename>,
+              })}
             </p>
           </div>
 
@@ -288,12 +296,12 @@ export function DemoDataControls() {
             {isCsvPending ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />
-                <span>Loading…</span>
+                <span>{t("csvLoading")}</span>
               </>
             ) : (
               <>
                 <FileSpreadsheet className="size-3.5" />
-                <span>Load Demo CSV</span>
+                <span>{t("csvLoad")}</span>
               </>
             )}
           </button>

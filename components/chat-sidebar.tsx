@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Bug, MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { askAssistant } from "@/app/actions/chat";
 import { ChatDebug } from "@/components/chat-debug";
@@ -18,14 +19,11 @@ type Message = {
 
 /**
  * These land in the empty state as one-tap starters, and each is phrased to
- * trip a different branch of `pickChart`, so the demo shows a chart early.
+ * trip a different branch of `pickChart`, so the demo shows a chart early. The
+ * wording lives in the `Chat` namespace — they are sent verbatim to the model,
+ * so a German reader asks in German and is answered in German.
  */
-const SUGGESTIONS = [
-  "Where does my money go?",
-  "Who are my top merchants?",
-  "How much of my income is salary?",
-  "How much did I save this year?",
-];
+const SUGGESTION_KEYS = ["suggestion1", "suggestion2", "suggestion3", "suggestion4"] as const;
 
 /**
  * The one interactive island besides the filters. Deliberately a client
@@ -46,6 +44,7 @@ function clampWidth(value: number): number {
 }
 
 export function ChatSidebar() {
+  const t = useTranslations("Chat");
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"chat" | "debug">("chat");
   const [input, setInput] = useState("");
@@ -134,7 +133,7 @@ export function ChatSidebar() {
           ...prev,
           {
             role: "assistant",
-            content: "Something went wrong — try asking again.",
+            content: t("failed"),
             error: true,
           },
         ]);
@@ -149,7 +148,7 @@ export function ChatSidebar() {
           type="button"
           onClick={() => setOpen(true)}
           className="fixed right-5 bottom-5 z-40 inline-flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-lg transition-all duration-200 animate-in fade-in zoom-in-75 hover:scale-105 hover:bg-accent-hover"
-          aria-label="Ask the money assistant"
+          aria-label={t("openLabel")}
         >
           <MessageCircle className="size-5" />
         </button>
@@ -164,7 +163,7 @@ export function ChatSidebar() {
         )}
         <aside
           role="dialog"
-          aria-label="Money assistant"
+          aria-label={t("panelLabel")}
           className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-surface shadow-lg animate-in fade-in slide-in-from-right sm:w-(--assistant-width) ${
             dragging ? "" : "duration-300"
           }`}
@@ -176,7 +175,7 @@ export function ChatSidebar() {
           <div
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize assistant"
+            aria-label={t("resizeLabel")}
             onPointerDown={startResize}
             className="absolute inset-y-0 left-0 hidden w-1.5 -translate-x-1/2 cursor-col-resize touch-none sm:block"
           >
@@ -193,12 +192,10 @@ export function ChatSidebar() {
             </span>
             <div className="min-w-0 flex-1">
               <h2 className="text-[14.5px] leading-tight font-semibold text-text">
-                {view === "debug" ? "Request log" : "Money assistant"}
+                {view === "debug" ? t("debugTitle") : t("title")}
               </h2>
               <p className="text-[12px] text-text-muted">
-                {view === "debug"
-                  ? "What went over the wire"
-                  : "Ask anything about your year"}
+                {view === "debug" ? t("debugSubtitle") : t("subtitle")}
               </p>
             </div>
             <button
@@ -210,8 +207,8 @@ export function ChatSidebar() {
                   ? "bg-accent-soft text-accent"
                   : "text-text-muted hover:bg-surface-muted hover:text-text"
               }`}
-              aria-label="Toggle request log"
-              title="Request log"
+              aria-label={t("toggleDebug")}
+              title={t("debugTitle")}
             >
               <Bug className="size-4" />
             </button>
@@ -219,7 +216,7 @@ export function ChatSidebar() {
               type="button"
               onClick={() => setOpen(false)}
               className="cursor-pointer rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
-              aria-label="Close assistant"
+              aria-label={t("close")}
             >
               <X className="size-4" />
             </button>
@@ -236,18 +233,17 @@ export function ChatSidebar() {
               {messages.length === 0 && (
                 <div className="duration-500 animate-in fade-in">
                   <p className="text-[13.5px] text-text-muted">
-                    I can summarise your spending, compare months, rank merchants
-                    — and draw the picture where it helps.
+                    {t("intro")}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {SUGGESTIONS.map((suggestion) => (
+                    {SUGGESTION_KEYS.map((key) => (
                       <button
-                        key={suggestion}
+                        key={key}
                         type="button"
-                        onClick={() => send(suggestion)}
+                        onClick={() => send(t(key))}
                         className="cursor-pointer rounded-full border border-line bg-bg px-3 py-1.5 text-[12.5px] text-text transition-colors hover:border-accent hover:text-accent"
                       >
-                        {suggestion}
+                        {t(key)}
                       </button>
                     ))}
                   </div>
@@ -289,7 +285,7 @@ export function ChatSidebar() {
                   <div
                     className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-line bg-bg px-4 py-3"
                     role="status"
-                    aria-label="The assistant is thinking"
+                    aria-label={t("thinking")}
                   >
                     {[0, 1, 2].map((dot) => (
                       <span
@@ -316,7 +312,7 @@ export function ChatSidebar() {
               {followUps.length > 0 && !pending && (
                 <div
                   className="mb-2.5 flex gap-2 overflow-x-auto pb-0.5"
-                  aria-label="Suggested follow-up questions"
+                  aria-label={t("followUpsLabel")}
                 >
                   {followUps.map((followUp, index) => (
                     <button
@@ -336,23 +332,22 @@ export function ChatSidebar() {
                   ref={inputRef}
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
-                  placeholder="Ask about your finances…"
+                  placeholder={t("inputPlaceholder")}
                   maxLength={2000}
                   className="h-10 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 text-[13.5px] text-text placeholder:text-text-subtle focus:ring-1 focus:ring-accent focus:outline-none"
-                  aria-label="Message the assistant"
+                  aria-label={t("inputLabel")}
                 />
                 <button
                   type="submit"
                   disabled={pending || input.trim() === ""}
                   className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md bg-accent text-white transition-colors hover:bg-accent-hover disabled:pointer-events-none disabled:opacity-40"
-                  aria-label="Send message"
+                  aria-label={t("send")}
                 >
                   <Send className="size-4" />
                 </button>
               </div>
               <p className="mt-2 text-[11px] text-text-subtle">
-                Answers come from Apertus over your imported statements. Charts
-                are drawn from the real figures, not the model.
+                {t("disclaimer")}
               </p>
             </form>
             </>

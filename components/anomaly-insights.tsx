@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -76,6 +77,13 @@ function getIconComponent(iconName: string): LucideIcon {
   return ICON_MAP[iconName] ?? AlertTriangle;
 }
 
+/** Severity → its key in the `AnomalyInsights` namespace. */
+const SEVERITY_KEYS: Record<AnomalySeverity, string> = {
+  high: "severityHigh",
+  medium: "severityMedium",
+  low: "severityLow",
+};
+
 const SEVERITY_STYLES: Record<
   AnomalySeverity,
   { badge: string; border: string; bg: string; iconColor: string }
@@ -105,6 +113,7 @@ export function AnomalyInsightsSection({
 }: {
   anomalies: AnomalyInsight[];
 }) {
+  const t = useTranslations("AnomalyInsights");
   const [filterSeverity, setFilterSeverity] = useState<"all" | AnomalySeverity>("all");
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
@@ -131,10 +140,10 @@ export function AnomalyInsightsSection({
           </div>
           <div>
             <h2 className="text-[15px] font-semibold text-text">
-              Statistical Anomaly Engine
+              {t("emptyTitle")}
             </h2>
             <p className="text-[13px] text-text-muted">
-              No statistical anomalies or behavioral deviations detected in the current transaction set.
+              {t("emptyBody")}
             </p>
           </div>
         </div>
@@ -153,14 +162,14 @@ export function AnomalyInsightsSection({
           <div>
             <div className="flex items-center gap-2">
               <h2 id="anomalies-heading" className="text-[16px] font-semibold text-text">
-                Deterministic Anomaly Detection
+                {t("heading")}
               </h2>
               <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                {counts.total} Insights
+                {t("count", { count: counts.total })}
               </span>
             </div>
             <p className="text-[12.5px] text-text-muted">
-              Mathematical deviations computed against your historical transaction baselines (MAD, percentiles & intervals).
+              {t("subtitle")}
             </p>
           </div>
         </div>
@@ -176,7 +185,7 @@ export function AnomalyInsightsSection({
                 : "bg-surface text-text-muted hover:text-text hover:bg-surface-hover"
             }`}
           >
-            All ({counts.total})
+            {t("filterAll", { count: counts.total })}
           </button>
           {counts.high > 0 && (
             <button
@@ -188,7 +197,7 @@ export function AnomalyInsightsSection({
                   : "bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300"
               }`}
             >
-              High ({counts.high})
+              {t("filterHigh", { count: counts.high })}
             </button>
           )}
           {counts.medium > 0 && (
@@ -201,7 +210,7 @@ export function AnomalyInsightsSection({
                   : "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
               }`}
             >
-              Medium ({counts.medium})
+              {t("filterMedium", { count: counts.medium })}
             </button>
           )}
           {counts.low > 0 && (
@@ -214,7 +223,7 @@ export function AnomalyInsightsSection({
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
               }`}
             >
-              Low ({counts.low})
+              {t("filterLow", { count: counts.low })}
             </button>
           )}
         </div>
@@ -248,7 +257,7 @@ export function AnomalyInsightsSection({
                       <span
                         className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider ${style.badge}`}
                       >
-                        {insight.severity}
+                        {t(SEVERITY_KEYS[insight.severity])}
                       </span>
                       <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[10.5px] text-text-subtle dark:bg-white/10">
                         {insight.rule_id}
@@ -268,7 +277,7 @@ export function AnomalyInsightsSection({
                   className="cursor-pointer inline-flex items-center gap-1 rounded px-2 py-1 text-[11.5px] font-medium text-text-muted hover:bg-black/5 dark:hover:bg-white/5"
                   aria-expanded={isExpanded}
                 >
-                  <span>{isExpanded ? "Hide data" : "Evidence"}</span>
+                  <span>{isExpanded ? t("hideEvidence") : t("showEvidence")}</span>
                   {isExpanded ? (
                     <ChevronUp className="h-3.5 w-3.5" />
                   ) : (
@@ -281,7 +290,7 @@ export function AnomalyInsightsSection({
               {isExpanded && (
                 <div className="mt-3 border-t border-black/5 pt-2.5 dark:border-white/5">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle mb-1.5">
-                    Deterministic Supporting Metrics & Proof
+                    {t("metricsHeading")}
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                     {Object.entries(insight.supporting_metrics).map(([key, val]) => (
@@ -303,7 +312,7 @@ export function AnomalyInsightsSection({
                     <div className="mt-2 flex items-center gap-1.5 text-[11.5px] text-text-muted">
                       <ArrowDownRight className="h-3.5 w-3.5" />
                       <span>
-                        Referenced Transaction IDs:{" "}
+                        {t("referencedIds")}{" "}
                         <strong className="font-mono text-text">
                           {insight.transaction_ids.join(", ")}
                         </strong>

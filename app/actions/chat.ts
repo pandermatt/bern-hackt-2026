@@ -1,5 +1,6 @@
 "use server";
 
+import { getLocale } from "next-intl/server";
 import { z } from "zod";
 
 import { getDashboard, listTransactions } from "@/app/actions/transactions";
@@ -24,8 +25,8 @@ import {
   shouldDefaultChart,
   stripModelMarkup,
   suggestFollowUps,
+  systemPromptFor,
   wantsNonPieChart,
-  SYSTEM_PROMPT,
   TOOL_DEFINITIONS,
   type AssistantTurn,
   type ChartSpec,
@@ -137,7 +138,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   }
 
   const messages: WireMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPromptFor(await getLocale()) },
     // Older turns only pad the context window of an 8B model.
     ...parsed.data.slice(-8),
   ];

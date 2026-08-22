@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
 import {
@@ -64,6 +65,7 @@ function buildOption(chart: PieChartSpec, tokens: ChartTokens): EChartsOption {
 }
 
 export function ChatPie({ chart }: { chart: PieChartSpec }) {
+  const t = useTranslations("Chat");
   const tokens = useChartTokens();
   const option = useMemo(
     () => (tokens ? buildOption(chart, tokens) : null),
@@ -82,7 +84,7 @@ export function ChatPie({ chart }: { chart: PieChartSpec }) {
         <EChart
           option={option}
           height={HEIGHT}
-          label={`Pie chart: ${chart.title}. The figures are listed in the table after the chart.`}
+          label={t("pieChartLabel", { title: chart.title })}
         />
 
         {/* The donut's middle as real HTML, matching the dashboard donut:
@@ -96,7 +98,7 @@ export function ChatPie({ chart }: { chart: PieChartSpec }) {
             {formatMoney(chart.totalMinor)}
           </p>
           <p className="text-[10px] font-medium tracking-wide text-text-subtle uppercase">
-            total
+            {t("pieTotal")}
           </p>
         </div>
       </div>
@@ -107,9 +109,9 @@ export function ChatPie({ chart }: { chart: PieChartSpec }) {
       <table className="sr-only" aria-label={chart.title}>
         <thead>
           <tr>
-            <th scope="col">Slice</th>
-            <th scope="col">Amount</th>
-            <th scope="col">Share</th>
+            <th scope="col">{t("pieSlice")}</th>
+            <th scope="col">{t("pieAmount")}</th>
+            <th scope="col">{t("pieShare")}</th>
           </tr>
         </thead>
         <tbody>

@@ -1,5 +1,5 @@
-import Link from "next/link";
 
+import { Link } from "@/i18n/navigation";
 import { SIGNET_PATH, SIGNET_VIEWBOX } from "@/lib/signet";
 import { site } from "@/lib/site";
 
