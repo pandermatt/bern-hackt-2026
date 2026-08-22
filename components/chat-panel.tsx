@@ -6,12 +6,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { askAssistant } from "@/app/actions/chat";
-import { streamAssistant } from "@/lib/assistant-client";
 import { applyAllocationAdds } from "@/app/actions/savings";
 import {
   SUGGESTION_KEYS,
   type AllocationProposal,
-  type AssistantTurn,
   type ChatRole,
 } from "@/lib/assistant";
 import { formatMoney } from "@/lib/insights";
@@ -43,8 +41,6 @@ export type PanelMessage = {
   proposalApplied?: boolean;
   proposalError?: string;
   error?: boolean;
-  /** Still arriving. Replaced wholesale by the finished turn. */
-  streaming?: boolean;
 };
 
 /*
@@ -97,13 +93,13 @@ export function useAssistantChat(): AssistantChat {
     setInput("");
 
     startTransition(async () => {
-      // Cards are client-side decoration; the endpoint only wants the words.
-      const wire = history.map(({ role, content }) => ({ role, content }));
-      const partial = (prev: PanelMessage[]) =>
-        prev[prev.length - 1]?.streaming ? prev.slice(0, -1) : prev;
-      const settle = (turn: AssistantTurn) => {
+      try {
+        // Cards are client-side decoration; the action only wants the words.
+        const turn = await askAssistant(
+          history.map(({ role, content }) => ({ role, content })),
+        );
         setMessages((prev) => [
-          ...partial(prev),
+          ...prev,
           {
             role: "assistant",
             content: turn.reply,
@@ -112,43 +108,27 @@ export function useAssistantChat(): AssistantChat {
           },
         ]);
         setFollowUps(turn.followUps ?? []);
-      };
-      try {
-        await streamAssistant(wire, {
-          onDelta: (chunk) =>
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              // The first fragment opens the bubble; the rest extend it.
-              if (last?.role === "assistant" && last.streaming) {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...last, content: last.content + chunk },
-                ];
-              }
-              return [...prev, { role: "assistant", content: chunk, streaming: true }];
-            }),
-          // The round turned out to be a tool round after all — what was shown
-          // was preamble to a call, not the answer.
-          onReset: () => setMessages(partial),
-          onDone: settle,
-        });
       } catch {
-        // The stream broke — a proxy that buffered it away, a dropped
-        // connection, a response that ended without a result. The turn itself
-        // may be perfectly answerable, so fall back to the server action once
-        // before telling the reader it failed.
-        try {
-          settle(await askAssistant(wire));
-        } catch {
-          setMessages((prev) => [
-            ...partial(prev),
-            { role: "assistant", content: t("failed"), error: true },
-          ]);
-        }
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: t("failed"),
+            error: true,
+          },
+        ]);
       }
     });
   };
 
+  /**
+   * Post one message's proposal as per-goal ADDS through
+   * `applyAllocationAdds`, which resolves each pot's current month total at
+   * apply time and re-checks the surplus ceiling server-side — a proposal
+   * frozen as absolute totals would silently revert allocations made between
+   * propose and Apply. The outcome lands on the message itself, so an applied
+   * card stays applied across a toggle away from the panel and back.
+   */
   const applyProposal = (index: number) => {
     const message = messages[index];
     if (!message?.proposal || message.proposalApplied || applying !== null) {
@@ -362,10 +342,7 @@ export function ChatPanel({
           </div>
         ))}
 
-        {/* The dots cover the tool rounds, which produce no text. Once the
-            answer starts streaming into its own bubble they would sit under
-            it, so the bubble takes over. */}
-        {pending && !messages[messages.length - 1]?.streaming && (
+        {pending && (
           <div className="flex justify-start duration-300 animate-in fade-in slide-in-from-bottom-2">
             <div
               className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-line bg-bg px-4 py-3"

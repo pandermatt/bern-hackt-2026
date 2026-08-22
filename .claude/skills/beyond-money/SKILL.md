@@ -364,44 +364,6 @@ Unchanged from the template this app grew out of, and still exactly true.
   above whatever branch hides the panel — the debug toggle today — so a
   conversation survives being toggled away from. Merge them and every toggle
   silently discards the chat.
-- **Calls arrive as `tool_calls`; nothing scrapes the model's prose.** The
-  endpoint does populate them — the loop in `lib/assistant-runner.ts` reads
-  `message.tool_calls` and pairs every result back by `tool_call_id`. The old
-  substring scan cost real answers: its stall heuristics were English regexes,
-  so a German turn shipped "Ich rufe die Ausgaben nach Kategorie ab…" to the
-  reader while a correct call in the same response went in the bin. German is
-  the default locale.
-- **Never show the tool-call syntax in `SYSTEM_PROMPT`.** It used to carry
-  examples like `[{"get_overview": {…}}]`. That teaches the model to *type*
-  calls into `content` instead of making them, and on the 70B it suppressed
-  native `tool_calls` entirely — same model, same tools, only the prompt
-  changed. It also once reported the prompt's own `CHF 1'234.55` format
-  example as the customer's real spending, which is why no example figure
-  lives there now either.
-- **Two guards keep invented money off the screen, and both are load-bearing.**
-  `showsPlumbing` rejects a reply naming a tool or carrying a JSON object;
-  `unverifiedAmounts` rejects one quoting francs no tool returned this turn.
-  Either one re-asks with the tools withheld, and a second failure fails the
-  turn closed. This is not hygiene — on exactly these turns the model is also
-  making the numbers up: asked for monthly spending with nothing fetched it
-  invented a whole year and named the cheapest month as the peak.
-- **Three LLM features, two models, and they must not be merged.** The chat can
-  run on Apertus 70B (`CHAT_MODEL`/`CHAT_URL`/`CHAT_KEY`, falling back to
-  `MODEL`/`APERTUS_URL`/`APERTUS_KEY` when unset); the anomaly narrator and the
-  icon picker must stay on the 8B, because they ask for `response_format:
-  json_object` and the onprem.ai gateway mangles it — a stray `{"` in front of
-  every reply, so all of them fail to parse, quietly.
-- **Two gateway quirks the loop is shaped around.** onprem.ai answers `400
-  Invalid tool call` to an echoed assistant `tool_call` whose arguments are
-  `{}` — which is most calls, since the only argument most tools take is an
-  optional period; the runner re-serializes the arguments each call actually
-  ran with, which is both truthful and never empty. And llm.stoney-cloud.com
-  answers `400 Invalid message role` to a `system` message anywhere but the
-  front, so the corrective nudges mid-turn go back as `user` turns.
-- **`weekday` and `month` are real columns in the SQL sandbox.** Left to
-  `strftime('%w', …)` the model named the wrong day — its 0 is Sunday — and a
-  wrong weekday on a statement is just a wrong answer. Adding the columns is
-  also what let the 8B reach `run_sql` for those questions at all.
 - **`ChatPanel` carries `min-h-0` in its own base classes.** It is a new flex
   item between a full-height shell and a scrolling transcript, and it has no
   `overflow` of its own, so without it a long conversation resolves to

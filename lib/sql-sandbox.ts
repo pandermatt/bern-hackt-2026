@@ -66,28 +66,17 @@ const db = new Database(":memory:");
 try {
   db.exec(
     "CREATE TABLE transactions (" +
-      "booked_on TEXT NOT NULL, weekday TEXT NOT NULL, month TEXT NOT NULL, " +
-      "kind TEXT NOT NULL, amount_minor INTEGER NOT NULL, " +
+      "booked_on TEXT NOT NULL, kind TEXT NOT NULL, amount_minor INTEGER NOT NULL, " +
       "amount_chf REAL NOT NULL, account TEXT NOT NULL, merchant TEXT NOT NULL, " +
       "category TEXT NOT NULL, description TEXT NOT NULL, currency TEXT NOT NULL)"
   );
   const insert = db.prepare(
-    "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
-  // Weekday as a name, not a number. Left to the model it means strftime('%w'),
-  // whose 0 is Sunday — and the answers came back naming the wrong day, which
-  // on a statement is simply a wrong answer. Computed from the date parts in
-  // UTC so it never depends on the server's zone.
-  const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const weekdayOf = (date) => {
-    const [y, m, d] = date.split("-").map(Number);
-    return DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  };
   const load = db.transaction((all) => {
     for (const r of all) {
       insert.run(
-        r.bookedOn, weekdayOf(r.bookedOn), r.bookedOn.slice(0, 7),
-        r.kind, r.amountMinor, r.amountMinor / 100,
+        r.bookedOn, r.kind, r.amountMinor, r.amountMinor / 100,
         r.account, r.merchant, r.category, r.description, r.currency
       );
     }
