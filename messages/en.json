@@ -638,7 +638,7 @@
     "body": "The page hit an error it could not recover from. Trying again usually works.",
     "digestTitle": "Server-side error identifier",
     "tryAgain": "Try again",
-    "backToDashboard": "Back to your dashboard",
+    "backHome": "Back to your home page",
     "globalTitle": "The app failed to start",
     "globalBody": "Something broke before the page could render. Reloading usually fixes it.",
     "reload": "Reload",

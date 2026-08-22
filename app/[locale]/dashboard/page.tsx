@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import { getDashboard } from "@/app/actions/transactions";
 import { BreakdownList } from "@/components/breakdown-list";
 import { ChatSidebar } from "@/components/chat-sidebar";
-import { Landing } from "@/components/landing";
 import { MonthlyTrend } from "@/components/monthly-trend";
 import { ScrollDebug } from "@/components/scroll-debug";
 import { SummaryCards } from "@/components/summary-cards";
@@ -13,27 +12,31 @@ import { AnomalySuggestion } from "@/components/anomaly-suggestion";
 import { TransactionCalendar } from "@/components/transaction-calendar";
 import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
+import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { displayName } from "@/lib/user";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home({ params, searchParams }: PageProps<"/[locale]">) {
+export default async function Dashboard({
+  params,
+  searchParams,
+}: PageProps<"/[locale]/dashboard">) {
   const { locale } = await params;
   // `getTranslations`, not `useTranslations`: an async server component cannot
   // call a hook.
   const t = await getTranslations({ locale, namespace: "Dashboard" });
   const tm = await getTranslations({ locale, namespace: "Merchants" });
 
-  // The authoritative auth check — the proxy only sniffs for a cookie.
-  // Signed-out visitors get the landing page rather than a redirect, so "/"
-  // stays a usable public entry point.
+  // The authoritative auth check — the proxy only sniffs for a cookie. This is
+  // a protected page now, so a signed-out visitor gets bounced rather than
+  // shown the landing page; the landing lives at "/", which is the public one.
   const user = await getCurrentUser();
-  if (!user) return <Landing />;
+  if (!user) return redirect({ href: "/login", locale });
 
   const query = await searchParams;
   const dashboard = await getDashboard(query);
-  if (!dashboard) return <Landing />;
+  if (!dashboard) return redirect({ href: "/login", locale });
 
   const { facets, view, filters, monthly, stack, totals, merchants } = dashboard;
 

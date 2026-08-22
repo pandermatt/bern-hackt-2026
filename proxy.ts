@@ -44,8 +44,10 @@ export function proxy(request: NextRequest) {
 
   const isAuthRoute = pathWithoutLocale === "/login" || pathWithoutLocale === "/register";
 
-  // "/" is public: it serves the landing page when signed out and the
-  // dashboard when signed in, so it must not be redirected away here.
+  // "/" is public: it is the marketing landing page, and bouncing it to /login
+  // would make it unreachable. It no longer doubles as the dashboard — that
+  // moved to /dashboard, and the signed-in entry page is /home; both are
+  // protected by their absence from this list.
   //
   // The rest are requested by things that never carry a session cookie: link
   // crawlers (the OG image), the browser's install prompt (the manifest), and
@@ -69,12 +71,14 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(`/${localeOf(request)}/login`, request.url));
   }
 
-  // The opposite direction is NOT safe here, and used to be: bouncing /login to
-  // "/" whenever a cookie was present assumed presence meant signed in. After a
-  // redeploy that rebuilt the database, every browser still held a cookie whose
-  // session row was gone — so "/" rendered the landing page, its "Sign in" link
-  // went to /login, and /login bounced straight back to "/". An unbreakable
-  // loop, with no way to sign in short of clearing cookies by hand.
+  // The opposite direction is NOT safe here, and used to be: bouncing /login
+  // away whenever a cookie was present assumed presence meant signed in. After
+  // a redeploy that rebuilt the database, every browser still held a cookie
+  // whose session row was gone — so "/" rendered the landing page, its "Sign
+  // in" link went to /login, and /login bounced straight back. An unbreakable
+  // loop, with no way to sign in short of clearing cookies by hand. The same
+  // trap now guards "/", which redirects to /home only after `getCurrentUser`
+  // confirms the session is real.
   //
   // Only `getCurrentUser()` can tell a live session from a dead one, so
   // app/login and app/register do that redirect themselves.

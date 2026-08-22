@@ -62,7 +62,7 @@ import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
  * The height is the same on every screen, deliberately: it is what
- * `app/(dashboard)/loading.tsx` reserves, and a canvas cannot reserve its own
+ * `app/[locale]/dashboard/loading.tsx` reserves, and a canvas cannot reserve its own
  * space. The phone adapts by giving the plot more of that box, not less of it.
  */
 const HEIGHT = 320;

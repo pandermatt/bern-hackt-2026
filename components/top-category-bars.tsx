@@ -74,7 +74,7 @@ import { useIsNarrow } from "@/lib/use-hydrated";
  * into the "Other" bucket, so the chart draws at most eight marks. */
 const SHOWN_CATEGORIES = 7;
 
-/** Reserved (with the control row) in `app/[locale]/(dashboard)/loading.tsx`
+/** Reserved (with the control row) in `app/[locale]/dashboard/loading.tsx`
  * — a canvas cannot reserve its own space. */
 const HEIGHT = 300;
 /** Extra headroom at the top for the per-bar totals; no legend strip at the

@@ -120,7 +120,7 @@ export function DemoDataControls() {
             <span>{lastActionStatus}</span>
           </div>
           <Link
-            href="/"
+            href="/dashboard"
             className="inline-flex items-center gap-1 font-medium text-accent hover:underline text-xs"
           >
             {t("viewDashboard")} <ArrowRight className="size-3" />

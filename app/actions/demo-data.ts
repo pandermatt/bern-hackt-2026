@@ -30,10 +30,9 @@ export async function generateSyntheticTransactionsAction(options?: {
       targetCount: options?.targetCount,
     });
     // Every page sits under `/[locale]`, so the literal "/" and "/account"
-    // these used to name match nothing. The dashboard lives in a `(dashboard)`
-    // route group and its cache tag carries the group, so the pattern has to
-    // as well. Revalidating the pattern covers both languages at once.
-    revalidatePath("/[locale]/(dashboard)", "page");
+    // these used to name match nothing. Revalidating the pattern covers both
+    // languages at once.
+    revalidatePath("/[locale]/dashboard", "page");
     revalidatePath("/[locale]/account", "page");
     const yearsText =
       yearsCount > 1 ? `the last ${yearsCount} years` : "the last 12 months";
@@ -62,7 +61,7 @@ export async function loadDemoCsvAction(): Promise<ActionState> {
 
   try {
     const { count } = await loadDemoCsvForUser(user.id);
-    revalidatePath("/[locale]/(dashboard)", "page");
+    revalidatePath("/[locale]/dashboard", "page");
     revalidatePath("/[locale]/account", "page");
     return {
       success: true,
