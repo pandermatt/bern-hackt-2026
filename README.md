@@ -1,3 +1,5 @@
+# BärnHäckt 2026 — Beyond Money
+
 A personal-finance dashboard built on bank statement exports: email/password
 accounts, and each account sees only its own transactions. A year of statements
 becomes income and spending per month, a category breakdown, a merchant
