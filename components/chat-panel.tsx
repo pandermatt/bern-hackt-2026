@@ -116,8 +116,8 @@ export function ChatPanel({
   className = "",
   /**
    * The transcript's own box. The slide-over gives it the leftover height of a
-   * viewport-tall column; the inline panel caps it instead, so an empty chat
-   * does not reserve a screenful above the fold.
+   * viewport-tall column; the inline panel pins it to a constant one, so the
+   * page below the chat does not shift on every reply.
    */
   scrollClassName = "flex-1",
   /**
