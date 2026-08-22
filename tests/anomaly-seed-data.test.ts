@@ -86,15 +86,24 @@ const rulesCovering = (id: number) =>
 
 describe("anomaly engine over the shipped seed statements", () => {
   it("imports the expected ledger", () => {
-    // 525 rows across both exports, 12 of them the same card payments listed twice.
-    expect(rows).toHaveLength(513);
+    // 941 rows across the four exports, 12 of them the same card payments
+    // listed twice (the 2026 ZKB and Revolut exports have no sibling account,
+    // so nothing in them dedupes away).
+    expect(rows).toHaveLength(929);
   });
 
   it("reports a readable number of findings", () => {
     // An upper bound alone would be satisfied by an engine that returns
     // nothing, which is exactly the hole the previous integration test left.
+    // The 2026 statements raise the count on purpose: they are a different
+    // spending profile grafted onto the 2025 history — a rent step from 1'820
+    // to 3'000, a different salary, whole categories that never existed — and
+    // the engine should say so. What it must NOT do is drown that story in
+    // one finding per first-ever kebab stand, which is what NEW_MERCHANT's
+    // significance gate exists for; before it, this ledger produced 294
+    // findings, 136 of them first-time merchants.
     expect(insights.length).toBeGreaterThanOrEqual(20);
-    expect(insights.length).toBeLessThanOrEqual(90);
+    expect(insights.length).toBeLessThanOrEqual(200);
 
     const flagged = new Set(insights.flatMap((i) => i.transaction_ids));
     expect(flagged.size / rows.length).toBeLessThan(0.25);
@@ -252,8 +261,10 @@ describe("anomaly engine over the shipped seed statements", () => {
     /*
      * The most fraud-shaped row in the year, and a perfectly legitimate holiday
      * booking. It is on the alert allowlist by rule, so what keeps it out of red
-     * is arithmetic: the airline repeats on three of its four active days, and
-     * the co-signature wants a merchant that repeats on at most one.
+     * is arithmetic: the airline repeats on four days across the ledger (three
+     * in the 2025 exports, plus the two identical tickets bought together in
+     * the 2026 Revolut statement), and the co-signature wants a merchant that
+     * repeats on at most one.
      *
      * If this starts passing, the demo account shows a red "possible fraud"
      * wash on a real purchase.
@@ -263,7 +274,7 @@ describe("anomaly engine over the shipped seed statements", () => {
     );
 
     expect(repeats).toHaveLength(1);
-    expect(repeats[0].supporting_metrics.merchant_repeat_days).toBe(3);
+    expect(repeats[0].supporting_metrics.merchant_repeat_days).toBe(4);
     expect(canEscalateToAlert(repeats[0], insights)).toBe(false);
   });
 

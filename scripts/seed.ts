@@ -11,6 +11,7 @@ import { hashPassword } from "../lib/password";
 import { toRecords } from "./lib/csv";
 import {
   classify,
+  MERCHANTS,
   naturalKey,
   openingBalanceRow,
   toMinor,
@@ -164,8 +165,15 @@ async function main() {
 
       const rule = classify(slug, label);
       // Transfers are labelled by the account they land in, not a merchant, and
-      // are overridden to "Transfer" below — they are not a mapping gap.
-      if (row.type !== "transfer" && rule.category === "Other") {
+      // are overridden to "Transfer" below — they are not a mapping gap. Nor is
+      // an explicit MERCHANTS entry that classifies to "Other" (TWINT_P2P):
+      // only a keyword fallback landing on "Other" means a merchant is missing
+      // from the table.
+      if (
+        row.type !== "transfer" &&
+        !(slug in MERCHANTS) &&
+        rule.category === "Other"
+      ) {
         unmapped.add(`${slug} (${label})`);
       }
 
@@ -182,9 +190,9 @@ async function main() {
         originalAmountMinor: toMinor(row.amount),
         account,
         merchant: row.type === "transfer" ? "Credit card payment" : rule.name,
-        // A refund from a shop is not income. 35 of the 48 "income" lines are
+        // A refund from a shop is not income. 39 of the 60 "income" lines are
         // merchant credits; folding them into Salary would overstate earnings by
-        // CHF 4,590.13 and make the salary figure meaningless.
+        // CHF 7,037.75 and make the salary figure meaningless.
         category:
           row.type === "transfer"
             ? "Transfer"
@@ -211,7 +219,7 @@ async function main() {
   // to re-run against a database that already holds these statements.
   const write = sqlite.transaction(() => {
     db.delete(transactions).where(eq(transactions.userId, target.id)).run();
-    // Chunked: one 513-row statement binds ~6,000 parameters, close enough to
+    // Chunked: one 929-row statement binds ~11,000 parameters, close enough to
     // SQLITE_MAX_VARIABLE_NUMBER to be a build flag away from failing.
     for (let i = 0; i < rows.length; i += 100) {
       db.insert(transactions).values(rows.slice(i, i + 100)).run();

@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { toRecords } from "@/scripts/lib/csv";
-import { classify, naturalKey, toMinor } from "@/scripts/lib/statement";
+import { classify, MERCHANTS, naturalKey, toMinor } from "@/scripts/lib/statement";
 
 /*
  * The regression guard on the shipped statements. These assertions are what
@@ -31,9 +31,12 @@ describe("the shipped statements", () => {
   it("collapses the credit-card payments that appear in both exports", () => {
     // Each of the 12 payments is written once from the paying account's export
     // and once from the receiving account's. Without the dedupe they count
-    // twice and every transfer total doubles.
-    expect(rawRows).toHaveLength(525);
-    expect(deduped).toHaveLength(513);
+    // twice and every transfer total doubles. The 2026 ZKB and Revolut exports
+    // have no sibling account, so all of their rows survive — the two identical
+    // same-day Swiss tickets in the Revolut file carry disambiguated names
+    // ("Swiss (2)") precisely so this dedupe cannot eat one of them.
+    expect(rawRows).toHaveLength(941);
+    expect(deduped).toHaveLength(929);
   });
 
   it("has no duplicates inside a single export", () => {
@@ -50,7 +53,7 @@ describe("the shipped statements", () => {
       return acc;
     }, {});
 
-    expect(counts).toEqual({ expense: 453, income: 48, transfer: 12 });
+    expect(counts).toEqual({ expense: 857, income: 60, transfer: 12 });
   });
 
   it("totals what the dashboard reports", () => {
@@ -59,8 +62,8 @@ describe("the shipped statements", () => {
         .filter((row) => row.type === kind)
         .reduce((total, row) => total + toMinor(row.base_amount), 0);
 
-    expect(sum("expense")).toBe(9296940);
-    expect(sum("income")).toBe(10162213);
+    expect(sum("expense")).toBe(13614592);
+    expect(sum("income")).toBe(14901135);
     expect(sum("transfer")).toBe(4185064);
   });
 
@@ -69,12 +72,12 @@ describe("the shipped statements", () => {
       (row) => row.type === "income" && row.source_id === "EmployerAG",
     );
 
-    expect(salary).toHaveLength(13);
+    expect(salary).toHaveLength(21);
     expect(salary.reduce((t, row) => t + toMinor(row.base_amount), 0)).toBe(
-      9703200,
+      14197360,
     );
-    // The other 35 inflows are shop credits, not earnings.
-    expect(deduped.filter((row) => row.type === "income")).toHaveLength(48);
+    // The other 39 inflows are shop credits, not earnings.
+    expect(deduped.filter((row) => row.type === "income")).toHaveLength(60);
   });
 });
 
@@ -87,7 +90,10 @@ describe("the merchant table", () => {
       const income = row.type === "income";
       const slug = income ? row.source_id : row.target_id;
       const label = income ? row.source_label : row.target_label;
-      if (classify(slug, label).category === "Other") {
+      // An explicit MERCHANTS entry that classifies to "Other" (TWINT_P2P,
+      // person-to-person payments) is a deliberate call, not a gap — only a
+      // fallback landing on "Other" means the table is missing a merchant.
+      if (!(slug in MERCHANTS) && classify(slug, label).category === "Other") {
         unmapped.add(`${slug} (${label})`);
       }
     }

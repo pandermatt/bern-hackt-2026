@@ -761,11 +761,18 @@ export function analyzeTransactionAnomalies(
      RULE 3: NEW_MERCHANT
      Icon: lucide:store
      Trigger when a merchant never appeared before in history (>= 60 days baseline established,
-     and only for transactions in the latest evaluation period).
+     and only for transactions in the latest evaluation period), AND the amount
+     is significant for this account — at or above the 75th percentile of
+     non-recurring expenses. Without the amount gate, an account that simply
+     eats somewhere new twice a week drowns the ledger: the shipped Revolut
+     statement alone produced 136 first-time-merchant findings, one per
+     CHF 15 lunch. "First time somewhere" is only worth a line when the money
+     involved would itself make a person look twice.
      ------------------------------------------------------------------------- */
   if (totalHistoryDays >= 60) {
     const baselineCutoffDays = totalHistoryDays * 0.7; // Establish 70% history as catalog baseline
     const seenMerchants = new Set<string>();
+    const significantMinor = calculatePercentile(nonRecurringExpenseMags, 75);
 
     for (const t of sorted) {
       const curDate = parseTransactionDate(t);
@@ -775,7 +782,11 @@ export function analyzeTransactionAnomalies(
       if (daysSinceStart < baselineCutoffDays) {
         if (norm) seenMerchants.add(norm);
       } else {
-        if (norm && !seenMerchants.has(norm) && seenMerchants.size >= 15) {
+        // A first-time merchant below the amount gate is still *seen* — its
+        // second visit must not fire either, so the add below stays
+        // unconditional for every merchant in the evaluation window.
+        const significant = Math.abs(t.amountMinor) >= significantMinor;
+        if (norm && !seenMerchants.has(norm) && seenMerchants.size >= 15 && significant) {
           insights.push({
             rule_id: "NEW_MERCHANT",
             title: "First-Time Merchant",
@@ -794,8 +805,10 @@ export function analyzeTransactionAnomalies(
             },
             icon: "lucide:store",
           });
-          seenMerchants.add(norm); // Avoid duplicate triggers for same new merchant
         }
+        // Marks the merchant known whether or not it fired, so neither a
+        // second visit nor a later, larger charge re-triggers the rule.
+        if (norm) seenMerchants.add(norm);
       }
     }
   }

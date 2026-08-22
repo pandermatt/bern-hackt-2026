@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { eq } from "drizzle-orm";
@@ -14,21 +14,25 @@ import {
   toMinor,
 } from "@/scripts/lib/statement";
 
-const DEMO_FILES = [
-  "jeanine_2025_Account1_2025.csv",
-  "jeanine_2025_Account3_2025.csv",
-] as const;
-
 /**
- * Loads the official demo CSV statements (Account 1 and Account 3)
- * for a specific user, replacing any existing transactions.
+ * Loads the official demo CSV statements for a specific user, replacing any
+ * existing transactions.
+ *
+ * The files are discovered from `scripts/seed-data`, exactly like
+ * `scripts/seed.ts` does — this used to be a hardcoded two-file list, which
+ * silently left every statement added after it out of the UI's demo-data
+ * button while `npm run seed` imported them fine.
  */
 export async function loadDemoCsvForUser(userId: number): Promise<{ count: number }> {
   const seedDir = join(process.cwd(), "scripts", "seed-data");
   const seen = new Set<string>();
   const rows: NewTransaction[] = [];
 
-  for (const file of DEMO_FILES) {
+  const files = readdirSync(seedDir)
+    .filter((file) => file.endsWith(".csv"))
+    .sort();
+
+  for (const file of files) {
     const filePath = join(seedDir, file);
     const content = readFileSync(filePath, "utf8");
     for (const row of toRecords(content)) {

@@ -200,19 +200,22 @@ describe("Synthetic Transaction Generator (Faker)", () => {
 });
 
 describe("Demo CSV Loader", () => {
-  it("loads and classifies statements from Account 1 and Account 3 CSVs", async () => {
+  it("loads and classifies every shipped statement", async () => {
     const { count } = await loadDemoCsvForUser(user1.id);
 
-    // Shipped CSVs have 513 unique transaction keys after deduplicating CC
-    // payments, plus the prepended opening-balance row.
-    expect(count).toBe(514);
+    // Shipped CSVs have 929 unique transaction keys after deduplicating CC
+    // payments, plus the prepended opening-balance row — the same set
+    // `npm run seed` imports, because both importers discover the same
+    // directory. This number moving in one importer but not the other is
+    // exactly the drift the discovery change exists to prevent.
+    expect(count).toBe(930);
 
     const rows = await db
       .select()
       .from(transactions)
       .where(eq(transactions.userId, user1.id));
 
-    expect(rows.length).toBe(514);
+    expect(rows.length).toBe(930);
 
     const categories = new Set(rows.map((r) => r.category));
     expect(categories.has("Food & Drink")).toBe(true);
@@ -221,7 +224,7 @@ describe("Demo CSV Loader", () => {
     expect(categories.has("Transport")).toBe(true);
   });
 
-  it("starts the history with a CHF 10'000 opening balance", async () => {
+  it("starts the history with a CHF 20'000 opening balance", async () => {
     await loadDemoCsvForUser(user1.id);
 
     const rows = await db
@@ -231,7 +234,7 @@ describe("Demo CSV Loader", () => {
 
     const opening = rows.filter((r) => r.category === "Opening balance");
     expect(opening).toHaveLength(1);
-    expect(opening[0].amountMinor).toBe(1_000_000);
+    expect(opening[0].amountMinor).toBe(2_000_000);
     expect(opening[0].kind).toBe("income");
 
     // Booked before every statement line, so the balance starts at the figure

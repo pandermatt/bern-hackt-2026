@@ -550,16 +550,16 @@ Unchanged from the template this app grew out of, and still exactly true.
   with `ERR_REQUIRE_ASYNC_MODULE`. Keep the wrapper.
 - **`naturalKey` — `date|type|source|target|amount|name` — is what makes the
   import idempotent.** A credit-card payment appears in *both* account exports,
-  once per side; without the dedupe those 12 lines count twice. 525 raw lines →
-  513 rows. `transactions.externalId` stores the key, unique per user.
+  once per side; without the dedupe those 12 lines count twice. 941 raw lines →
+  929 rows. `transactions.externalId` stores the key, unique per user.
 - **`MERCHANTS` in `scripts/lib/statement.ts` is the single source of both the
   category and the canonical merchant name.** The exports spell the same
   merchant several ways; grouping on the raw label silently splits the ranking.
   Add new merchants there, not at read time — categories are assigned once, at
   import.
-- **A refund is not income.** 35 of the 48 lines typed `income` are merchant
+- **A refund is not income.** 39 of the 60 lines typed `income` are merchant
   credits. They get the `Refund` category and their own tile; folding them into
-  salary overstates the year by CHF 4,590.
+  salary overstates the earnings by CHF 7,038.
 - **EUR lines are not converted.** All 13 carry `exchange_rate = 1.0` and
   `base_amount == amount`, so the source asserts 1 EUR = 1 CHF. Store what the
   file says; keep `currency` and `originalAmountMinor` so a real rate can be
