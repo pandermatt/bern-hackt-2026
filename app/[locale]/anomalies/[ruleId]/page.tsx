@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { getAnomalyRuleDetail } from "@/app/actions/anomalies";
+import { AnomalyIcon } from "@/components/anomaly-icon";
 import { Section } from "@/components/section";
 import type { Transaction } from "@/db/schema";
 import { Link, redirect } from "@/i18n/navigation";
@@ -92,9 +93,10 @@ export default async function AnomalyRulePage({
 
       <div className="mt-3 mb-5">
         <h1 className="flex items-start gap-3 text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
-          <span aria-hidden className="shrink-0 leading-none">
-            {detail.emoji}
-          </span>
+          {/* Sized under the heading rather than with it: at 36px a lucide
+              stroke reads as a second heading, where the emoji it replaces read
+              as a bullet. `mt-1` puts it on the cap line of the first word. */}
+          <AnomalyIcon name={detail.icon} className="mt-1 size-6 shrink-0 text-text-muted sm:size-7" />
           <span>{detail.title}</span>
         </h1>
 

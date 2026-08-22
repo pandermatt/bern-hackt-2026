@@ -14,7 +14,6 @@ import {
 import {
   analyzeTransactionAnomalies,
   attentionFor,
-  emojiFor,
   type AnomalyInsight,
   type AnomalySeverity,
 } from "@/lib/anomaly-engine";
@@ -359,7 +358,8 @@ export async function getStoredAnomaliesForPage(
 export type AnomalyGroup = {
   ruleId: string;
   title: string;
-  emoji: string;
+  /** The rule's own lucide name, so the row wears the badge the ledger wears. */
+  icon: string;
   severity: AnomalySeverity;
   /** The most recent finding's own words — see the note in `getAnomalyOverview`. */
   description: string;
@@ -455,7 +455,7 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
         group: {
           ruleId: row.ruleId,
           title: row.title,
-          emoji: row.emoji || emojiFor(row.ruleId),
+          icon: row.icon,
           severity: row.severity,
           description: row.description,
           transactionCount: 0,
@@ -517,7 +517,7 @@ const RULE_ID_PATTERN = /^[A-Z_]{1,60}$/;
 export type AnomalyRuleDetail = {
   ruleId: string;
   title: string;
-  emoji: string;
+  icon: string;
   severity: AnomalySeverity;
   /**
    * The one finding that named transaction belongs to — the four charges of a
@@ -560,7 +560,7 @@ export async function getAnomalyRuleDetail(
       transactionId: anomalies.transactionId,
       description: anomalies.description,
       title: anomalies.title,
-      emoji: anomalies.emoji,
+      icon: anomalies.icon,
       severity: anomalies.severity,
     })
     .from(anomalies)
@@ -606,7 +606,7 @@ export async function getAnomalyRuleDetail(
   return {
     ruleId,
     title: usable[0]?.title ?? ruleId,
-    emoji: usable[0]?.emoji || emojiFor(ruleId),
+    icon: usable[0]?.icon ?? "",
     severity: usable.reduce<AnomalySeverity>(
       (worst, f) => (SEVERITY_ORDER[f.severity] > SEVERITY_ORDER[worst] ? f.severity : worst),
       "low",

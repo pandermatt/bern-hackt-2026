@@ -1,38 +1,7 @@
-import {
-  AlertTriangle,
-  ArrowLeftRight,
-  ArrowUp,
-  Banknote,
-  CalendarClock,
-  CalendarPlus,
-  CalendarX,
-  ChartNoAxesCombined,
-  CircleDollarSign,
-  Clock3,
-  Copy,
-  CreditCard,
-  Gauge,
-  Layers,
-  MapPin,
-  PiggyBank,
-  Plane,
-  RefreshCw,
-  Repeat2,
-  Store,
-  Tag,
-  Target,
-  TrendingDown,
-  TrendingUp,
-  TriangleAlert,
-  Undo2,
-  UserPlus,
-  Wallet,
-  WalletCards,
-  type LucideIcon,
-} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
 
+import { AnomalyIcon } from "@/components/anomaly-icon";
 import { MerchantAvatar } from "@/components/merchant-avatar";
 import type { Transaction } from "@/db/schema";
 import { Link } from "@/i18n/navigation";
@@ -57,41 +26,6 @@ import { formatMoney, type MonthTotal } from "@/lib/insights";
  * the feed is a client component that imports the action, and the action
  * imports this.
  */
-
-const LUCIDE_ICON_MAP: Record<string, LucideIcon> = {
-  "lucide:arrow-up": ArrowUp,
-  "lucide:circle-dollar-sign": CircleDollarSign,
-  "lucide:store": Store,
-  "lucide:tag": Tag,
-  "lucide:repeat-2": Repeat2,
-  "lucide:chart-no-axes-combined": ChartNoAxesCombined,
-  "lucide:calendar-plus": CalendarPlus,
-  "lucide:refresh-cw": RefreshCw,
-  "lucide:calendar-x": CalendarX,
-  "lucide:clock-3": Clock3,
-  "lucide:calendar-clock": CalendarClock,
-  "lucide:gauge": Gauge,
-  "lucide:copy": Copy,
-  "lucide:map-pin": MapPin,
-  "lucide:plane": Plane,
-  "lucide:user-plus": UserPlus,
-  "lucide:arrow-left-right": ArrowLeftRight,
-  "lucide:wallet": Wallet,
-  "lucide:wallet-cards": WalletCards,
-  "lucide:trending-down": TrendingDown,
-  "lucide:piggy-bank": PiggyBank,
-  "lucide:target": Target,
-  "lucide:undo-2": Undo2,
-  "lucide:banknote": Banknote,
-  "lucide:credit-card": CreditCard,
-  "lucide:trending-up": TrendingUp,
-  "lucide:layers": Layers,
-  "lucide:triangle-alert": TriangleAlert,
-};
-
-function getLucideIcon(iconName: string): LucideIcon {
-  return LUCIDE_ICON_MAP[iconName] ?? AlertTriangle;
-}
 
 const SEVERITY_RANK: Record<AnomalySeverity, number> = { high: 3, medium: 2, low: 1 };
 
@@ -196,9 +130,11 @@ function FindingPanel({
   return (
     <Panel id={id}>
       <p className="flex items-start gap-2 text-[14px] font-semibold text-text">
-        <span aria-hidden className="shrink-0 leading-none">
-          {anomaly.emoji}
-        </span>
+        {/* Muted, where the badge that opened this panel draws the same glyph in
+            its kind colour: the colour has already been read by the time the
+            panel is open, and repeating it here only shouts. `mt-0.5` sits the
+            icon on the title's cap line. */}
+        <AnomalyIcon name={anomaly.icon} className="mt-0.5 size-4 shrink-0 text-text-muted" />
         <span>{anomaly.title}</span>
       </p>
 
@@ -351,7 +287,6 @@ function TransactionRow({
         {hasAnomaly && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {shownAnomalies.map((anomaly, index) => {
-              const Icon = getLucideIcon(anomaly.icon);
               /* Not keyed on `rule_id` alone: one transaction can carry two
                  findings from the same rule — an airline billing two different
                  amounts twice over on one day — and React then sees duplicate
@@ -372,7 +307,7 @@ function TransactionRow({
                       KIND_CLASSES[anomaly.kind]
                     }`}
                   >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <AnomalyIcon name={anomaly.icon} className="h-3.5 w-3.5 shrink-0" />
                     {/* Carries the kind for anyone the colour does not reach. */}
                     <span className="sr-only">{KIND_LABELS[anomaly.kind]} </span>
                     {/* The finding's own words. This used to print `rule_id`, so
@@ -407,8 +342,12 @@ function TransactionRow({
                           }}
                           className="block hover:underline"
                         >
-                          <span className="text-[13px] font-medium text-text">
-                            {anomaly.emoji} {anomaly.title}
+                          <span className="flex items-start gap-1.5 text-[13px] font-medium text-text">
+                            <AnomalyIcon
+                              name={anomaly.icon}
+                              className="mt-0.5 size-3.5 shrink-0 text-text-muted"
+                            />
+                            {anomaly.title}
                           </span>
                           <span className="mt-0.5 block text-[12px] text-text-muted">
                             {anomaly.description}

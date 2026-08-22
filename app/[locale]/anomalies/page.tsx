@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
 import { getAnomalyOverview, type AnomalyGroup } from "@/app/actions/anomalies";
+import { AnomalyIcon } from "@/components/anomaly-icon";
 import { Section } from "@/components/section";
 import { Link, redirect } from "@/i18n/navigation";
 import type { AnomalySeverity } from "@/lib/anomaly-engine";
@@ -50,9 +51,11 @@ function GroupRow({ group, countLabel }: { group: AnomalyGroup; countLabel: stri
         href={`/anomalies/${group.ruleId}`}
         className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover sm:px-5"
       >
-        <span aria-hidden className="shrink-0 text-[20px] leading-none">
-          {group.emoji}
-        </span>
+        {/* The rule's own lucide glyph — the same one its badges wear in the
+            ledger, so a finding is recognisable before its title is read. It
+            stays neutral in colour: the count badge beside it already carries
+            the severity, and a second colour-coded thing would only compete. */}
+        <AnomalyIcon name={group.icon} className="size-5 shrink-0 text-text-muted" />
 
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
