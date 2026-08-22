@@ -21,16 +21,19 @@ export function SavingsGoalForm() {
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
+  // Optional, and blank is a real answer: plenty of goals are "eventually".
+  const [targetOn, setTargetOn] = useState("");
 
   const ready = name.trim() !== "" && amount.trim() !== "";
 
   function submit() {
     startTransition(async () => {
-      const result = await createSavingsGoal(name, amount);
+      const result = await createSavingsGoal(name, amount, targetOn);
       if (result.ok) {
         toast.success(t("goalAdded", { name: name.trim() }));
         setName("");
         setAmount("");
+        setTargetOn("");
         router.refresh();
       } else {
         toast.error(result.error);
@@ -72,6 +75,22 @@ export function SavingsGoalForm() {
           onChange={(event) => setAmount(event.target.value)}
           placeholder="5000"
           className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        />
+      </label>
+
+      <label className="w-[10rem] shrink-0">
+        <span className="text-[12.5px] font-medium text-text-muted">
+          {t("targetDateOptional")}
+        </span>
+        {/* A native date input: it gets the platform's own picker and the
+            reader's own date format for free, and `globals.css` already sets
+            `color-scheme` per theme so the calendar glyph is not a white icon
+            on a dark field. The value is always `YYYY-MM-DD` regardless. */}
+        <input
+          type="date"
+          value={targetOn}
+          onChange={(event) => setTargetOn(event.target.value)}
+          className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[13px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
       </label>
 

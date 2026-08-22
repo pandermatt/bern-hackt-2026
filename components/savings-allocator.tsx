@@ -28,6 +28,19 @@ function toField(minor: number): string {
   return minor === 0 ? "" : (minor / 100).toFixed(2);
 }
 
+/**
+ * What a pot's field starts at.
+ *
+ * Whatever is already allocated for this month wins: those are saved figures
+ * and the reader is editing them, not starting over. Only an untouched pot
+ * falls back to its Dauersparauftrag — which is the whole point of one, and
+ * also the only place a standing order ever influences anything. It still
+ * moves no money: it fills an input, and the input is saved by hand.
+ */
+function seedFor(pot: SavingsPot): number {
+  return pot.monthMinor > 0 ? pot.monthMinor : (pot.monthlyMinor ?? 0);
+}
+
 /** What a field is worth, for the running total. `NaN` for anything unparseable. */
 function toMinor(field: string): number {
   const cleaned = field.trim().replace(/[’'\s]/g, "").replace(",", ".");
@@ -49,7 +62,7 @@ export function SavingsAllocator({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [fields, setFields] = useState<Record<number, string>>(() =>
-    Object.fromEntries(pots.map((pot) => [pot.id, toField(pot.monthMinor)])),
+    Object.fromEntries(pots.map((pot) => [pot.id, toField(seedFor(pot))])),
   );
 
   const amounts = pots.map((pot) => toMinor(fields[pot.id] ?? ""));
@@ -63,20 +76,70 @@ export function SavingsAllocator({
     (pot, index) => amounts[index] !== pot.monthMinor && !Number.isNaN(amounts[index]),
   );
 
-  function spreadEvenly() {
-    if (pots.length === 0) return;
-    // The remainder goes to the first pot rather than vanishing — rappen that
-    // do not divide by the number of pots are still money.
-    const each = Math.floor(surplusMinor / pots.length);
-    const remainder = surplusMinor - each * pots.length;
+  function applyStandingOrders() {
     setFields(
       Object.fromEntries(
-        pots.map((pot, index) => [
-          pot.id,
-          toField(index === 0 ? each + remainder : each),
-        ]),
+        pots.map((pot) => [pot.id, toField(pot.monthlyMinor ?? 0)]),
       ),
     );
+  }
+
+  function spreadEvenly() {
+    if (pots.length === 0) return;
+    // A pot the user already put a number into is left alone — its amount
+    // still counts against the pool, but only the empty fields get filled.
+    const filled = pots.map((pot) => (fields[pot.id] ?? "").trim() !== "");
+    const claimedByFilled = pots.reduce(
+      (sum, pot, index) =>
+        filled[index] && !Number.isNaN(amounts[index]) ? sum + amounts[index] : sum,
+      0,
+    );
+    const pool = Math.max(0, surplusMinor - claimedByFilled);
+
+    // A pot's share stops at what it still needs to reach its target —
+    // `savedMinor` already counts this month's own contribution, so add
+    // `monthMinor` back before subtracting.
+    const caps = pots.map((pot) =>
+      Math.max(0, pot.targetMinor - pot.savedMinor + pot.monthMinor),
+    );
+    const allocated = new Array<number>(pots.length).fill(0);
+    // Water-filling: a pot that caps out at the current even share frees its
+    // leftover for the pots still under theirs, which raises their share, which
+    // can cap out another pot — so this repeats until a pass caps out none.
+    const active = new Set(
+      pots.map((_, index) => index).filter((index) => !filled[index]),
+    );
+    let pending = pool;
+    while (active.size > 0) {
+      const share = Math.floor(pending / active.size);
+      let anyCapped = false;
+      for (const index of active) {
+        if (caps[index] <= share) {
+          allocated[index] = caps[index];
+          pending -= caps[index];
+          active.delete(index);
+          anyCapped = true;
+        }
+      }
+      if (!anyCapped) {
+        // Nothing left to cap: split what remains evenly, remainder to the
+        // first still-active pot rather than letting it vanish.
+        const indices = [...active];
+        const each = Math.floor(pending / indices.length);
+        const remainder = pending - each * indices.length;
+        indices.forEach((index, position) => {
+          allocated[index] = position === 0 ? each + remainder : each;
+        });
+        break;
+      }
+    }
+    setFields((previous) => {
+      const next = { ...previous };
+      pots.forEach((pot, index) => {
+        if (!filled[index]) next[pot.id] = toField(allocated[index]);
+      });
+      return next;
+    });
   }
 
   function save() {
@@ -159,6 +222,17 @@ export function SavingsAllocator({
               : t("unallocated", { amount: formatMoney(remaining) })}
         </p>
 
+        {/* Only offered when there is something to apply. */}
+        {pots.some((pot) => pot.monthlyMinor !== null) && (
+          <button
+            type="button"
+            onClick={applyStandingOrders}
+            disabled={pending}
+            className="h-9 cursor-pointer rounded-md border border-line-strong px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-default disabled:opacity-60"
+          >
+            {t("useStandingOrders")}
+          </button>
+        )}
         <button
           type="button"
           onClick={spreadEvenly}

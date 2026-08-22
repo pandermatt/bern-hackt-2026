@@ -16,6 +16,8 @@ import {
   ledgerChunk,
   monthSurplus,
   monthTotals,
+  byTargetDate,
+  isCalendarDate,
   potFill,
   potPercent,
   potSlot,
@@ -547,6 +549,71 @@ describe("potPercent", () => {
   it("treats a zero target as done only once something is in it", () => {
     expect(potPercent(0, 0)).toBe(0);
     expect(potPercent(100, 0)).toBe(100);
+  });
+});
+
+describe("isCalendarDate", () => {
+  it("accepts a real day", () => {
+    expect(isCalendarDate("2026-07-01")).toBe(true);
+    expect(isCalendarDate("2026-12-31")).toBe(true);
+  });
+
+  it("rejects a day that never existed", () => {
+    // The `YYYY-MM-DD` shape alone accepts all of these, which is why the
+    // check is more than a regex.
+    expect(isCalendarDate("2026-02-30")).toBe(false);
+    expect(isCalendarDate("2026-13-01")).toBe(false);
+    expect(isCalendarDate("2026-04-31")).toBe(false);
+    expect(isCalendarDate("2026-00-10")).toBe(false);
+  });
+
+  it("knows about leap years without constructing a Date", () => {
+    expect(isCalendarDate("2024-02-29")).toBe(true);
+    expect(isCalendarDate("2026-02-29")).toBe(false);
+    expect(isCalendarDate("2000-02-29")).toBe(true);
+    expect(isCalendarDate("1900-02-29")).toBe(false);
+  });
+
+  it("rejects anything that is not the shape", () => {
+    expect(isCalendarDate("")).toBe(false);
+    expect(isCalendarDate("01.07.2026")).toBe(false);
+    expect(isCalendarDate("2026-7-1")).toBe(false);
+  });
+});
+
+describe("byTargetDate", () => {
+  const pot = (id: number, targetOn: string | null) => ({
+    id,
+    name: `Pot ${id}`,
+    targetMinor: 100000,
+    savedMinor: 0,
+    monthMinor: 0,
+    targetOn,
+    monthlyMinor: null,
+    slot: 1,
+  });
+
+  it("puts the soonest deadline first", () => {
+    const sorted = [
+      pot(1, "2027-01-01"),
+      pot(2, "2026-03-15"),
+      pot(3, "2026-11-30"),
+    ].sort(byTargetDate);
+    expect(sorted.map((p) => p.id)).toEqual([2, 3, 1]);
+  });
+
+  it("sorts an undated pot last, not first", () => {
+    // `null` is "eventually", and eventually is never sooner than a date.
+    // Sorting it to the top would bury the pot that is actually due.
+    const sorted = [pot(1, null), pot(2, "2026-03-15"), pot(3, null)].sort(
+      byTargetDate,
+    );
+    expect(sorted.map((p) => p.id)).toEqual([2, 1, 3]);
+  });
+
+  it("breaks ties on id, so a pot does not jump when a sibling is edited", () => {
+    const sorted = [pot(9, "2026-05-01"), pot(4, "2026-05-01")].sort(byTargetDate);
+    expect(sorted.map((p) => p.id)).toEqual([4, 9]);
   });
 });
 
