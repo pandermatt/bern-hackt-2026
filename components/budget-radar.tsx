@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   EChart,
-  tooltipStyle,
   useChartTokens,
   withAlpha,
   type ChartTokens,
@@ -226,7 +225,16 @@ function buildOption(
     animationDuration: 600,
     tooltip: {
       trigger: "item",
-      ...tooltipStyle(tokens),
+      // Tooltip chrome is inlined per chart: the shared `tooltipStyle` helper
+      // this used to spread went away when the dashboard charts were rewritten,
+      // and every other chart now carries its own.
+      backgroundColor: tokens.surface,
+      borderColor: tokens.line,
+      borderWidth: 1,
+      padding: [8, 10] as [number, number],
+      textStyle: { color: tokens.text, fontSize: 12 },
+      extraCssText:
+        "box-shadow: 0 4px 12px -2px rgba(0,0,0,0.18); border-radius: 8px;",
       formatter: () => {
         // One panel for the whole shape: a radar's per-point tooltip fires on
         // the polygon, not the spoke, so naming a single category would be a
