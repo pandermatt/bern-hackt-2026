@@ -96,6 +96,11 @@ export function SavingsPot({
   // funded past its target says 133% rather than a flat, less useful 100%.
   const percent = potPercent(pot.savedMinor, pot.targetMinor);
   const full = fill >= 1;
+  // The lid swaps in the instant a pot reaches its target — a hard cut, not a
+  // transition — and it paints over the mouth. Animating the liquid up to
+  // meet it would show the level still visibly rising underneath an already
+  // -sealed lid, so the last stretch into "full" snaps instead of gliding.
+  const liquidClass = full ? undefined : "pot-liquid";
   // Where the liquid's surface sits. Measured between the two ellipse centres,
   // so an empty pot's surface is the base and a full one's is the mouth.
   const surface = BASE_Y - (BASE_Y - MOUTH_Y) * fill;
@@ -178,10 +183,10 @@ export function SavingsPot({
             <path d={BODY} />
           </clipPath>
           <clipPath id={dryClip}>
-            <rect className="pot-liquid" x="0" y="0" width="120" height={surface} />
+            <rect className={liquidClass} x="0" y="0" width="120" height={surface} />
           </clipPath>
           <clipPath id={wetClip}>
-            <rect className="pot-liquid" x="0" y={surface} width="120" height={128 - surface} />
+            <rect className={liquidClass} x="0" y={surface} width="120" height={128 - surface} />
           </clipPath>
         </defs>
 
@@ -210,7 +215,7 @@ export function SavingsPot({
                   in globals.css for why a CSS transition is enough here with
                   no client JS. */}
               <rect
-                className="pot-liquid"
+                className={liquidClass}
                 x="0"
                 y={surface}
                 width="120"
@@ -223,9 +228,9 @@ export function SavingsPot({
                   muted fills start much closer to the body than the chart ramp
                   did, so the wash that used to lift the level was washing it
                   out instead. */}
-              <ellipse className="pot-liquid" cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
+              <ellipse className={liquidClass} cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
               <ellipse
-                className="pot-liquid"
+                className={liquidClass}
                 cx={CX}
                 cy={surface}
                 rx={RX}
