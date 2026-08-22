@@ -13,9 +13,10 @@ import type { BudgetRow, SavingsPot } from "@/lib/insights";
  * - **over budget** — the comparison lived inline in `budget-editor.tsx` and
  *   `budget-radar.tsx` and was exported from neither. `isOverBudget` below is
  *   that predicate, in one place.
- * - **unusual spending** — `getAnomalyOverview().action`. The engine already
+ * - **unusual spending** — `getAnomalyOverview(true).action`. The engine already
  *   splits findings into `action` ("has a next step") and `context` ("is a
- *   fact about last month"); only the first kind earns a slot here.
+ *   fact about last month"); only the first kind earns a slot here, and the
+ *   `true` drops the rules the reader has already worked through entirely.
  * - **free money** — `SavingsOverview.freeMinor`, which was computed and read
  *   by nothing.
  */
