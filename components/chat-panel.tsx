@@ -15,15 +15,14 @@ import {
 import { formatMoney } from "@/lib/insights";
 
 /**
- * The assistant's body, and the state behind it — one conversation, two shells.
+ * The assistant's body, and the state behind it.
  *
- * `ChatSidebar` mounts it inside a slide-over; the entry page mounts it inline.
- * They are split as a **hook plus a presentational component** rather than one
- * component on purpose: `ChatSidebar` never unmounts (it renders a launcher
- * when closed), so the transcript survives closing and reopening only because
- * the state lives above the `open &&` branch. A single component owning that
- * state would have to be mounted inside the branch, and every close would throw
- * the conversation away.
+ * `HomeChat` mounts it inline at the top of the entry page — the assistant's
+ * one home, since the dashboard's slide-over was removed. It stays split as a
+ * **hook plus a presentational component** rather than one component: the
+ * shell owns the conversation, so a shell that hides the panel behind a toggle
+ * (as `HomeChat` does with the debug view) keeps the transcript across it. A
+ * single component owning that state would lose it on every toggle.
  *
  * So: the shell calls `useAssistantChat()` at its own top level and renders
  * `<ChatPanel>` wherever it likes. `components/echart.tsx` pairs a hook with a
@@ -37,7 +36,8 @@ export type PanelMessage = {
   /** A validated surplus split, rendered as a card with an Apply button. */
   proposal?: AllocationProposal;
   /** Apply state lives on the message, not the panel: the panel unmounts
-   * with the slide-over, and an applied card has to stay applied. */
+   * when the shell toggles away from it, and an applied card has to stay
+   * applied. */
   proposalApplied?: boolean;
   proposalError?: string;
   error?: boolean;
@@ -127,7 +127,7 @@ export function useAssistantChat(): AssistantChat {
    * apply time and re-checks the surplus ceiling server-side — a proposal
    * frozen as absolute totals would silently revert allocations made between
    * propose and Apply. The outcome lands on the message itself, so an applied
-   * card stays applied after the slide-over closes and reopens.
+   * card stays applied across a toggle away from the panel and back.
    */
   const applyProposal = (index: number) => {
     const message = messages[index];
@@ -179,15 +179,16 @@ export function ChatPanel({
   chat,
   className = "",
   /**
-   * The transcript's own box. The slide-over gives it the leftover height of a
-   * viewport-tall column; the inline panel pins it to a constant one, so the
-   * page below the chat does not shift on every reply.
+   * The transcript's own box. The inline panel pins it to a constant height
+   * rather than letting it take the leftover space, so the page below the chat
+   * does not shift on every reply.
    */
   scrollClassName = "flex-1",
   /**
-   * Optional, and the inline caller deliberately omits it: focusing an input
-   * near the top of a mobile page raises the keyboard on arrival and shoves
-   * away the content the reader came for.
+   * Optional, and `HomeChat` — the only caller today — deliberately omits it:
+   * focusing an input near the top of a mobile page raises the keyboard on
+   * arrival and shoves away the content the reader came for. It is kept for a
+   * shell that opens the chat on demand, where focusing it is the right move.
    */
   inputRef,
   "aria-label": ariaLabel,
@@ -213,9 +214,9 @@ export function ChatPanel({
 
   // Keep the newest bubble in view — including the typing indicator. The
   // effect lives HERE, not in the hook: the hook survives in the shell while
-  // this panel (and its scroll container) unmounts with the slide-over, so a
-  // hook-side effect keyed on [messages, pending] never re-fires on reopen
-  // and the transcript came back scrolled to the top.
+  // this panel (and its scroll container) unmounts whenever the shell toggles
+  // away from it, so a hook-side effect keyed on [messages, pending] never
+  // re-fires on the way back and the transcript returned scrolled to the top.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -223,7 +224,7 @@ export function ChatPanel({
 
   return (
     /* `min-h-0` is not optional. This root is a new flex item between the
-       slide-over and the transcript, and it carries no `overflow`, so its
+       shell and the transcript, and it carries no `overflow`, so its
        `min-height: auto` resolves to `min-content` — a long conversation would
        grow the column and push the input form off the bottom of the screen. */
     <div

@@ -643,15 +643,11 @@
     "confirm": "Delete account"
   },
   "Chat": {
-    "openLabel": "Ask the money assistant",
-    "panelLabel": "Money assistant",
-    "resizeLabel": "Resize assistant",
     "title": "Money assistant",
     "subtitle": "Ask anything about your year",
     "debugTitle": "Request log",
     "debugSubtitle": "What went over the wire",
     "toggleDebug": "Toggle request log",
-    "close": "Close assistant",
     "intro": "I can show you where you could save, check for anything shady, list your subscriptions and help split a month's surplus across your saving goals. Ask away.",
     "suggestion1": "Where could I save money?",
     "suggestion2": "Is something shady going on in my account?",

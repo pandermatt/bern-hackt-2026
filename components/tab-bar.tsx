@@ -34,8 +34,7 @@ export function TabBar() {
   return (
     <div
       /*
-       * Below the header's `z-50` and above the page, on the same layer as the
-       * chat launcher — which is lifted clear of this bar in `chat-sidebar.tsx`.
+       * Below the header's `z-50` and above the page.
        *
        * iOS floats its own tab bar clear of every edge by about the same
        * amount on all three sides, which is what makes it read as an object
