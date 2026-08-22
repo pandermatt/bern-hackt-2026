@@ -1,10 +1,10 @@
 import { CalendarDays, Repeat } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { CSSProperties } from "react";
+import { createElement, type CSSProperties } from "react";
 
 import { SavingsGoalDelete } from "@/components/savings-goal-delete";
 import { SavingsGoalEdit } from "@/components/savings-goal-edit";
-import { goalIcon, iconPath } from "@/lib/goal-icon";
+import { goalIcon } from "@/lib/goal-icon";
 import {
   formatDay,
   formatMoney,
@@ -44,6 +44,13 @@ const MOUTH_Y = 22;
 const BASE_Y = 104;
 /** The glyph's centre — the wall's midpoint, clear of both ellipses. */
 const ICON_CENTRE_Y = (MOUTH_Y + BASE_Y) / 2;
+
+/* The glyph's box. Square, because every lucide icon is 24x24 — the fitting
+   maths this used to carry existed only for Font Awesome, whose boxes are not
+   (`fa-laptop` is 640x512, and forcing that into a square squashed it). */
+const ICON_BOX = 34;
+const ICON_X = CX - ICON_BOX / 2;
+const ICON_Y = ICON_CENTRE_Y - ICON_BOX / 2;
 
 /** The pot's silhouette: two walls closed by the base ellipse. */
 const BODY =
@@ -93,28 +100,15 @@ export function SavingsPot({
   // so an empty pot's surface is the base and a full one's is the mouth.
   const surface = BASE_Y - (BASE_Y - MOUTH_Y) * fill;
   const colour = `var(--chart-${pot.slot})`;
-  const icon = iconPath(goalIcon(pot.name));
+  // The name is the guess; `pot.icon` is what the model named for a goal the
+  // keyword rules could not place, and it wins when it is there.
+  const icon = goalIcon(pot.name, pot.icon);
 
   // Ids have to be unique per pot or every jar clips against the first one's
   // path. The row id is already unique per account.
   const bodyClip = `pot-body-${pot.id}`;
   const dryClip = `pot-dry-${pot.id}`;
   const wetClip = `pot-wet-${pot.id}`;
-
-  // The glyph is drawn on the pot wall at a fixed height, so the level rises
-  // past it as the goal fills. That means it has to survive being underwater:
-  // it is drawn twice, clipped at the surface. Above it is `--accent`, the
-  // template's teal. Below it switches to `--chart-ink` — the brand teal is a
-  // teal, and three of the ten fills are teals, so an accent glyph disappeared
-  // into its own liquid. Ink only ever darkens whatever it lands on.
-  //
-  // Fitted to its own box rather than assumed square: `fa-laptop` is 640×512,
-  // and forcing that into a square squashes it.
-  const ICON_BOX = 34;
-  const iconScale = ICON_BOX / Math.max(icon.width, icon.height);
-  const iconAt =
-    `translate(${CX - (icon.width * iconScale) / 2} ` +
-    `${ICON_CENTRE_Y - (icon.height * iconScale) / 2}) scale(${iconScale})`;
 
   return (
     <div className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
@@ -226,18 +220,39 @@ export function SavingsPot({
           />
         </g>
 
-        {/* The clip has to sit on an *untransformed* group: a clipPath is
-            resolved in the user space of the element that references it, so
-            clipping the scaled group would scale the waterline with it. */}
+        {/* The glyph is drawn on the pot wall at a fixed height, so the level
+            rises past it as the goal fills. That means it has to survive being
+            underwater: it is drawn twice, clipped at the surface. Above it is
+            `--accent`, the template's teal. Below it switches to `--chart-ink`
+            — the brand teal is a teal, and three of the ten fills are teals, so
+            an accent glyph disappeared into its own liquid. Ink only ever
+            darkens whatever it lands on, and the wet copy sits heavier than the
+            dry one because a stroked glyph has far less ink to lose to opacity
+            than the filled silhouette this used to be.
+
+            A lucide icon is a nested `<svg>`: it carries its own
+            `viewBox="0 0 24 24"`, so `x`/`y`/`size` place and scale it in the
+            pot's coordinates with no transform of our own. The clip stays on
+            the group around it — a clipPath is resolved in the user space of
+            the element referencing it, so putting it on the icon would scale
+            the waterline with the glyph. */}
         <g clipPath={`url(#${dryClip})`}>
-          <g transform={iconAt}>
-            <path d={icon.d} fill="var(--accent)" opacity="0.9" />
-          </g>
+          {createElement(icon, {
+            x: ICON_X,
+            y: ICON_Y,
+            size: ICON_BOX,
+            color: "var(--accent)",
+            opacity: 0.9,
+          })}
         </g>
         <g clipPath={`url(#${wetClip})`}>
-          <g transform={iconAt}>
-            <path d={icon.d} fill="var(--chart-ink)" opacity="0.45" />
-          </g>
+          {createElement(icon, {
+            x: ICON_X,
+            y: ICON_Y,
+            size: ICON_BOX,
+            color: "var(--chart-ink)",
+            opacity: 0.6,
+          })}
         </g>
 
         {/* Outline last, so the walls read as edges over the fill. */}

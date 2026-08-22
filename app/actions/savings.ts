@@ -14,6 +14,8 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { currentMonth, monthHasEnded } from "@/lib/clock";
+import { matchGoalIcon } from "@/lib/goal-icon";
+import { suggestGoalIcon } from "@/lib/llm/suggest-goal-icon";
 import {
   byTargetDate,
   defaultBudgetMonth,
@@ -222,6 +224,7 @@ export async function getSavingsOverview(
         monthMinor: thisMonth.get(goal.id) ?? 0,
         targetOn: goal.targetOn,
         monthlyMinor: goal.monthlyMinor,
+        icon: goal.icon,
         slot: potSlot(goal.id),
       }))
       .sort(byTargetDate),
@@ -246,23 +249,64 @@ export async function createSavingsGoal(
   const due = toTargetOn(targetOn);
   if (typeof due === "object" && due !== null) return savingsError(due.key);
 
+  let created: { id: number }[];
   try {
-    await db
+    created = await db
       .insert(savingsGoals)
       .values({
         userId: user.id,
         name: parsed.data.name,
         targetMinor: target,
         targetOn: due,
-      });
+      })
+      .returning({ id: savingsGoals.id });
   } catch {
     // The unique index on (user_id, name) is the only thing that realistically
     // fails here, and it fails for a reason worth naming.
     return savingsError("duplicateName", { name: parsed.data.name });
   }
 
+  await nameTheIcon(parsed.data.name, created[0]?.id, user.id);
+
   revalidatePath("/[locale]/budget", "page");
   return { ok: true };
+}
+
+/**
+ * Gives a pot a glyph the keyword rules could not find for it.
+ *
+ * Only ever a second guess: a name the rules match already draws the right
+ * picture on every render for free, so asking about it would be a network round
+ * trip to be told what we knew. This is the whole of the cost control — the
+ * same shape as `selectCrowdedFindings`, which spends a request only on the
+ * findings a person cannot read unaided.
+ *
+ * **Awaited rather than left floating.** `startAnomalyScan` detaches its work
+ * because a scan runs for minutes; this is one small completion, and awaiting
+ * it keeps everything inside the request — the `revalidatePath` that follows
+ * then paints the right glyph the first time instead of a piggy bank that
+ * changes its mind a second later. The timeout inside `suggestGoalIcon` is what
+ * bounds the wait.
+ *
+ * Nothing here can fail the creation. The goal is already in the table; a
+ * missing icon is the state every goal was in before this existed.
+ */
+async function nameTheIcon(
+  name: string,
+  goalId: number | undefined,
+  userId: number,
+): Promise<void> {
+  if (goalId === undefined) return;
+  if (matchGoalIcon(name) !== null) return;
+
+  const icon = await suggestGoalIcon(name);
+  if (icon === null) return;
+
+  await db
+    .update(savingsGoals)
+    .set({ icon })
+    // Scoped by owner as well as id, like every other write in this file.
+    .where(and(eq(savingsGoals.id, goalId), eq(savingsGoals.userId, userId)));
 }
 
 /**

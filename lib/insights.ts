@@ -734,6 +734,12 @@ export type SavingsPot = {
    * suggestion for splitting a surplus — it never moves money on its own.
    */
   monthlyMinor: number | null;
+  /**
+   * A lucide name from `GOAL_ICONS`, or null for a goal nobody named one for.
+   * Only set where the keyword rules missed and the model was asked instead —
+   * see `lib/goal-icon.ts`.
+   */
+  icon: string | null;
   /** Palette slot, 1-based. Stable per goal — see `potSlot`. */
   slot: number;
 };

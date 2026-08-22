@@ -1,48 +1,133 @@
-import { faBaby } from "@fortawesome/free-solid-svg-icons/faBaby";
-import { faBicycle } from "@fortawesome/free-solid-svg-icons/faBicycle";
-import { faCamera } from "@fortawesome/free-solid-svg-icons/faCamera";
-import { faCar } from "@fortawesome/free-solid-svg-icons/faCar";
-import { faCoins } from "@fortawesome/free-solid-svg-icons/faCoins";
-import { faCouch } from "@fortawesome/free-solid-svg-icons/faCouch";
-import { faGift } from "@fortawesome/free-solid-svg-icons/faGift";
-import { faGraduationCap } from "@fortawesome/free-solid-svg-icons/faGraduationCap";
-import { faGuitar } from "@fortawesome/free-solid-svg-icons/faGuitar";
-import { faHouse } from "@fortawesome/free-solid-svg-icons/faHouse";
-import { faLaptop } from "@fortawesome/free-solid-svg-icons/faLaptop";
-import { faMobileScreen } from "@fortawesome/free-solid-svg-icons/faMobileScreen";
-import { faMotorcycle } from "@fortawesome/free-solid-svg-icons/faMotorcycle";
-import { faPiggyBank } from "@fortawesome/free-solid-svg-icons/faPiggyBank";
-import { faPlaneDeparture } from "@fortawesome/free-solid-svg-icons/faPlaneDeparture";
-import { faRing } from "@fortawesome/free-solid-svg-icons/faRing";
-import { faShieldHalved } from "@fortawesome/free-solid-svg-icons/faShieldHalved";
-import { faUmbrellaBeach } from "@fortawesome/free-solid-svg-icons/faUmbrellaBeach";
-import { faWrench } from "@fortawesome/free-solid-svg-icons/faWrench";
-import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
+import {
+  Baby,
+  Bed,
+  Bike,
+  BookOpen,
+  Briefcase,
+  Bus,
+  Camera,
+  Car,
+  Cat,
+  Coins,
+  Dog,
+  Dumbbell,
+  Gamepad2,
+  Gem,
+  Gift,
+  GraduationCap,
+  Guitar,
+  Hammer,
+  Headphones,
+  House,
+  Laptop,
+  Motorbike,
+  Mountain,
+  Palette,
+  PiggyBank,
+  PlaneTakeoff,
+  ShieldHalf,
+  Ship,
+  Shirt,
+  Smartphone,
+  Sofa,
+  Sprout,
+  Stethoscope,
+  Tent,
+  Ticket,
+  TrainFront,
+  TreePalm,
+  Utensils,
+  Wine,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 
 /**
- * Which Font Awesome glyph a savings goal wears, guessed from its name.
+ * Which glyph a savings goal wears, guessed from its name.
  *
- * There is no icon column. A picker is a second thing to fill in for every
+ * There is no icon picker. It would be a second thing to fill in for every
  * goal, and the name already says what the goal is — "Ferien" and "Holiday"
  * both want the same picture. The guess is deliberately generous with German,
  * because the app is Swiss and half the names people type will be.
  *
- * **Font Awesome Free has no palm tree** — `fa-tree-palm` is a Pro icon — so
- * holidays get `fa-umbrella-beach`, which is the free family's beach glyph and
- * the closest thing to the template's island.
- *
- * Deep imports (`.../faCar`) rather than the barrel: the barrel is ~2000 icon
- * definitions, and the same reasoning applies here as to `echarts/charts`.
+ * lucide, the same library every other icon in the app comes from. This used to
+ * be Font Awesome, for one component, which meant carrying a second dependency
+ * and a second drawing convention so that one glyph could look unlike every
+ * other glyph in the product.
  */
 
 /**
- * Matched in order, so a more specific rule wins: "Motorrad" has to reach
- * `fa-motorcycle` before "rad" hands it a bicycle.
+ * Every glyph a pot can wear.
+ *
+ * **One map, two jobs.** The keyword rules below pick from it, and
+ * `lib/llm/suggest-goal-icon.ts` offers its keys to the model as the only
+ * answers it may give. That is what makes it impossible for the model to name
+ * a picture this file cannot draw — the allowlist is not a copy of the render
+ * table, it *is* the render table.
+ *
+ * The first nineteen are what the rules use; the rest are there for the model,
+ * covering the goals a keyword table never will — a pet, a season ticket, a
+ * hobby. Keys are lucide's own names, which is also what is stored in
+ * `savings_goals.icon`.
  */
-const RULES: [readonly string[], IconDefinition][] = [
+export const GOAL_ICONS = {
+  Baby,
+  Bed,
+  Bike,
+  BookOpen,
+  Briefcase,
+  Bus,
+  Camera,
+  Car,
+  Cat,
+  Coins,
+  Dog,
+  Dumbbell,
+  Gamepad2,
+  Gem,
+  Gift,
+  GraduationCap,
+  Guitar,
+  Hammer,
+  Headphones,
+  House,
+  Laptop,
+  Motorbike,
+  Mountain,
+  Palette,
+  PiggyBank,
+  PlaneTakeoff,
+  ShieldHalf,
+  Ship,
+  Shirt,
+  Smartphone,
+  Sofa,
+  Sprout,
+  Stethoscope,
+  Tent,
+  Ticket,
+  TrainFront,
+  TreePalm,
+  Utensils,
+  Wine,
+  Wrench,
+} satisfies Record<string, LucideIcon>;
+
+export type GoalIconName = keyof typeof GOAL_ICONS;
+
+/** A stored name is only a name until it is one of ours. */
+export function isGoalIconName(value: string): value is GoalIconName {
+  return Object.hasOwn(GOAL_ICONS, value);
+}
+
+/**
+ * Matched in order, so a more specific rule wins: "Motorrad" has to reach
+ * `Motorbike` before "rad" hands it a bicycle.
+ */
+const RULES: [readonly string[], LucideIcon][] = [
   [
     ["holiday", "vacation", "ferien", "urlaub", "beach", "strand", "sommer", "summer"],
-    faUmbrellaBeach,
+    GOAL_ICONS.TreePalm,
   ],
   [
     // Ahead of the travel rule: "Investment" has nothing to do with a trip,
@@ -53,34 +138,34 @@ const RULES: [readonly string[], IconDefinition][] = [
       "etf", "depot", "börse", "boerse", "fonds", "rendite", "portfolio",
       "crypto", "krypto", "bitcoin", "vorsorge", "säule", "saeule", "pension",
     ],
-    faCoins,
+    GOAL_ICONS.Coins,
   ],
-  [["flight", "flug", "reise", "travel", "trip", "japan", "usa"], faPlaneDeparture],
-  [["motorrad", "motorcycle", "roller", "vespa", "scooter"], faMotorcycle],
-  [["car", "auto", "wagen", "fahrzeug", "tesla", "van"], faCar],
+  [["flight", "flug", "reise", "travel", "trip", "japan", "usa"], GOAL_ICONS.PlaneTakeoff],
+  [["motorrad", "motorcycle", "roller", "vespa", "scooter"], GOAL_ICONS.Motorbike],
+  [["car", "auto", "wagen", "fahrzeug", "tesla", "van"], GOAL_ICONS.Car],
   [
     ["computer", "laptop", "pc", "mac", "macbook", "notebook", "rechner"],
-    faLaptop,
+    GOAL_ICONS.Laptop,
   ],
-  [["phone", "handy", "iphone", "smartphone", "mobile"], faMobileScreen],
-  [["camera", "kamera", "foto", "photo", "lens"], faCamera],
-  [["house", "haus", "home", "wohnung", "flat", "apartment", "eigenheim"], faHouse],
-  [["furniture", "möbel", "moebel", "sofa", "couch", "kitchen", "küche"], faCouch],
-  [["bike", "velo", "fahrrad", "bicycle", "rad"], faBicycle],
-  [["wedding", "hochzeit", "ring", "verlobung"], faRing],
-  [["baby", "kind", "child", "kita"], faBaby],
-  [["study", "studium", "school", "schule", "uni", "course", "kurs"], faGraduationCap],
-  [["guitar", "gitarre", "piano", "klavier", "music", "musik"], faGuitar],
-  [["gift", "geschenk", "present", "weihnachten", "christmas"], faGift],
-  [["renovation", "renovation", "umbau", "repair", "reparatur", "tools"], faWrench],
+  [["phone", "handy", "iphone", "smartphone", "mobile"], GOAL_ICONS.Smartphone],
+  [["camera", "kamera", "foto", "photo", "lens"], GOAL_ICONS.Camera],
+  [["house", "haus", "home", "wohnung", "flat", "apartment", "eigenheim"], GOAL_ICONS.House],
+  [["furniture", "möbel", "moebel", "sofa", "couch", "kitchen", "küche"], GOAL_ICONS.Sofa],
+  [["bike", "velo", "fahrrad", "bicycle", "rad"], GOAL_ICONS.Bike],
+  [["wedding", "hochzeit", "ring", "verlobung"], GOAL_ICONS.Gem],
+  [["baby", "kind", "child", "kita"], GOAL_ICONS.Baby],
+  [["study", "studium", "school", "schule", "uni", "course", "kurs"], GOAL_ICONS.GraduationCap],
+  [["guitar", "gitarre", "piano", "klavier", "music", "musik"], GOAL_ICONS.Guitar],
+  [["gift", "geschenk", "present", "weihnachten", "christmas"], GOAL_ICONS.Gift],
+  [["renovation", "renovation", "umbau", "repair", "reparatur", "tools"], GOAL_ICONS.Wrench],
   [
     ["emergency", "notgroschen", "reserve", "rainy", "puffer", "buffer", "insurance"],
-    faShieldHalved,
+    GOAL_ICONS.ShieldHalf,
   ],
 ];
 
 /** The fallback. A pot with no guessable name is still a pot of money. */
-export const DEFAULT_GOAL_ICON = faPiggyBank;
+export const DEFAULT_GOAL_ICON = GOAL_ICONS.PiggyBank;
 
 /**
  * Whether a name mentions a keyword.
@@ -96,30 +181,34 @@ function mentions(words: string[], name: string): boolean {
   );
 }
 
-export function goalIcon(name: string): IconDefinition {
+/**
+ * What the keyword rules alone make of a name, or `null` for a name they have
+ * nothing to say about.
+ *
+ * Separate from `goalIcon` because "the rules missed" is the question
+ * `createSavingsGoal` asks before spending a request on the model — folding the
+ * fallback in here would make every goal look like a match.
+ */
+export function matchGoalIcon(name: string): LucideIcon | null {
   const haystack = name.toLowerCase();
   for (const [words, icon] of RULES) {
     if (mentions([...words], haystack)) return icon;
   }
-  return DEFAULT_GOAL_ICON;
+  return null;
 }
 
 /**
- * A Font Awesome definition unpacked into what an `<svg>` needs.
+ * The glyph a pot draws: a stored name first, then the rules, then the pot.
  *
- * `icon[4]` is either one path or several; joining them is safe because every
- * free solid glyph uses the same fill rule. The box is **not** always square —
- * `fa-laptop` is 640×512 — so a caller that assumes 512 stretches half the set.
+ * `stored` is `savings_goals.icon` — what the model named for a goal the rules
+ * could not place. It is checked against `GOAL_ICONS` rather than trusted,
+ * exactly as `anomalyIcon` falls back rather than trusting a stored icon name:
+ * a hand-edited row must not be able to take a page down.
+ *
+ * In practice the first two branches never disagree, because a name the rules
+ * match is a name the model was never asked about.
  */
-export function iconPath(icon: IconDefinition): {
-  width: number;
-  height: number;
-  d: string;
-} {
-  const [width, height, , , path] = icon.icon;
-  return {
-    width,
-    height,
-    d: Array.isArray(path) ? path.join(" ") : path,
-  };
+export function goalIcon(name: string, stored?: string | null): LucideIcon {
+  if (stored && isGoalIconName(stored)) return GOAL_ICONS[stored];
+  return matchGoalIcon(name) ?? DEFAULT_GOAL_ICON;
 }

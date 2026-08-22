@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Transaction } from "@/db/schema";
-import { goalIcon } from "@/lib/goal-icon";
+import { goalIcon, matchGoalIcon } from "@/lib/goal-icon";
 import {
   accountTotals,
   applyFilters,
@@ -494,43 +494,69 @@ describe("potFill", () => {
 });
 
 describe("goalIcon", () => {
-  const name = (goal: string) => goalIcon(goal).iconName;
+  // lucide's own name for the glyph, which is also what the icon column holds.
+  const name = (goal: string, stored?: string | null) =>
+    goalIcon(goal, stored).displayName;
 
   it("reads the goal's own language", () => {
     // The app is Swiss; half the names people type will be German.
-    expect(name("Ferien")).toBe("umbrella-beach");
-    expect(name("Holiday")).toBe("umbrella-beach");
-    expect(name("Auto")).toBe("car");
-    expect(name("New car")).toBe("car");
-    expect(name("Computer")).toBe("laptop");
-    expect(name("Haus")).toBe("house");
+    expect(name("Ferien")).toBe("TreePalm");
+    expect(name("Holiday")).toBe("TreePalm");
+    expect(name("Auto")).toBe("Car");
+    expect(name("New car")).toBe("Car");
+    expect(name("Computer")).toBe("Laptop");
+    expect(name("Haus")).toBe("House");
   });
 
   it("matches inside a longer word", () => {
-    expect(name("Ferienkasse 2027")).toBe("umbrella-beach");
+    expect(name("Ferienkasse 2027")).toBe("TreePalm");
   });
 
   it("takes the more specific rule first", () => {
     // "Motorrad" contains "rad", which is the bicycle keyword.
-    expect(name("Motorrad")).toBe("motorcycle");
+    expect(name("Motorrad")).toBe("Motorbike");
   });
 
   it("does not let a two-letter keyword hunt through unrelated names", () => {
     // "pc" is inside "Upcycling"; a plain substring test hands it a laptop.
-    expect(name("Upcycling")).toBe("piggy-bank");
-    expect(name("Neuer PC")).toBe("laptop");
+    expect(name("Upcycling")).toBe("PiggyBank");
+    expect(name("Neuer PC")).toBe("Laptop");
   });
 
   it("knows what money looks like", () => {
-    expect(name("Investment")).toBe("coins");
-    expect(name("Investieren")).toBe("coins");
-    expect(name("ETF Sparplan")).toBe("coins");
-    expect(name("3. Säule")).toBe("coins");
+    expect(name("Investment")).toBe("Coins");
+    expect(name("Investieren")).toBe("Coins");
+    expect(name("ETF Sparplan")).toBe("Coins");
+    expect(name("3. Säule")).toBe("Coins");
   });
 
   it("falls back to a piggy bank rather than guessing", () => {
-    expect(name("Sparbüchse")).toBe("piggy-bank");
-    expect(name("")).toBe("piggy-bank");
+    expect(name("Sparbüchse")).toBe("PiggyBank");
+    expect(name("")).toBe("PiggyBank");
+  });
+
+  it("draws a stored icon for a name the rules cannot place", () => {
+    // What the model is for: the rules have nothing to say about a table
+    // football table, and the goal cannot be renamed to help them.
+    expect(name("Töggelikasten")).toBe("PiggyBank");
+    expect(name("Töggelikasten", "Gamepad2")).toBe("Gamepad2");
+  });
+
+  it("does not trust a stored name it cannot draw", () => {
+    // A hand-edited row must fall through, not take the page down.
+    expect(name("Töggelikasten", "Unicorn")).toBe("PiggyBank");
+    expect(name("Auto", "Unicorn")).toBe("Car");
+    expect(name("Auto", null)).toBe("Car");
+  });
+});
+
+describe("matchGoalIcon", () => {
+  it("says nothing rather than falling back", () => {
+    // This is the question `createSavingsGoal` asks before spending a request:
+    // folding the piggy bank in here would make every goal look like a match.
+    expect(matchGoalIcon("Sparbüchse")).toBeNull();
+    expect(matchGoalIcon("Töggelikasten")).toBeNull();
+    expect(matchGoalIcon("Ferien")).not.toBeNull();
   });
 });
 
@@ -591,6 +617,7 @@ describe("byTargetDate", () => {
     monthMinor: 0,
     targetOn,
     monthlyMinor: null,
+    icon: null,
     slot: 1,
   });
 
