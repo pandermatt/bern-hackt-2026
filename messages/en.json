@@ -126,6 +126,8 @@
     "greeting": "Hello {name}",
     "nudgesLabel": "Things worth knowing",
     "allClear": "Nothing needs your attention today.",
+    "showAll": "Show all ({count})",
+    "showLess": "Show less",
     "overBudgetTitle": "Over budget in {category}",
     "overBudgetBody": "{amount} past the limit you set.",
     "freeMoneyTitle": "{amount} still unassigned",

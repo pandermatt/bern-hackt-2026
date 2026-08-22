@@ -126,6 +126,8 @@
     "greeting": "Hallo {name}",
     "nudgesLabel": "Wissenswertes",
     "allClear": "Heute braucht nichts Ihre Aufmerksamkeit.",
+    "showAll": "Alle anzeigen ({count})",
+    "showLess": "Weniger anzeigen",
     "overBudgetTitle": "Budget überschritten bei {category}",
     "overBudgetBody": "{amount} über dem von Ihnen gesetzten Limit.",
     "freeMoneyTitle": "{amount} noch nicht zugewiesen",
