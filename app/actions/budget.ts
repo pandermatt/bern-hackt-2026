@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { budgets, transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { currentMonth } from "@/lib/clock";
 import {
   budgetRows,
   defaultBudgetMonth,
@@ -43,13 +44,6 @@ async function ownedRows(userId: number): Promise<Transaction[]> {
     .from(transactions)
     .where(eq(transactions.userId, userId))
     .orderBy(desc(transactions.bookedOn), asc(transactions.id));
-}
-
-/** "2026-08" for the server's today. Kept out of `lib/insights.ts`, which
- *  never constructs a `Date`. */
-function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export async function getBudgetOverview(

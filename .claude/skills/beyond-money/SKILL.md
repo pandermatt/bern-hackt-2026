@@ -33,17 +33,31 @@ never through the UI.
   "tighten" this to NOT NULL** without a deliberate migration plan — and for
   the same reason, do not add a NOT NULL column to `transactions` once it has
   rows.
-- **`budgets` is the one writable table.** `transactions` is read-only in the
+- **`budgets`, `savings_goals` and `savings_allocations` are the writable
+  tables.** `transactions` is read-only in the
   UI; budget limits are not. Its `userId` is **NOT NULL**, unlike
   `transactions.userId` — that column is nullable because it was added to a
   populated table and `drizzle-kit push` deploys without `--force`, whereas
   `budgets` is created empty, so the constraint costs nothing. The unique index
   on `(user_id, category)` is what makes saving an upsert rather than a
-  read-then-write race.
+  read-then-write race. The two savings tables are created empty for the same
+  reason and follow the same shape.
+- **An allocation is keyed by `(goal_id, month)`, not appended as a log.** The
+  page's question is "how much of March have I already put away", and with a
+  log that answer changes meaning the moment someone revises an allocation.
+  One row per goal per month makes revising an upsert and keeps the month's
+  remaining balance a subtraction rather than a reconciliation.
+- **Deleting a goal releases its money rather than destroying it.** A month's
+  surplus is a property of the statements, so cascading the allocations away
+  makes those francs allocatable again. The confirm dialog says so, because it
+  is the opposite of what "delete" usually means.
 - **An unset limit is `null`, and zero is a real budget of nothing.** Clearing
   a field deletes the row; it does not store 0. Don't collapse the two — a
   category budgeted at nothing and a category with no budget render, sort and
-  warn differently.
+  warn differently. **Savings allocations are the opposite**: putting zero
+  francs in a pot and putting nothing in it are the same event, so there both
+  blank and `0` delete the row. The distinction is about whether the value
+  carries meaning, not about house style.
 - **Money is signed integer minor units** (`amount_minor`, rappen), never
   `real`. The EUR lines in the source arrive as `46.96976052505031`, and
   summing a few hundred IEEE-754 doubles drifts. Income is positive, expenses
@@ -112,13 +126,31 @@ Unchanged from the template this app grew out of, and still exactly true.
   so a junk query string renders defaults rather than throwing. `?month=` on
   the budget page is checked against the months that exist and falls back to
   the default rather than rendering an empty page.
-- **`saveBudgets` is the app's only data mutation, and it uses the `{ ok }`
-  envelope** — that is what the envelope was always for. It runs its deletes
-  and upserts inside one `db.transaction`, so a half-saved budget is not a
-  state the page can land in. Reads on that page still return data directly.
+- **Mutations use the `{ ok }` envelope; reads return data directly.**
+  `saveBudgets` and the three actions in `app/actions/savings.ts` are the app's
+  only mutations — that envelope is what the client raises a `sonner` toast
+  off. Each runs its deletes and upserts inside one `db.transaction`, so a
+  half-saved budget or a half-allocated month is not a state the page can land
+  in.
+- **`allocateSurplus` recomputes the month's surplus server-side.** It is the
+  one number that bounds the whole operation, and a client that posts its own
+  ceiling has no ceiling. The action also intersects the posted goal ids with
+  the ones this account owns, so a guessed id cannot fund someone else's pot.
+  The running total in `SavingsAllocator` is a convenience, not the check —
+  verified by replaying the action's own POST with a tampered amount.
 
 ## Rendering
 
+- **A pot is inline SVG in a server component, not a chart.** It is one number
+  between 0 and 1; putting the ECharts boundary and a canvas around a rectangle
+  buys nothing. The jar is a `clipPath` and the money is a rect whose top edge
+  moves, so it renders in the server HTML and needs no hydration. `potFill`
+  clamps at 1 — over-funding a goal is allowed, but a 130% fill paints outside
+  the jar.
+- **A pot's colour comes from its row id, not its position.** `potSlot` keys on
+  the id so deleting one goal does not repaint the rest. Goals have no chart
+  counterpart to agree with, so any stable mapping does — this one is stable
+  because ids are.
 - **The dashboard is server-rendered apart from the filter bar, the two
   charts, and the theme switch.** Everything else stays on the server. The
   charts are the deliberate exception described below; the rule they came from

@@ -10,6 +10,9 @@ import {
   monthlySeries,
   budgetRows,
   defaultBudgetMonth,
+  monthSurplus,
+  potFill,
+  potSlot,
   slotsOf,
   stackByCategory,
   paginate,
@@ -336,6 +339,71 @@ describe("defaultBudgetMonth", () => {
 
   it("has nothing to open on when nothing is imported", () => {
     expect(defaultBudgetMonth([], "2026-08")).toBeNull();
+  });
+});
+
+describe("monthSurplus", () => {
+  const series = () =>
+    monthlySeries([
+      row({ kind: "income", amountMinor: 500000, bookedOn: "2025-01-25" }),
+      row({ amountMinor: -120000, bookedOn: "2025-01-05" }),
+      row({ kind: "income", amountMinor: 300000, bookedOn: "2025-02-25" }),
+      row({ amountMinor: -450000, bookedOn: "2025-02-05" }),
+    ]);
+
+  it("is income the month did not spend", () => {
+    expect(monthSurplus(series(), "2025-01", true)).toBe(380000);
+  });
+
+  it("is zero for a month that spent more than it earned", () => {
+    // Not a negative surplus: there is no such thing as money left over to
+    // put away when the month came out behind.
+    expect(monthSurplus(series(), "2025-02", true)).toBe(0);
+  });
+
+  it("is null while the month is still running", () => {
+    // Distinct from zero. A surplus computed mid-month only ever shrinks, and
+    // offering it as money to put away invites allocating rent.
+    expect(monthSurplus(series(), "2025-01", false)).toBeNull();
+  });
+
+  it("is zero for a month the statements do not cover", () => {
+    expect(monthSurplus(series(), "2024-07", true)).toBe(0);
+  });
+});
+
+describe("potFill", () => {
+  it("is the share of the target that is saved", () => {
+    expect(potFill(250000, 500000)).toBe(0.5);
+  });
+
+  it("clamps an over-funded pot rather than drawing past the rim", () => {
+    // Over-funding is allowed — money does not bounce off a full pot — but a
+    // fill of 130% would paint outside the jar.
+    expect(potFill(650000, 500000)).toBe(1);
+  });
+
+  it("treats a zero target as full only once something is in it", () => {
+    expect(potFill(0, 0)).toBe(0);
+    expect(potFill(100, 0)).toBe(1);
+  });
+});
+
+describe("potSlot", () => {
+  it("is 1-based, so it lines up with --chart-N", () => {
+    expect(potSlot(1)).toBe(1);
+    expect(potSlot(10)).toBe(10);
+  });
+
+  it("wraps past the end of the ramp instead of inventing a hue", () => {
+    expect(potSlot(11)).toBe(1);
+  });
+
+  it("is keyed on the id, so deleting a pot does not repaint the others", () => {
+    const before = [4, 7, 9].map((id) => potSlot(id));
+    // Goal 7 is gone; the survivors keep their colours because the slot never
+    // depended on their position in the list.
+    expect([4, 9].map((id) => potSlot(id))).toEqual([before[0], before[2]]);
   });
 });
 
