@@ -31,7 +31,9 @@ export async function generateMetadata({
   return { title: t("title") };
 }
 
-export default async function HomePage({ params }: PageProps<"/[locale]/home">) {
+export default async function HomePage({
+  params,
+}: PageProps<"/[locale]/home">) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Home" });
 
@@ -48,7 +50,8 @@ export default async function HomePage({ params }: PageProps<"/[locale]/home">) 
     getBudgetOverview(),
     getAnomalyOverview(),
   ]);
-  if (!savings || !budget || !anomalies) return redirect({ href: "/login", locale });
+  if (!savings || !budget || !anomalies)
+    return redirect({ href: "/login", locale });
 
   const nudges = rankNudges({
     budget: budget.rows,
@@ -70,55 +73,68 @@ export default async function HomePage({ params }: PageProps<"/[locale]/home">) 
        saturated end sits behind the dragon where there is no text to read. The
        chat and the nudges keep their own `bg-surface` ground. */
     <main className="relative flex-1 bg-linear-to-b from-bg via-pistachio/25 to-pistachio">
-      {/* Phone-shaped at every width. This is an entry page, not a dashboard —
-          stretching it across a desk monitor would only put the chat input a
-          mouse-journey away from the reader's eyes. */}
-      <div className="mx-auto flex min-h-full w-full max-w-md flex-col px-5 py-6">
+      {/* One phone-shaped column up to `lg`, where it becomes two. This is an
+          entry page, not a dashboard, so it never stretches to the full width
+          of a desk monitor — but a single `max-w-md` ribbon down the middle of
+          one leaves the chat input scrolled away below the mascot. Two columns
+          put both above the fold without either growing a mouse-journey wide. */}
+      <div className="mx-auto flex min-h-full w-full max-w-md flex-col px-5 py-6 lg:max-w-4xl">
         <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-text">
           {t("greeting", { name: displayName(user) })}
         </h1>
 
-        <div className="mt-4">
-          <HomeChat />
-        </div>
-
-        {/* `mt-auto` is what puts this block at the bottom of the *page*
-            rather than merely under the chat: on a quiet day it keeps the
-            dragon in the pistachio instead of floating mid-screen. It is also
-            what makes the deck unfold *upwards* — the auto margin gives up
-            space as the stack grows, so the dragon stays put and the cards rise
-            out of it rather than shoving it off the screen. */}
-        <div className="mt-auto pt-8">
-          {/* One arrangement for both states: the bubble, then the dragon
-              saying it. With nothing to report the all-clear line is simply the
-              only thing in the bubble. Pistachio is a fill — 2:1 on white —
-              never a surface for type, so nothing here sits on the gradient
-              without its own ground. */}
-          <NudgeStack
-            label={t("nudgesLabel")}
-            speaker={
-              /* A plain `<img>`, like `merchant-avatar.tsx`: a small asset
-                 already at its final size on our own origin. `next/image`
-                 would add a `/_next/image` round trip and this repo's first
-                 `images` config to save nothing. */
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={DRAGON_SRC[dragon]}
-                alt={t(`dragonAlt.${dragon}`)}
-                width={512}
-                height={512}
-                className="h-28 w-28 drop-shadow-sm"
-              />
-            }
-          >
-            {nudges.length > 0 ? (
-              nudges.map((nudge) => <NudgeCard key={nudge.id} nudge={nudge} />)
-            ) : (
-              <p className="w-fit rounded-full bg-surface/85 px-3 py-1 text-[12.5px] text-text-muted backdrop-blur-sm">
-                {t("allClear")}
-              </p>
-            )}
-          </NudgeStack>
+        {/* `flex-1` on this wrapper, not on the page column, is what keeps the
+            dragon's `mt-auto` reaching the bottom of the page in both layouts:
+            as a flex column it is the only growing child, and as a grid its
+            two tracks stretch to its height. */}
+        <div className="mt-4 flex flex-1 flex-col lg:grid lg:grid-cols-2 lg:gap-8">
+          {/* `lg:self-start` so the card keeps its own height instead of being
+              stretched to match the nudges-and-dragon track. */}
+          <div className="lg:self-start">
+            <HomeChat />
+          </div>
+          {/* The second track. On a phone this is simply the rest of the
+              stack, in the same order it has always been. */}
+          <div className="mt-4 flex flex-1 flex-col lg:mt-0">
+            {/* `mt-auto` is what puts this block at the bottom of the *page*
+                rather than merely under the chat: on a quiet day it keeps the
+                dragon in the pistachio instead of floating mid-screen. It is
+                also what makes the deck unfold *upwards* — the auto margin
+                gives up space as the stack grows, so the dragon stays put and
+                the cards rise out of it rather than shoving it off the screen. */}
+            <div className="mt-auto pt-8">
+              {/* One arrangement for both states: the bubble, then the dragon
+                  saying it. With nothing to report the all-clear line is
+                  simply the only thing in the bubble. Pistachio is a fill —
+                  2:1 on white — never a surface for type, so nothing here
+                  sits on the gradient without its own ground. */}
+              <NudgeStack
+                label={t("nudgesLabel")}
+                speaker={
+                  /* A plain `<img>`, like `merchant-avatar.tsx`: a small asset
+                     already at its final size on our own origin. `next/image`
+                     would add a `/_next/image` round trip and this repo's
+                     first `images` config to save nothing. */
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={DRAGON_SRC[dragon]}
+                    alt={t(`dragonAlt.${dragon}`)}
+                    width={512}
+                    height={512}
+                    className="h-40 w-40 drop-shadow-sm lg:h-60 lg:w-60"
+                  />
+                }
+              >
+                {nudges.length > 0 ? (
+                  nudges.map((nudge) => <NudgeCard key={nudge.id} nudge={nudge} />)
+                ) : (
+                  <p className="w-fit rounded-full bg-surface/85 px-3 py-1 text-[12.5px] text-text-muted backdrop-blur-sm">
+                    {t("allClear")}
+                  </p>
+                )}
+              </NudgeStack>
+            </div>
+          </div>
         </div>
       </div>
     </main>

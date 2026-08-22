@@ -20,9 +20,13 @@ import { ChatPanel, useAssistantChat } from "@/components/chat-panel";
  *   viewport and pushes away the very thing the reader opened the page to see.
  * - **The transcript is capped rather than stretched.** An auto-height root
  *   keeps an empty chat short — it is a greeting, not a screenful of blank
- *   panel — and `max-h-[45svh]` takes over once a conversation gets going.
- *   `svh`, not `vh`: on iOS Safari `vh` measures against the collapsed URL bar,
- *   which would tuck the input underneath it.
+ *   panel — and the cap takes over once a conversation gets going. It is
+ *   deliberately tight on a phone (`30svh`): the transcript scrolls, the
+ *   mascot below it does not, so every extra centimetre the chat takes is one
+ *   the dragon loses. From `lg` the page is two columns and the mascot sits
+ *   beside the chat rather than under it, so the cap opens up. `svh`, not
+ *   `vh`: on iOS Safari `vh` measures against the collapsed URL bar, which
+ *   would tuck the input underneath it.
  */
 export function HomeChat() {
   const t = useTranslations("Chat");
@@ -42,7 +46,7 @@ export function HomeChat() {
         </div>
       </div>
 
-      <ChatPanel chat={chat} scrollClassName="max-h-[45svh]" />
+      <ChatPanel chat={chat} scrollClassName="max-h-[30svh] lg:max-h-[60svh]" />
     </div>
   );
 }
