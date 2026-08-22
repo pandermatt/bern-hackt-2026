@@ -13,7 +13,8 @@ import type { CSSProperties } from "react";
  * route group for that, back when the dashboard was `/`; now that the page has
  * its own segment the folder does the scoping. Don't move it back up.
  *
- * Mirrors the dashboard's shape — heading, four tiles, the two charts, the
+ * Mirrors the dashboard's shape — heading, four tiles (the fourth carrying the
+ * forecast sparkline, so it is taller than the other three), the two charts, the
  * merchant breakdown, filters, rows — so the real content lands in roughly the
  * same places rather than shifting. Both chart blocks reserve the height their
  * ECharts canvas will take, heading and footnote included; a canvas that sizes
@@ -68,14 +69,29 @@ export default function Loading() {
         <Bar className="h-[30px] w-[240px] sm:h-[36px]" />
         <Bar className="mt-2 h-[14px] w-[240px]" />
 
+        {/* Two figures, then the balance across both columns, then the
+            forecast tile — which is taller by its 60px sparkline and the year
+            labels under it, and sets the row's height on every screen. */}
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((tile) => (
-            <div key={tile} className="rounded-lg bg-surface-muted p-3.5 sm:p-4">
+          {[0, 1, 2].map((tile) => (
+            <div
+              key={tile}
+              className={`rounded-lg bg-surface-muted p-3.5 sm:p-4 ${
+                tile === 2 ? "col-span-2 lg:col-span-1" : ""
+              }`}
+            >
               <Bar className="h-[13px] w-[64px]" />
               <Bar className="mt-2 h-[20px] w-[110px]" />
               <Bar className="mt-2.5 h-[12px] w-[88px]" />
             </div>
           ))}
+          <div className="col-span-2 rounded-lg bg-surface-muted p-3.5 sm:p-4 lg:col-span-1">
+            <Bar className="h-[13px] w-[64px]" />
+            <Bar className="mt-2 h-[20px] w-[110px]" />
+            <Bar className="mt-2 h-[60px] w-full" />
+            <Bar className="mt-1 h-[11px] w-[70px]" />
+            <Bar className="mt-2.5 h-[12px] w-[88px]" />
+          </div>
         </div>
 
         {/* Month by month: the year pager row (32px + 12px gap), 320px of

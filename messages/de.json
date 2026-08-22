@@ -165,15 +165,22 @@
     }
   },
   "Summary": {
-    "salary": "Lohn",
-    "salaryNote": "Zahlungen des Arbeitgebers",
-    "refunds": "Rückerstattungen",
-    "refundsNote": "Von Händlern zurückerstattet",
+    "income": "Einnahmen",
+    "incomeNote": "{salary} Lohn · {refunds} Rückerstattungen",
     "spending": "Ausgaben",
     "spendingNote": "auf {count} Einkäufe verteilt",
-    "net": "Netto",
+    "net": "Saldo",
     "netPositive": "Zur Seite gelegt",
-    "netNegative": "Mehr ausgegeben als eingenommen"
+    "netNegative": "Mehr ausgegeben als eingenommen",
+    "forecast": "Prognose",
+    "forecastNote": "≈ {amount} im {year}",
+    "forecastEmpty": "Noch keine Ausgaben zum Hochrechnen",
+    "forecastLabel": "Ausgaben pro Monat: {year} wie gebucht, danach gestrichelt zum Schnitt von {average} hochgerechnet",
+    "forecastMonth": "Monat",
+    "forecastAmount": "Ausgaben",
+    "forecastKind": "Grundlage",
+    "forecastActual": "Gebucht",
+    "forecastProjected": "Hochgerechnet"
   },
   "Trend": {
     "heading": "Monat für Monat",

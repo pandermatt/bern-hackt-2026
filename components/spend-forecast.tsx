@@ -1,0 +1,150 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { useMemo } from "react";
+
+import {
+  EChart,
+  useChartTokens,
+  withAlpha,
+  type ChartTokens,
+  type EChartsOption,
+} from "@/components/echart";
+import { formatMoney, type SpendForecast } from "@/lib/insights";
+
+/**
+ * Twenty-four months of spending inside a summary tile: solid where the
+ * statements reach, then dashed at the run rate to the end of the year after.
+ *
+ * The stroke change is the whole message — it is where recorded stops and
+ * projected starts — so the two are separate series over one axis rather than
+ * one series with a styled tail, and they share the last recorded month's
+ * vertex (see `spendForecast`) so the join is continuous.
+ *
+ * No axes. At ~190px of desktop column there is no room for furniture, and
+ * the years are named in HTML below the canvas instead, where they cost no
+ * plot width. The figures live in the tile's `sr-only` table, server-rendered
+ * like every other chart's — the accessibility contract does not lapse just
+ * because the chart is 60px tall.
+ *
+ * `--flow-out`, not a `--chart-N` slot: money out is a direction, not a
+ * category.
+ */
+
+/**
+ * Reserved in `app/[locale]/dashboard/loading.tsx`, which a canvas cannot do
+ * for itself. Change it in both places or the page jumps on every filter.
+ */
+export const FORECAST_HEIGHT = 60;
+
+function buildOption(
+  forecast: SpendForecast,
+  tokens: ChartTokens,
+  text: { actual: string; projected: string },
+): EChartsOption {
+  const line = {
+    type: "line" as const,
+    showSymbol: false,
+    symbol: "circle",
+    symbolSize: 6,
+    smooth: false,
+    // Both series read the same axis, so neither may drop its nulls onto the
+    // next point along — the gap is the point.
+    connectNulls: false,
+  };
+
+  return {
+    animationDuration: 500,
+    grid: { left: 2, right: 2, top: 6, bottom: 2, containLabel: false },
+    tooltip: {
+      confine: true,
+      trigger: "axis",
+      axisPointer: { type: "line", lineStyle: { color: withAlpha(tokens.ink, 0.3) } },
+      backgroundColor: tokens.surface,
+      borderColor: tokens.line,
+      textStyle: { color: tokens.text, fontSize: 12 },
+      valueFormatter: (value) => formatMoney(Number(value)),
+    },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: forecast.points.map((point) => `${point.label} ${point.month.slice(2, 4)}`),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { show: false },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      // From zero: a spending line floated on its own minimum turns a steady
+      // year into dramatic peaks.
+      min: 0,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { show: false },
+      splitLine: { show: false },
+    },
+    series: [
+      {
+        ...line,
+        id: "actual",
+        name: text.actual,
+        lineStyle: { color: tokens.flowOut, width: 2 },
+        itemStyle: { color: tokens.flowOut },
+        areaStyle: { color: withAlpha(tokens.flowOut, 0.14) },
+        data: forecast.points.map((point) => point.actual),
+      },
+      {
+        ...line,
+        id: "projected",
+        name: text.projected,
+        lineStyle: { color: withAlpha(tokens.flowOut, 0.55), width: 2, type: "dashed" },
+        itemStyle: { color: withAlpha(tokens.flowOut, 0.55) },
+        data: forecast.points.map((point) => point.projected),
+        // The turn of the year, standing on January of the next one, so
+        // "this year / next year" is readable without axis labels inside the
+        // plot. A category axis snaps a mark to a tick, so this is an index
+        // and not the 11.5 that would put it in the gap.
+        markLine: {
+          silent: true,
+          symbol: "none",
+          label: { show: false },
+          lineStyle: { color: withAlpha(tokens.ink, 0.35), width: 1, type: "solid" },
+          data: [{ xAxis: 12 }],
+        },
+      },
+    ],
+  };
+}
+
+export function SpendForecastChart({ forecast }: { forecast: SpendForecast }) {
+  const t = useTranslations("Summary");
+  const tokens = useChartTokens();
+  const text = useMemo(
+    () => ({ actual: t("forecastActual"), projected: t("forecastProjected") }),
+    [t],
+  );
+  const option = useMemo(
+    () => (tokens ? buildOption(forecast, tokens, text) : null),
+    [forecast, tokens, text],
+  );
+
+  return (
+    <div className="mt-2">
+      <EChart
+        option={option}
+        height={FORECAST_HEIGHT}
+        label={t("forecastLabel", {
+          year: forecast.year,
+          average: formatMoney(forecast.average),
+        })}
+      />
+      {/* The years as HTML, each at the start of its own half of the axis —
+          an ECharts axis would spend plot width on the same two words. */}
+      <div className="grid grid-cols-2 text-[11px] text-text-subtle tabular-nums">
+        <span>{forecast.year}</span>
+        <span>{forecast.year + 1}</span>
+      </div>
+    </div>
+  );
+}

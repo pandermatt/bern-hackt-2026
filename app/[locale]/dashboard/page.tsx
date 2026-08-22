@@ -68,7 +68,7 @@ export default async function Dashboard({
             on its heading, so the whole page runs on one rhythm instead of two
             stacked ones. The bare blocks get theirs explicitly. */}
         <div>
-          <SummaryCards totals={totals} />
+          <SummaryCards totals={totals} forecast={dashboard.forecast} />
 
           <MonthlyTrend series={monthly} />
 

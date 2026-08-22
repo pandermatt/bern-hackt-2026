@@ -165,15 +165,22 @@
     }
   },
   "Summary": {
-    "salary": "Salary",
-    "salaryNote": "Employer payments",
-    "refunds": "Refunds",
-    "refundsNote": "Money returned by merchants",
+    "income": "Income",
+    "incomeNote": "{salary} salary · {refunds} refunds",
     "spending": "Spending",
     "spendingNote": "across {count} purchases",
-    "net": "Net",
+    "net": "Balance",
     "netPositive": "Put aside",
-    "netNegative": "Overspent"
+    "netNegative": "Overspent",
+    "forecast": "Forecast",
+    "forecastNote": "≈ {amount} in {year}",
+    "forecastEmpty": "No spending to project yet",
+    "forecastLabel": "Spending per month: {year} as booked, then projected dashed at the {average} average",
+    "forecastMonth": "Month",
+    "forecastAmount": "Spending",
+    "forecastKind": "Basis",
+    "forecastActual": "Booked",
+    "forecastProjected": "Projected"
   },
   "Trend": {
     "heading": "Month by month",

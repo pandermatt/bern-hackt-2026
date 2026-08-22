@@ -35,6 +35,7 @@ import {
   monthTotals,
   categorySpendPeriods,
   slotsOf,
+  spendForecast,
   stackByCategory,
   summarize,
   topMerchants,
@@ -46,6 +47,7 @@ import {
   type MonthPoint,
   type MonthTotal,
   type Slice,
+  type SpendForecast,
   type Totals,
 } from "@/lib/insights";
 
@@ -131,6 +133,14 @@ export type Dashboard = {
   view: Facets;
   totals: Totals;
   monthly: MonthPoint[];
+  /**
+   * Monthly spending over the year the statements end in and the year after —
+   * the summary row's forward-looking tile. Unfiltered, like the charts and
+   * unlike `totals`: it is a statement about the account's run rate, and one
+   * that changed when the direction dropdown moved would be describing the
+   * filter. `null` when nothing has been spent at all.
+   */
+  forecast: SpendForecast | null;
   /**
    * Money in and out per `YYYY-MM`, for the ledger's month headings. Filtered,
    * like `totals` — the headings sit above filtered rows, so they have to say
@@ -359,6 +369,7 @@ export async function getDashboard(raw: unknown): Promise<Dashboard | null> {
     accountTotals: accountTotals(rows),
     view: facetsOf(filtered),
     monthly: monthlySeries(rows),
+    forecast: spendForecast(rows),
     stack,
     topCategories: categorySpendPeriods(rows),
     totals: summarize(filtered),

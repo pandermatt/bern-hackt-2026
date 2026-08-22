@@ -24,6 +24,7 @@ import {
   potPercent,
   potSlot,
   slotsOf,
+  spendForecast,
   stackByCategory,
   paginate,
   summarize,
@@ -1331,5 +1332,80 @@ describe("groupByDayMerchant", () => {
 
   it("has nothing to say about no rows", () => {
     expect(groupByDayMerchant([])).toEqual([]);
+  });
+});
+
+describe("spendForecast", () => {
+  it("anchors on the statements' last year, not on the clock", () => {
+    const forecast = spendForecast([
+      row({ bookedOn: "2024-11-05", amountMinor: -9000 }),
+      row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
+      row({ bookedOn: "2025-02-05", amountMinor: -20000 }),
+    ]);
+
+    expect(forecast?.year).toBe(2025);
+    expect(forecast?.points).toHaveLength(24);
+    expect(forecast?.points[0].month).toBe("2025-01");
+    expect(forecast?.points[23].month).toBe("2026-12");
+  });
+
+  it("averages only the anchor year's months", () => {
+    // The 2024 line is a whole year's spending on its own and would halve the
+    // run rate if it were averaged in.
+    const forecast = spendForecast([
+      row({ bookedOn: "2024-11-05", amountMinor: -100000 }),
+      row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
+      row({ bookedOn: "2025-02-05", amountMinor: -20000 }),
+    ]);
+
+    expect(forecast?.average).toBe(15000);
+    expect(forecast?.actualMonths).toBe(2);
+  });
+
+  it("counts a month with no spending as a zero, not a hole", () => {
+    const forecast = spendForecast([
+      row({ bookedOn: "2025-01-05", amountMinor: -30000 }),
+      row({ bookedOn: "2025-03-05", amountMinor: -30000 }),
+    ]);
+
+    expect(forecast?.actualMonths).toBe(3);
+    expect(forecast?.points[1].actual).toBe(0);
+    expect(forecast?.average).toBe(20000);
+  });
+
+  it("projects every month past the statements, to the end of the next year", () => {
+    const forecast = spendForecast([
+      row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
+      row({ bookedOn: "2025-02-05", amountMinor: -20000 }),
+    ]);
+
+    expect(forecast?.points[0].projected).toBeNull();
+    // The last recorded month carries both, so the solid and dashed lines
+    // share a vertex instead of leaving a gap at the join.
+    expect(forecast?.points[1].actual).toBe(20000);
+    expect(forecast?.points[1].projected).toBe(20000);
+    expect(forecast?.points[2].actual).toBeNull();
+    expect(forecast?.points[2].projected).toBe(15000);
+    expect(forecast?.points[23].projected).toBe(15000);
+    expect(forecast?.nextYearTotal).toBe(15000 * 12);
+    // Two recorded months plus ten projected ones.
+    expect(forecast?.yearTotal).toBe(10000 + 20000 + 15000 * 10);
+  });
+
+  it("ignores income and transfers", () => {
+    const forecast = spendForecast([
+      row({ bookedOn: "2025-01-05", amountMinor: -10000 }),
+      row({ bookedOn: "2025-01-06", kind: "income", amountMinor: 500000 }),
+      row({ bookedOn: "2025-01-07", kind: "transfer", amountMinor: -80000 }),
+    ]);
+
+    expect(forecast?.average).toBe(10000);
+  });
+
+  it("has nothing to project without expenses", () => {
+    expect(spendForecast([])).toBeNull();
+    expect(
+      spendForecast([row({ kind: "income", amountMinor: 500000 })]),
+    ).toBeNull();
   });
 });

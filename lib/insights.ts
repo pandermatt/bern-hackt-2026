@@ -64,6 +64,31 @@ export type MonthPoint = {
   balance: number;
 };
 
+/** One column of the summary tile's forecast sparkline. */
+export type ForecastPoint = {
+  month: string;
+  label: string;
+  /** Spending that month, a positive magnitude. `null` past the statements. */
+  actual: number | null;
+  /** The projected run rate, from the last recorded month on. `null` before. */
+  projected: number | null;
+};
+
+export type SpendForecast = {
+  /** Exactly 24: January of the anchor year through December of the next. */
+  points: ForecastPoint[];
+  /** Mean monthly spend over the anchor year's recorded months. */
+  average: number;
+  /** The year the statements end in — never the calendar's. See below. */
+  year: number;
+  /** How many months of the anchor year the average is built from. */
+  actualMonths: number;
+  /** Recorded plus projected for the anchor year. */
+  yearTotal: number;
+  /** `average * 12` — the next year is projection all the way down. */
+  nextYearTotal: number;
+};
+
 export type Slice = {
   key: string;
   amount: number;
@@ -374,6 +399,86 @@ export function monthlySeries(rows: Transaction[]): MonthPoint[] {
   }
 
   return series;
+}
+
+/**
+ * Monthly spending across the year the statements end in and the year after,
+ * recorded where there are statements and projected at the run rate from there
+ * on — the forward-looking tile in the summary row.
+ *
+ * **The anchor year comes from the data, not from the clock.** This module
+ * constructs no `Date` (see `formatDay`), and the rule the rest of the file
+ * follows — `categorySpendPeriods` calls the latest month with spending "this
+ * month" — is what keeps a fixed year of imported statements readable in
+ * January of the year after. A forecast anchored on the calendar would show an
+ * empty current year and predict nothing.
+ *
+ * The projection is deliberately the plainest one that can be explained in a
+ * tile: the mean of the recorded months, held flat. It carries no seasonality
+ * and no trend, which is the honest shape for twelve points — and it is the
+ * number the tile prints above the chart, so the figure and the dashed line
+ * say the same thing rather than two things.
+ */
+export function spendForecast(rows: Transaction[]): SpendForecast | null {
+  const buckets = new Map<string, number>();
+
+  for (const row of rows) {
+    // Expenses only. A refund lands in `income` and would flatter the run
+    // rate; a transfer between own accounts is not spending at all — the same
+    // exclusions `monthlySeries` and `summarize` make.
+    if (row.kind !== "expense") continue;
+    const month = row.bookedOn.slice(0, 7);
+    buckets.set(month, (buckets.get(month) ?? 0) - row.amountMinor);
+  }
+
+  if (buckets.size === 0) return null;
+
+  const recorded = [...buckets.keys()].sort();
+  const last = recorded[recorded.length - 1];
+  const year = Number(last.slice(0, 4));
+  // The anchor year's own first recorded month, not the history's: a two-year
+  // import must not average this year against last year's months.
+  const first = recorded.find((month) => month.slice(0, 4) === last.slice(0, 4)) ?? last;
+
+  // Gap-filled between the first and last recorded month, exactly as
+  // `monthAxis` fills the charts: a month with no spending is a zero, not a
+  // hole, and it belongs in the average.
+  const actuals: (number | null)[] = [];
+  for (let index = 0; index < 24; index += 1) {
+    const month = `${year + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+    actuals.push(month >= first && month <= last ? (buckets.get(month) ?? 0) : null);
+  }
+
+  const months = actuals.filter((value): value is number => value !== null);
+  const average = Math.round(
+    months.reduce((sum, value) => sum + value, 0) / months.length,
+  );
+
+  const points: ForecastPoint[] = actuals.map((actual, index) => {
+    const month = `${year + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+    return {
+      month,
+      label: MONTH_LABELS[index % 12],
+      actual,
+      // The last recorded month carries both figures on purpose: the solid
+      // line and the dashed one share that vertex, so the join is a change of
+      // stroke rather than a gap with a jump across it.
+      projected: month > last ? average : month === last ? actual : null,
+    };
+  });
+
+  const yearTotal = points
+    .slice(0, 12)
+    .reduce((sum, point) => sum + (point.actual ?? point.projected ?? 0), 0);
+
+  return {
+    points,
+    average,
+    year,
+    actualMonths: months.length,
+    yearTotal,
+    nextYearTotal: average * 12,
+  };
 }
 
 /**
