@@ -20,15 +20,19 @@ import { useIsNarrow } from "@/lib/use-hydrated";
 /**
  * The month's net balance — money in minus money out — as bars diverging from
  * a zero line, one year at a time, with the **running account balance** as an
- * ink line in its own slim panel above the bars. The bars answer "did this
- * month keep money"; the line answers "where does that leave the account".
+ * ink line over them. The bars answer "did this month keep money"; the line
+ * answers "where does that leave the account".
  *
- * Two aligned panels, not one plot and not two y-axes: a balance is a stock
- * and the nets are flows, and the stock is routinely thirty times the flow —
- * on a shared scale the bars squash into slivers, and a second axis on the
- * same plot is the dual-axis chart this codebase does not draw. The panels
- * share the month axis (and the hover), so a column reads vertically through
- * both.
+ * One plot, two y-axes, **zeros aligned**: a balance is a stock and the nets
+ * are flows, and the stock is routinely thirty times the flow — on a shared
+ * scale the bars squash into slivers, so each measure reads on its own axis
+ * (bars left, balance right), both scaled to put zero on the same gridline.
+ * That shared zero is what makes the overlay readable — the line above the
+ * baseline means solvent, exactly like a bar above it means surplus. The
+ * dual-scale caveat stands: never compare the line's *height* to a bar's,
+ * only their signs and shapes; the axes on their own sides say which scale is
+ * whose, and only the bars' axis draws gridlines so the plot carries one
+ * ruler, not two.
  *
  * A stepper pages between the years the statements cover, and hovering a
  * column widens it and hangs its amount off the data end — the hover feedback
@@ -63,18 +67,15 @@ import { useIsNarrow } from "@/lib/use-hydrated";
  */
 const HEIGHT = 320;
 /**
- * On a 390px screen the card leaves ~310px of canvas, and a 58px left gutter
- * spends a fifth of it on axis labels. The narrow gutter is paid for by the
- * `2.5k` formatter below. The balance panel sits on top (its `top` leaves
- * room for the hovered vertex's amount label); the bars panel takes the rest,
- * with the bottom holding the month labels. `PANEL_GAP` keeps the balance
- * panel's gridlines and the tallest bar's hover label apart.
+ * On a 390px screen the card leaves ~310px of canvas, and a 58px gutter
+ * spends a fifth of it on axis labels. The narrow gutters are paid for by the
+ * `2.5k` formatter below. Symmetric gutters: the bars' axis reads on the
+ * left, the balance's on the right, so the two label columns never stack into
+ * what reads as one axis that resets halfway down. The top holds the hovered
+ * amounts; the bottom, the month labels.
  */
-const BALANCE_PANEL = { left: 58, right: 14, top: 26, height: 72 };
-const BALANCE_PANEL_NARROW = { left: 40, right: 10, top: 24, height: 60 };
-const PANEL_GAP = 22;
-const GRID = { left: 58, right: 14, bottom: 30 };
-const GRID_NARROW = { left: 40, right: 10, bottom: 26 };
+const GRID = { left: 58, right: 58, top: 26, bottom: 30 };
+const GRID_NARROW = { left: 40, right: 40, top: 24, bottom: 26 };
 
 /** Base and hovered column widths. The growth is symmetric about the tick. */
 const BAR = { base: 26, hover: 40 };
@@ -111,18 +112,42 @@ function buildOption(
   const peak = niceCeiling(Math.max(1, ...nets) * 1.08);
   const lowest = Math.min(0, ...nets);
   const floor = lowest < 0 ? -niceCeiling(-lowest * 1.08) : 0;
+  // The balance axis, zero-aligned with the bars': both axes give the same
+  // *fraction* of their range to the region below zero, so the two zeros land
+  // on one shared line. Whichever side needs more room below sets the
+  // fraction; the other axis extends past its own data to match. The
+  // matched-side minimum keeps its nice figure, the stretched one can go
+  // un-nice — its label is hidden below when nothing lives down there.
+  const balances = months.flatMap((point) => (point ? [point.balance] : []));
+  const balHi = Math.max(1, ...balances);
+  const balLo = Math.min(0, ...balances);
+  const balMax = niceCeiling(balHi * 1.08);
+  const below = Math.max(
+    floor < 0 ? -floor / peak : 0,
+    balLo < 0 ? -balLo / balMax : 0,
+  );
+  const barMin = -Math.round(below * peak);
+  const balMin = -Math.round(below * balMax);
   const bar = narrow ? BAR_NARROW : BAR;
-  const balGrid = narrow ? BALANCE_PANEL_NARROW : BALANCE_PANEL;
-  const barGrid = {
-    ...(narrow ? GRID_NARROW : GRID),
-    top: balGrid.top + balGrid.height + PANEL_GAP,
-  };
+  const grid = narrow ? GRID_NARROW : GRID;
   const monthNames = Array.from({ length: 12 }, (_, index) => monthLabel(index));
+
+  // Where a month's bar end and its balance vertex land, as pixels from the
+  // plot top — the one collision the overlay can produce is their two hover
+  // labels wanting the same spot. When they would, the bar's amount tucks
+  // inside the bar and leaves the airspace to the balance.
+  const plotHeight = HEIGHT - grid.top - grid.bottom;
+  const labelCollides = months.map((point) => {
+    if (!point) return false;
+    const yEnd = ((peak - point.net) / (peak - barMin)) * plotHeight;
+    const yVertex = ((balMax - point.balance) / (balMax - balMin)) * plotHeight;
+    return Math.abs(yEnd - yVertex) < 30;
+  });
 
   // Francs, not rappen. The footnote says CHF once. On a narrow screen
   // thousands are abbreviated too — `2.5k` is three characters where `2’500`
   // is five, which is what buys back the smaller left gutter. Shared by both
-  // panels' axes so they cannot drift apart in format.
+  // axes so they cannot drift apart in format.
   const francs = (value: number) => {
     const whole = Math.round(value / 100);
     if (!narrow || Math.abs(whole) < 1000) {
@@ -174,22 +199,28 @@ function buildOption(
           transition: ["shape" as const, "style" as const],
           enterFrom: { shape: { y: yZero, height: 0 } },
         },
-        // The amount, hanging off the data end. Always in the tree with empty
-        // text when idle, so hover updates morph the rect instead of replacing
-        // a lone rect with a rect-plus-label group.
-        {
-          type: "text" as const,
-          silent: true,
-          style: {
-            x,
-            y: positive ? top - 6 : top + height + 6,
-            text: isHovered ? signedFrancs(net) : "",
-            align: "center" as const,
-            verticalAlign: positive ? ("bottom" as const) : ("top" as const),
-            fill: tokens.ink,
-            fontSize: 11,
-          },
-        },
+        // The amount, hanging off the data end. When the balance vertex's
+        // label wants the same airspace, this one steps further out so the
+        // two stack — net above balance — instead of overprinting; inside the
+        // bar is no refuge, the colliding line crosses exactly there. Always
+        // in the tree with empty text when idle, so hover updates morph the
+        // rect instead of replacing a lone rect with a rect-plus-label group.
+        (() => {
+          const gap = isHovered && labelCollides[dataIndex] ? 24 : 6;
+          return {
+            type: "text" as const,
+            silent: true,
+            style: {
+              x,
+              y: positive ? top - gap : top + height + gap,
+              text: isHovered ? signedFrancs(net) : "",
+              align: "center" as const,
+              verticalAlign: positive ? ("bottom" as const) : ("top" as const),
+              fill: tokens.ink,
+              fontSize: 11,
+            },
+          };
+        })(),
       ],
     } as unknown as CustomSeriesRenderItemReturn;
   };
@@ -199,47 +230,26 @@ function buildOption(
     // The hover expansion and the year-step morph. Snappy enough that sweeping
     // across columns never feels laggy.
     animationDurationUpdate: 250,
-    // Panel 0 is the balance strip, panel 1 the bars. They share the left
-    // gutter, so the two plots align column for column.
-    grid: [balGrid, barGrid],
-    xAxis: [
-      // The balance panel's month bands — hidden, the bottom axis names them.
-      { gridIndex: 0, type: "category", data: monthNames, show: false },
-      {
-        gridIndex: 1,
-        type: "category",
-        data: monthNames,
-        axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
-        axisTick: { show: false },
-        axisLabel: {
-          color: tokens.ink,
-          fontSize: 11,
-          interval: narrow ? 1 : 0,
-        },
+    grid: narrow ? GRID_NARROW : GRID,
+    xAxis: {
+      type: "category",
+      data: monthNames,
+      // With two value axes in one grid, "sit on zero" would be ambiguous —
+      // and the month labels belong at the bottom regardless of sign.
+      axisLine: { onZero: false, lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: tokens.ink,
+        fontSize: 11,
+        interval: narrow ? 1 : 0,
       },
-    ],
+    },
     yAxis: [
+      // The bars' axis — the plot's one set of gridlines.
       {
-        gridIndex: 0,
-        type: "value",
-        // Auto-scaled around the data, not zero-based: a slim strip showing a
-        // stock is a sparkline, and pinning it to zero flattens the drift that
-        // is the whole story. A line has no area to lie about.
-        scale: true,
-        // A slim panel affords two bands, no more.
-        splitNumber: 2,
-        axisLabel: {
-          color: withAlpha(tokens.ink, 0.75),
-          fontSize: 10,
-          formatter: francs,
-        },
-        splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.12) } },
-      },
-      {
-        gridIndex: 1,
         type: "value",
         max: peak,
-        min: floor,
+        min: barMin,
         axisLabel: {
           color: withAlpha(tokens.ink, 0.75),
           fontSize: 10,
@@ -247,13 +257,28 @@ function buildOption(
         },
         splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
       },
+      // The balance's axis, on the right. No gridlines of its own — two
+      // rulers' worth of lines in one plot read as noise — and the stretched
+      // below-zero region's labels are hidden while the balance itself never
+      // goes there.
+      {
+        type: "value",
+        position: "right",
+        max: balMax,
+        min: balMin,
+        axisLabel: {
+          color: withAlpha(tokens.ink, 0.75),
+          fontSize: 10,
+          formatter: (value: number) =>
+            value < 0 && balLo >= 0 ? "" : francs(value),
+        },
+        splitLine: { show: false },
+      },
     ],
     series: [
       {
         id: "net",
         type: "custom",
-        xAxisIndex: 1,
-        yAxisIndex: 1,
         renderItem,
         encode: { x: 0, y: 1 },
         // Unclipped so a tall bar's amount label can use the grid's own top
@@ -262,16 +287,15 @@ function buildOption(
         clip: false,
         data: months.map((point, index) => [index, point ? point.net : NaN]),
       },
-      // The running balance, in its own panel. No symbols — the hovered
+      // The running balance, on the right-hand axis. No symbols — the hovered
       // month's vertex grows a value label instead, the same interrogation
       // idiom the bars use. Nulls outside the history span end the line
       // rather than inventing a balance for months that never happened.
-      // Unclipped so the vertex label can borrow the panel's top padding.
+      // Unclipped so the vertex label can borrow the grid's top padding.
       {
         id: "balance",
         type: "line",
-        xAxisIndex: 0,
-        yAxisIndex: 0,
+        yAxisIndex: 1,
         clip: false,
         smooth: false,
         // A label rides its point's symbol, so the symbols have to exist —
@@ -307,8 +331,6 @@ function buildOption(
       {
         id: "baseline",
         type: "bar",
-        xAxisIndex: 1,
-        yAxisIndex: 1,
         silent: true,
         data: [],
         markLine: {
