@@ -829,6 +829,26 @@ export function monthSurplus(
 }
 
 /**
+ * Same shape as `monthSurplus`, **not** clamped at zero.
+ *
+ * `monthSurplus` floors at zero because it feeds two things that both need
+ * that floor: `allocateSurplus`'s ceiling (a submitted total of zero must
+ * never read as "over" a negative surplus) and the "nothing spare to put
+ * away" copy. The Unallocated pot needs the opposite — the whole point of it
+ * going red is showing *how far* negative a month went — so it reads off this
+ * instead.
+ */
+export function monthNet(
+  series: MonthPoint[],
+  month: string,
+  ended: boolean,
+): number | null {
+  if (!ended) return null;
+  const point = series.find((entry) => entry.month === month);
+  return point?.net ?? 0;
+}
+
+/**
  * Which month the budget page opens on: the current one when the statements
  * reach it, otherwise the most recent month there is data for.
  *

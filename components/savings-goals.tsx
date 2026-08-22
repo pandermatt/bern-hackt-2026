@@ -26,7 +26,7 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
   // component, so the hook works and keeps the call site the same shape the
   // client components use.
   const t = useTranslations("Savings");
-  const { month, monthEnded, surplusMinor, pots } = overview;
+  const { month, monthEnded, surplusMinor, freeMinor, pots } = overview;
 
   const savedMinor = pots.reduce((sum, pot) => sum + pot.savedMinor, 0);
   const targetMinor = pots.reduce((sum, pot) => sum + pot.targetMinor, 0);
@@ -65,7 +65,11 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
           {t("empty")}
         </p>
       ) : (
-        <SavingsPotsGrid pots={pots} />
+        <SavingsPotsGrid
+          pots={pots}
+          month={monthEnded ? month : null}
+          freeMinor={freeMinor}
+        />
       )}
 
       {canAllocate && pots.length > 0 ? (
@@ -86,12 +90,14 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
           <p className="border-t border-surface px-4 py-3 text-[12.5px] text-text-muted sm:px-5">
             {!monthEnded
               ? t("monthRunning", { month })
-              : surplus === 0
-                ? t("monthSpentAll", { month })
-                : t("monthLeftOver", {
-                    month,
-                    amount: formatMoney(surplus),
-                  })}
+              : surplus < 0
+                ? t("monthOverspent", { month, amount: formatMoney(surplus) })
+                : surplus === 0
+                  ? t("monthSpentAll", { month })
+                  : t("monthLeftOver", {
+                      month,
+                      amount: formatMoney(surplus),
+                    })}
           </p>
         )
       )}

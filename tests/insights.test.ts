@@ -15,6 +15,7 @@ import {
   budgetRows,
   defaultBudgetMonth,
   ledgerChunk,
+  monthNet,
   monthSurplus,
   monthTotals,
   byTargetDate,
@@ -473,6 +474,34 @@ describe("monthSurplus", () => {
 
   it("is zero for a month the statements do not cover", () => {
     expect(monthSurplus(series(), "2024-07", true)).toBe(0);
+  });
+});
+
+describe("monthNet", () => {
+  const series = () =>
+    monthlySeries([
+      row({ kind: "income", amountMinor: 500000, bookedOn: "2025-01-25" }),
+      row({ amountMinor: -120000, bookedOn: "2025-01-05" }),
+      row({ kind: "income", amountMinor: 300000, bookedOn: "2025-02-25" }),
+      row({ amountMinor: -450000, bookedOn: "2025-02-05" }),
+    ]);
+
+  it("agrees with monthSurplus for a month that came out ahead", () => {
+    expect(monthNet(series(), "2025-01", true)).toBe(380000);
+  });
+
+  it("is negative for a month that spent more than it earned, unlike monthSurplus", () => {
+    // The Unallocated pot's whole reason to exist: this is the deficit
+    // `monthSurplus` floors away.
+    expect(monthNet(series(), "2025-02", true)).toBe(-150000);
+  });
+
+  it("is null while the month is still running", () => {
+    expect(monthNet(series(), "2025-01", false)).toBeNull();
+  });
+
+  it("is zero for a month the statements do not cover", () => {
+    expect(monthNet(series(), "2024-07", true)).toBe(0);
   });
 });
 

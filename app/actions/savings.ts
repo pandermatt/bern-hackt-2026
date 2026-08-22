@@ -18,6 +18,7 @@ import {
   byTargetDate,
   defaultBudgetMonth,
   isCalendarDate,
+  monthNet,
   monthSurplus,
   monthlySeries,
   potSlot,
@@ -38,12 +39,21 @@ export type SavingsOverview = {
   monthEnded: boolean;
   /**
    * Income the month did not spend, or `null` while it is still running.
-   * Zero is a real answer — the month spent everything it earned.
+   * Zero is a real answer — the month spent everything it earned. **Can go
+   * negative** — a month that spent more than it earned — which is exactly
+   * what the Unallocated pot exists to surface; nothing else in the app reads
+   * this as a ceiling the way `allocateSurplus` reads its own, separately
+   * floored, copy of the same number.
    */
   surplusMinor: number | null;
   /** Already put away out of that month. */
   allocatedMinor: number;
-  /** Surplus minus what is already allocated. Never negative. */
+  /**
+   * Surplus minus what is already allocated — what the "Unallocated" pot
+   * shows. **Can go negative**: a month that spent more than it earned has a
+   * negative surplus and nothing allocated, so this is that deficit, and the
+   * pot pulses to say so.
+   */
   freeMinor: number;
   pots: SavingsPot[];
 };
@@ -196,9 +206,12 @@ export async function getSavingsOverview(
   }
 
   const monthEnded = month !== null && monthHasEnded(month);
-  const surplusMinor = month
-    ? monthSurplus(monthlySeries(rows), month, monthEnded)
-    : null;
+  // `monthNet`, not `monthSurplus`: this feeds the Unallocated pot, which is
+  // the one place in the app meant to say a month went negative rather than
+  // floor it at "nothing spare". `allocateSurplus` below still floors its own
+  // ceiling — a submitted total of zero must never read as over a negative
+  // surplus, which is a different question from what this pot displays.
+  const surplusMinor = month ? monthNet(monthlySeries(rows), month, monthEnded) : null;
   const allocatedMinor = [...thisMonth.values()].reduce(
     (sum, amount) => sum + amount,
     0,
@@ -209,7 +222,7 @@ export async function getSavingsOverview(
     monthEnded,
     surplusMinor,
     allocatedMinor,
-    freeMinor: Math.max(0, (surplusMinor ?? 0) - allocatedMinor),
+    freeMinor: (surplusMinor ?? 0) - allocatedMinor,
     // Soonest deadline first, undated last — see `byTargetDate`. Sorted here
     // rather than in the query because the comparator has a rule SQL's NULL
     // ordering does not share, and it is worth having under test.

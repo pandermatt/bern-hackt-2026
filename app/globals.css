@@ -561,6 +561,24 @@
   animation: pot-glow-pulse 2.1s ease-out 350ms both;
 }
 
+/* The Unallocated tile's alarm: loops for as long as the month is overspent,
+   unlike the one-shot pot celebration above. Reduced motion collapses this to
+   its resting (no-ring) frame via the block below, rather than a stuck ring —
+   `animation-iteration-count: 1` lands on `100%`, which matches `0%`. */
+@keyframes unallocated-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--danger) 0%, transparent);
+  }
+}
+
+.unallocated-pulse {
+  animation: unallocated-pulse 1.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -326,7 +326,22 @@
     "transferHint": "Up to {amount}.",
     "transferPreview": "{to} would read {percent}%.",
     "moveMoney": "Move money",
-    "transferred": "Moved {amount} from {from} to {to}."
+    "transferred": "Moved {amount} from {from} to {to}.",
+    "unallocatedLabel": "Unallocated",
+    "unallocatedHint": "Drag into a pot to save it",
+    "unallocatedOverspent": "Spent more than you had this month",
+    "allocateTitle": "Put money into {to}",
+    "allocateDescription": "{amount} is unallocated this month.",
+    "allocateFieldLabel": "Amount to put away (CHF)",
+    "allocateHint": "Up to {amount}.",
+    "allocatePreview": "{to} would read {percent}%.",
+    "allocated": "Moved {amount} into {to}.",
+    "unallocateTitle": "Take money out of {from}",
+    "unallocateDescription": "{amount} of {from} is allocated this month.",
+    "unallocateFieldLabel": "Amount to take out (CHF)",
+    "unallocateHint": "Up to {amount}.",
+    "unallocatedAgain": "Moved {amount} out of {from}.",
+    "monthOverspent": "{month} spent {amount} more than it earned."
   },
   "SavingsErrors": {
     "notSignedInCreate": "Sign in to add a savings goal.",
