@@ -301,7 +301,22 @@
     "deleteBodyFunded": "Die {amount} in diesem Topf gehen zurück an die Monate, aus denen sie stammen, und können erneut verteilt werden. Das kann nicht rückgängig gemacht werden.",
     "deleteBodyEmpty": "Dieser Topf ist leer, es geht also nichts verloren. Das kann nicht rückgängig gemacht werden.",
     "deleteConfirm": "Ziel löschen",
-    "removed": "„{name}“ entfernt."
+    "removed": "„{name}“ entfernt.",
+    "targetDateLabel": "Zieldatum",
+    "targetDateOptional": "Zieldatum (optional)",
+    "potDue": "bis {date}",
+    "potNoDue": "kein Zieldatum",
+    "monthlyLabel": "Pro Monat (CHF)",
+    "potMonthly": "{amount}/Monat",
+    "standingOrder": "Dauersparauftrag",
+    "standingOrderTitle": "Dauersparauftrag",
+    "standingOrderBody": "Wie viel Sie monatlich in einen Topf legen möchten. Es ist ein Vorschlag für die Aufteilung des übrigen Geldes eines Monats — von selbst wird nichts verschoben.",
+    "standingOrderPot": "Topf",
+    "standingOrderSaved": "Dauersparauftrag für „{name}“ gespeichert.",
+    "standingOrderCleared": "Dauersparauftrag für „{name}“ entfernt.",
+    "standingOrderSave": "Dauersparauftrag speichern",
+    "standingOrderNone": "Legen Sie zuerst ein Sparziel an, dann können Sie einen Dauersparauftrag dafür setzen.",
+    "useStandingOrders": "Dauersparaufträge übernehmen"
   },
   "SavingsErrors": {
     "notSignedInCreate": "Melden Sie sich an, um ein Sparziel hinzuzufügen.",
@@ -319,7 +334,8 @@
     "overSurplus": "Das ist mehr, als in diesem Monat übrig blieb.",
     "notAnAmount": "„{amount}“ ist kein Betrag.",
     "tooLarge": "Dieser Betrag ist grösser, als diese App speichern kann.",
-    "moveFailed": "Geld konnte nicht verschoben werden. Versuchen Sie es erneut."
+    "moveFailed": "Geld konnte nicht verschoben werden. Versuchen Sie es erneut.",
+    "notADate": "Das ist kein Datum."
   },
   "AnomalySuggestion": {
     "runningTitle": "Ihre Transaktionen werden mit KI analysiert",

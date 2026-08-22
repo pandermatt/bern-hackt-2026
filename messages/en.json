@@ -301,7 +301,22 @@
     "deleteBodyFunded": "The {amount} in this pot goes back to the months it came from, and can be allocated again. This cannot be undone.",
     "deleteBodyEmpty": "This pot is empty, so nothing is lost. This cannot be undone.",
     "deleteConfirm": "Delete goal",
-    "removed": "“{name}” removed."
+    "removed": "“{name}” removed.",
+    "targetDateLabel": "Target date",
+    "targetDateOptional": "Target date (optional)",
+    "potDue": "by {date}",
+    "potNoDue": "no target date",
+    "monthlyLabel": "Per month (CHF)",
+    "potMonthly": "{amount}/month",
+    "standingOrder": "Standing order",
+    "standingOrderTitle": "Standing order",
+    "standingOrderBody": "How much you mean to put into a pot each month. It is a suggestion for splitting a month's leftover money — it never moves anything on its own.",
+    "standingOrderPot": "Pot",
+    "standingOrderSaved": "Standing order for “{name}” saved.",
+    "standingOrderCleared": "Standing order for “{name}” removed.",
+    "standingOrderSave": "Save standing order",
+    "standingOrderNone": "Add a goal first, then you can set a standing order for it.",
+    "useStandingOrders": "Use standing orders"
   },
   "SavingsErrors": {
     "notSignedInCreate": "Sign in to add a savings goal.",
@@ -319,7 +334,8 @@
     "overSurplus": "That is more than the month had left over.",
     "notAnAmount": "“{amount}” is not an amount.",
     "tooLarge": "That amount is larger than this app can hold.",
-    "moveFailed": "Could not move that money. Try again."
+    "moveFailed": "Could not move that money. Try again.",
+    "notADate": "That is not a date."
   },
   "AnomalySuggestion": {
     "runningTitle": "Analysing your transactions with AI",

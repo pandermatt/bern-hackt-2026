@@ -34,11 +34,15 @@ export function SavingsGoalEdit({
   name,
   targetMinor,
   savedMinor,
+  targetOn,
+  monthlyMinor,
 }: {
   id: number;
   name: string;
   targetMinor: number;
   savedMinor: number;
+  targetOn: string | null;
+  monthlyMinor: number | null;
 }) {
   const t = useTranslations("Savings");
   const router = useRouter();
@@ -46,6 +50,12 @@ export function SavingsGoalEdit({
   const [open, setOpen] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState(() => (targetMinor / 100).toFixed(2));
+  // Both optional, and both clear on blank: a goal may have no deadline and
+  // most have no standing order.
+  const [due, setDue] = useState(() => targetOn ?? "");
+  const [monthly, setMonthly] = useState(() =>
+    monthlyMinor === null ? "" : (monthlyMinor / 100).toFixed(2),
+  );
 
   const cleaned = amount.trim().replace(/[’'\s]/g, "").replace(",", ".");
   const parsed = Number(cleaned);
@@ -56,7 +66,7 @@ export function SavingsGoalEdit({
 
   function save() {
     startTransition(async () => {
-      const result = await updateSavingsGoal(id, amount);
+      const result = await updateSavingsGoal(id, amount, due, monthly);
       if (result.ok) {
         toast.success(t("retargeted", { name }));
         setOpen(false);
@@ -73,7 +83,11 @@ export function SavingsGoalEdit({
       onOpenChange={(next) => {
         setOpen(next);
         // Reopening should show what is stored, not last time's abandoned edit.
-        if (next) setAmount((targetMinor / 100).toFixed(2));
+        if (next) {
+          setAmount((targetMinor / 100).toFixed(2));
+          setDue(targetOn ?? "");
+          setMonthly(monthlyMinor === null ? "" : (monthlyMinor / 100).toFixed(2));
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -126,6 +140,35 @@ export function SavingsGoalEdit({
               ? t("editHint")
               : t("editPreview", { percent: preview })}
           </p>
+
+          <div className="mt-2 grid grid-cols-2 gap-2.5">
+            <label>
+              <span className="text-[12.5px] font-medium text-text-muted">
+                {t("targetDateLabel")}
+              </span>
+              {/* Native, so the reader gets their platform's picker and their
+                  own date format; the value is `YYYY-MM-DD` either way. */}
+              <input
+                type="date"
+                value={due}
+                onChange={(event) => setDue(event.target.value)}
+                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[12.5px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              />
+            </label>
+            <label>
+              <span className="text-[12.5px] font-medium text-text-muted">
+                {t("monthlyLabel")}
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={monthly}
+                onChange={(event) => setMonthly(event.target.value)}
+                placeholder="0.00"
+                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              />
+            </label>
+          </div>
         </form>
 
         <DialogFooter>

@@ -291,6 +291,29 @@ export const savingsGoals = sqliteTable(
     name: text("name").notNull(),
     /** Positive minor units — what the pot holds when it is full. */
     targetMinor: integer("target_minor").notNull(),
+    /**
+     * When the money is wanted by, as `YYYY-MM-DD` text — a calendar day, not
+     * an instant, for the same reason `transactions.bookedOn` is text: stored
+     * as a timestamp, 2026-07-01 renders as 30 June for anyone west of UTC.
+     *
+     * Nullable, and it stays that way. Plenty of goals are "eventually" — a
+     * rainy-day fund has no deadline — and this column was added to a table
+     * that already had rows, which `drizzle-kit push` deploys without
+     * `--force`. A date in the past is allowed: that is an overdue goal, which
+     * is a true thing to say about it.
+     */
+    targetOn: text("target_on"),
+    /**
+     * A Dauersparauftrag: what the account holder means to put in each month.
+     *
+     * **It never moves money.** Nothing reads this column to create an
+     * allocation; it seeds the split when a finished month has a surplus, and
+     * that is all. A standing order that quietly filled pots would invent
+     * savings out of months that never had the income.
+     *
+     * Nullable — most pots have no standing order — and positive when set.
+     */
+    monthlyMinor: integer("monthly_minor"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

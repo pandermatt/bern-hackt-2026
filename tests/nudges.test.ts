@@ -21,6 +21,8 @@ function pot(overrides: Partial<SavingsPot> = {}): SavingsPot {
     targetMinor: 500000,
     savedMinor: 0,
     monthMinor: 0,
+    targetOn: null,
+    monthlyMinor: null,
     slot: 1,
     ...overrides,
   };

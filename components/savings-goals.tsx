@@ -4,6 +4,7 @@ import type { SavingsOverview } from "@/app/actions/savings";
 import { SavingsAllocator } from "@/components/savings-allocator";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
 import { SavingsPot } from "@/components/savings-pot";
+import { StandingOrderDialog } from "@/components/standing-order-dialog";
 import { Section } from "@/components/section";
 import { formatMoney } from "@/lib/insights";
 
@@ -41,13 +42,21 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
     <Section
       id="savings"
       heading={t("heading")}
+      /* The meta slot holds the running total and the standing-order button
+         together: both are about the pots as a set rather than any one of
+         them, and the section heading is the only place that is true. */
       meta={
-        pots.length > 0
-          ? t("savedOfTarget", {
-              saved: formatMoney(savedMinor),
-              target: formatMoney(targetMinor),
-            })
-          : t("subtitle")
+        <span className="flex items-center gap-3">
+          <span className="text-[12.5px] text-text-muted">
+            {pots.length > 0
+              ? t("savedOfTarget", {
+                  saved: formatMoney(savedMinor),
+                  target: formatMoney(targetMinor),
+                })
+              : t("subtitle")}
+          </span>
+          <StandingOrderDialog pots={pots} />
+        </span>
       }
     >
       {pots.length === 0 ? (
