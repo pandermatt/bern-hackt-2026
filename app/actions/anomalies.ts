@@ -14,7 +14,10 @@ import {
   analyzeTransactionAnomalies,
   type AnomalyInsight,
 } from "@/lib/anomaly-engine";
-import { analyzeTransactionInsights } from "@/lib/llm/analyze-insights";
+import {
+  analyzeTransactionInsights,
+  type TransactionContext,
+} from "@/lib/llm/analyze-insights";
 import { getCurrentUser } from "@/lib/auth";
 
 /**
@@ -30,9 +33,11 @@ import { getCurrentUser } from "@/lib/auth";
 /** How many rows to insert per statement — see the note in scripts/seed.ts. */
 const INSERT_CHUNK = 100;
 
-/** Rows scanned between progress writes. Small enough to animate, large enough
- *  not to turn the scan into a write-amplified crawl. */
-const PROGRESS_CHUNK = 1000;
+/** Share of the bar the analysis phase owns, before the LLM phase starts. */
+const ANALYSIS_SHARE = 0.1;
+
+/** Share the LLM phase walks through, leaving the tail for the inserts. */
+const AI_SHARE = 0.85;
 
 export type ScanStatus = {
   status: AnomalyRun["status"];
@@ -106,16 +111,45 @@ async function runScan(runId: number, userId: number): Promise<void> {
     let insights: AnomalyInsight[] = analyzeTransactionAnomalies(rows);
 
     if (insights.length > 0) {
-      await setProgress(runId, { phase: "Generating insights with AI", processed: Math.floor(total * 0.1) });
-      
-      let aiProgress = Math.floor(total * 0.1);
-      const interval = setInterval(() => {
-        aiProgress = Math.min(total - 1, aiProgress + Math.max(1, Math.floor(total * 0.05)));
-        void setProgress(runId, { processed: aiProgress });
-      }, 500);
+      await setProgress(runId, {
+        phase: "Generating insights with AI",
+        processed: Math.floor(total * ANALYSIS_SHARE),
+      });
 
-      insights = await analyzeTransactionInsights(insights);
-      clearInterval(interval);
+      /*
+       * The narrative layer groups findings by merchant and month, but the
+       * rules that produce the most findings — amount spikes, repeat charges —
+       * record neither in their metrics, and their descriptions do not name the
+       * merchant either. The ledger is already in memory, so hand it over
+       * rather than let the model guess.
+       */
+      const context = new Map<number, TransactionContext>();
+      for (const row of rows) {
+        context.set(row.id, {
+          merchant: row.merchant,
+          category: row.category,
+          month: row.bookedOn.slice(0, 7),
+        });
+      }
+
+      insights = await analyzeTransactionInsights(insights, {
+        contextOf: (id) => context.get(id),
+
+        /*
+         * Real progress, one step per batch. This used to be a timer walking
+         * the bar forward on no information at all, which reached its clamp in
+         * ten seconds and then sat frozen for the rest of the phase.
+         */
+        onProgress: (done, batches) => {
+          const share = ANALYSIS_SHARE + AI_SHARE * (done / batches);
+          // Floating on purpose: a dropped progress write is not worth failing
+          // a scan over, and nothing downstream reads it back.
+          void setProgress(runId, {
+            phase: `Generating insights with AI (${done}/${batches})`,
+            processed: Math.min(total - 1, Math.floor(total * share)),
+          }).catch(() => {});
+        },
+      });
     }
 
     await setProgress(runId, { processed: total });
@@ -129,6 +163,7 @@ async function runScan(runId: number, userId: number): Promise<void> {
           transactionId,
           ruleId: insight.rule_id,
           severity: insight.severity,
+          kind: insight.kind,
           title: insight.title,
           description: insight.description,
           icon: insight.icon,
@@ -281,7 +316,13 @@ export async function getStoredAnomaliesForPage(
   // Re-group the flattened rows back into one insight per (rule, finding).
   const byInsight = new Map<string, AnomalyInsight>();
   for (const row of rows) {
-    const key = `${row.ruleId}|${row.description}`;
+    /*
+     * Severity and kind belong in the key. Two findings can share a rule and a
+     * wording and still be classified differently — the narrative layer sees
+     * them in separate batches — and merging those would silently hand the
+     * second one the first's colour.
+     */
+    const key = `${row.ruleId}|${row.severity}|${row.kind}|${row.description}`;
     const existing = byInsight.get(key);
     if (existing) {
       existing.transaction_ids.push(row.transactionId);
@@ -299,6 +340,7 @@ export async function getStoredAnomaliesForPage(
       title: row.title,
       description: row.description,
       severity: row.severity,
+      kind: row.kind,
       transaction_ids: [row.transactionId],
       supporting_metrics: metrics,
       icon: row.icon,

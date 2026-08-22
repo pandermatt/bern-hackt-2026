@@ -22,6 +22,115 @@ import { formatDay, formatMoney } from "@/lib/insights";
 
 export type AnomalySeverity = "low" | "medium" | "high";
 
+/**
+ * How much concern a finding warrants — a second axis, deliberately not a
+ * rename of `severity`.
+ *
+ * `severity` is statistical magnitude: how far from its own baseline a number
+ * sits. `kind` is what the reader should feel about it. They are not the same
+ * question, and a large legitimate purchase is the case that separates them —
+ * a CHF 6'000 bike is `high` severity and merely `warning` in kind.
+ *
+ * `alert` means "this may not be your doing". Nothing deterministic ever
+ * produces it: the narrative layer proposes it and `canEscalateToAlert` has to
+ * co-sign. See the note there.
+ */
+export type AnomalyKind = "info" | "warning" | "alert";
+
+const KIND_ORDER: Record<AnomalyKind, number> = { info: 1, warning: 2, alert: 3 };
+
+/** The stronger of two kinds, on the `info < warning < alert` ordering. */
+export function strongestKind(a: AnomalyKind, b: AnomalyKind): AnomalyKind {
+  return KIND_ORDER[a] >= KIND_ORDER[b] ? a : b;
+}
+
+/**
+ * The kind every finding starts at, before the narrative layer sees it.
+ *
+ * Deliberately a coarsening of `severity` and nothing cleverer: it keeps the
+ * two axes in step, which is what lets the ledger sort by kind and fall back to
+ * severity without the two orderings ever disagreeing.
+ */
+export function derivedKind(severity: AnomalySeverity): AnomalyKind {
+  return severity === "low" ? "info" : "warning";
+}
+
+/**
+ * Rules whose findings may be escalated to `alert`, each paired below with a
+ * numeric co-signature in `canEscalateToAlert`.
+ *
+ * The list is short on purpose. Painting a row red in a finance app says "this
+ * may not have been you", and the cost of being wrong is a person calling their
+ * bank about their own holiday booking. Every rule left out was left out
+ * because its modal case is legitimate: the amount rules fire on genuine large
+ * purchases, the month-aggregate rules describe a trend rather than a charge —
+ * and they attach to the month's largest transaction, so a red wash would land
+ * on an arbitrary innocent row.
+ */
+export const ALERT_ELIGIBLE_RULES = new Set([
+  "REPEAT_CHARGE",
+  "LARGE_TRANSFER",
+  "NEW_COUNTERPARTY",
+  "CASH_WITHDRAWAL_SPIKE",
+]);
+
+/**
+ * Whether a finding's own evidence supports calling it `alert`.
+ *
+ * This is the deterministic half of a two-key gate: the LLM may propose `alert`
+ * but cannot grant it, because "does this look like fraud" is exactly the
+ * judgement an 8B model at temperature 0.1 will answer yes to. Being a pure
+ * function of metrics the rules already compute, it lives here beside them
+ * rather than in the narrative layer.
+ *
+ * `LARGE_TRANSFER` and `NEW_COUNTERPARTY` are each other's co-signature: a big
+ * transfer is ordinary, a first-time recipient is ordinary, and a big transfer
+ * to a first-time recipient is the shape of an authorised-push-payment scam.
+ * Neither qualifies alone, which is why this takes the whole candidate set.
+ */
+export function canEscalateToAlert(
+  insight: Pick<AnomalyInsight, "rule_id" | "transaction_ids" | "supporting_metrics">,
+  siblings: readonly Pick<AnomalyInsight, "rule_id" | "transaction_ids">[] = [],
+): boolean {
+  if (!ALERT_ELIGIBLE_RULES.has(insight.rule_id)) return false;
+
+  const m = insight.supporting_metrics;
+  const num = (key: string): number =>
+    typeof m[key] === "number" ? (m[key] as number) : NaN;
+
+  const sharesTransactionWith = (ruleId: string): boolean =>
+    siblings.some(
+      (s) =>
+        s.rule_id === ruleId &&
+        s.transaction_ids.some((id) => insight.transaction_ids.includes(id)),
+    );
+
+  switch (insight.rule_id) {
+    /*
+     * Double billing. The repeat-days clause is what keeps the seed statements'
+     * four identical CHF 1'766.50 airline charges out of red: that is a real
+     * holiday booking, and the merchant repeats on three of its four active
+     * days. A merchant that bills twice on one day and never otherwise is a
+     * different animal.
+     */
+    case "REPEAT_CHARGE":
+      return num("charge_count") >= 3 && num("merchant_repeat_days") <= 1;
+
+    case "LARGE_TRANSFER":
+      return sharesTransactionWith("NEW_COUNTERPARTY");
+
+    case "NEW_COUNTERPARTY":
+      return sharesTransactionWith("LARGE_TRANSFER");
+
+    // An outlier withdrawal against the account's own withdrawal history.
+    case "CASH_WITHDRAWAL_SPIKE":
+      return num("mad_deviation") >= 5;
+
+    default:
+      return false;
+  }
+}
+
 export const RULE_EMOJIS: Record<string, string> = {
   AMOUNT_SPIKE: "🔺",
   UNUSUALLY_LARGE_TRANSACTION: "💰",
@@ -56,6 +165,7 @@ export interface AnomalyInsight {
   title: string;
   description: string;
   severity: AnomalySeverity;
+  kind: AnomalyKind;
   transaction_ids: number[];
   supporting_metrics: Record<string, number | string | boolean | (number | string)[]>;
   icon: string;
@@ -310,7 +420,7 @@ export function analyzeTransactionAnomalies(
   const typicalMonthlyIncome =
     options.typicalMonthlyIncomeMinor ?? estimateTypicalMonthlyIncome(sorted);
 
-  const insights: Omit<AnomalyInsight, "emoji">[] = [];
+  const insights: Omit<AnomalyInsight, "emoji" | "kind">[] = [];
 
   // Groupings by category, merchant, etc.
   const expensesByCategory = new Map<string, TransactionInput[]>();
@@ -1578,9 +1688,25 @@ export function analyzeTransactionAnomalies(
     );
   }
 
-  return finalInsights.map((r) => ({
+  /*
+   * `emoji` and `kind` are both stamped here rather than at each rule's push
+   * site: they are derived from what the rule already decided, so 26 copies of
+   * the derivation would be 26 chances to disagree.
+   */
+  const stamped = finalInsights.map((r) => ({
     ...r,
     emoji: RULE_EMOJIS[r.rule_id] ?? "⚠️",
+    kind: derivedKind(r.severity),
+  }));
+
+  /*
+   * Escalation is a second pass because it is the one classification that reads
+   * the other findings: a large transfer and a first-time recipient only mean
+   * something together, and neither knows about the other until both exist.
+   */
+  return stamped.map((insight) => ({
+    ...insight,
+    kind: canEscalateToAlert(insight, stamped) ? ("alert" as const) : insight.kind,
   }));
 }
 
@@ -1605,7 +1731,8 @@ const AMOUNT_RULE_PRECEDENCE = [
   "UNUSUAL_FINANCIAL_IMPACT",
 ];
 
-type RawInsight = Omit<AnomalyInsight, "emoji">;
+/* Both stamped after consolidation, so the rules never spell them out. */
+type RawInsight = Omit<AnomalyInsight, "emoji" | "kind">;
 
 /**
  * Rules that already emit one finding per event rather than per transaction.

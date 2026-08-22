@@ -1,158 +1,373 @@
 import { z } from "zod";
-import type { AnomalyInsight } from "@/lib/anomaly-engine";
+
+import {
+  normalizeMerchant,
+  strongestKind,
+  type AnomalyInsight,
+  type AnomalyKind,
+  type AnomalySeverity,
+} from "@/lib/anomaly-engine";
+
+/*
+ * The narrative layer.
+ *
+ * The anomaly engine has already decided what is unusual, how unusual, which
+ * transactions are involved, every number quoted, and how much concern it
+ * warrants. This module does the one thing none of that can: when a single
+ * transaction collects a pile of findings, it says what they add up to.
+ *
+ * It is deliberately not asked to do more. The engine's own descriptions are
+ * already numerically exact — "Apple Online Store charged CHF 35.00 2 times on
+ * 14 Sep 2025, totalling CHF 70.00" — so a model rewriting them can only
+ * paraphrase, at the cost of a network round trip and a chance to get a number
+ * wrong. And classification stays deterministic: `canEscalateToAlert` in the
+ * engine decides what turns red, because "this may not have been you" is not a
+ * sentence to let an 8B model reach on its own.
+ *
+ * Everything except `title` and `description` is restored from the
+ * deterministic findings after the model has spoken. A failure at any point
+ * returns them untouched: the LLM is an enhancement, and a scan that cannot
+ * reach it is still a useful scan.
+ */
 
 const APERTUS_URL =
   process.env.APERTUS_URL ??
   "https://llm.stoney-cloud.com/v1/chat/completions";
 
-/** One finding as the model writes it. `buildFinalInsight` maps it back onto
- *  the algorithmic candidates it claims to summarise. */
+/**
+ * Findings per request.
+ *
+ * The binding constraint is output, not input: one narrative runs 75-90 tokens,
+ * so ten worst-case (nothing merged) is ~900 against a 1500 cap. The headroom is
+ * the point — a response that runs over the cap is truncated mid-JSON, which is
+ * unparseable, which loses the whole batch. Do not raise this to buy fewer
+ * round trips.
+ */
+const MAX_BATCH_CANDIDATES = 10;
+
+/** Second cap, against a pathological metrics blob rather than the normal path. */
+const MAX_BATCH_CHARS = 6000;
+
+/** Metrics sent per finding. The tail of a long blob is rarely the interesting part. */
+const MAX_METRIC_KEYS = 6;
+
+/** Per-request timeout. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Ceiling on the whole LLM phase, across every batch.
+ *
+ * A scan holds a `running` row that blocks the account from starting another,
+ * so an endpoint that has gone slow rather than down must not be able to stretch
+ * one scan indefinitely. When this trips the remaining batches fall back
+ * deterministically and the scan finishes.
+ */
+const TOTAL_DEADLINE_MS = 120_000;
+
+/** The whole of what the model may write. */
 const llmInsightSchema = z.object({
-  source_rule_ids: z.array(z.string()).min(1),
+  source_ids: z.array(z.string()).min(1),
   title: z.string().min(1),
   description: z.string().min(1),
 });
 
-/** The whole response — the model answers with an array of them. */
-const llmResponseSchema = z.object({ insights: z.array(llmInsightSchema) });
+const llmResponseSchema = z.object({
+  insights: z.array(llmInsightSchema),
+});
 
 type LlmInsight = z.infer<typeof llmInsightSchema>;
 
-function getHighestSeverity(
-  candidates: AnomalyInsight[],
-): "low" | "medium" | "high" {
+/**
+ * A finding paired with a handle the model can cite.
+ *
+ * The handle is what makes the round trip sound. `rule_id` cannot serve: a
+ * statement holds many `AMOUNT_SPIKE` findings, so citing the rule would pull
+ * every one of them into whichever narrative mentioned it and pool their
+ * transactions.
+ */
+type Candidate = {
+  id: string;
+  insight: AnomalyInsight;
+};
+
+/** What a transaction can tell the model about a finding that names no merchant. */
+export type TransactionContext = {
+  merchant: string;
+  category: string;
+  /** `YYYY-MM`. */
+  month: string;
+};
+
+export type AnalyzeOptions = {
+  /**
+   * Resolves a transaction id to the merchant, category and month it belongs to.
+   *
+   * Needed because the highest-cardinality rules — `AMOUNT_SPIKE`,
+   * `REPEAT_CHARGE`, `UNUSUALLY_LARGE_TRANSACTION`,
+   * `ROUND_NUMBER_TRANSACTION` — put none of those in `supporting_metrics`, and
+   * their descriptions do not name the merchant either. Without this the model
+   * receives several findings distinguishable only by a float and is asked to
+   * write a sentence about a shop; it would invent the name, and an invented
+   * merchant is not something the rule-id allowlist can catch.
+   *
+   * Optional so callers with no ledger in hand still work, at the cost of
+   * coarser grouping.
+   */
+  contextOf?: (transactionId: number) => TransactionContext | undefined;
+
+  /**
+   * Called after each batch resolves, so a caller driving a progress bar can
+   * report where it actually is. The batch count is not knowable before
+   * clustering, which is why this reports rather than returns it.
+   */
+  onProgress?: (completedBatches: number, totalBatches: number) => void;
+};
+
+function getHighestSeverity(candidates: AnomalyInsight[]): AnomalySeverity {
   if (candidates.some((c) => c.severity === "high")) return "high";
   if (candidates.some((c) => c.severity === "medium")) return "medium";
   return "low";
 }
 
-function getHighestConfidence(
-  candidates: AnomalyInsight[],
-): "low" | "medium" | "high" {
-  const confidences = candidates.map(
-    (c) =>
-      c.supporting_metrics?.confidence as
-        | "low"
-        | "medium"
-        | "high"
-        | undefined,
-  );
-
-  if (confidences.includes("high")) return "high";
-  if (confidences.includes("medium")) return "medium";
-  return "low";
-}
-
 function mergeMetrics(
   candidates: AnomalyInsight[],
-): Record<string, unknown> {
-  const merged: Record<string, unknown> = {};
+): Record<string, number | string | boolean | (number | string)[]> {
+  return Object.assign({}, ...candidates.map((c) => c.supporting_metrics));
+}
 
-  for (const candidate of candidates) {
-    if (candidate.supporting_metrics) {
-      Object.assign(merged, candidate.supporting_metrics);
-    }
-  }
-
-  return merged;
+/**
+ * The kind a merged narrative inherits.
+ *
+ * Taken from the findings it was built out of, never from the model — a summary
+ * of a red finding and two amber ones is still red, and a summary that could
+ * talk itself down would be a way to hide the one thing worth seeing.
+ */
+function inheritedKind(sourceCandidates: AnomalyInsight[]): AnomalyKind {
+  return sourceCandidates.reduce<AnomalyKind>(
+    (strongest, c) => strongestKind(strongest, c.kind),
+    "info",
+  );
 }
 
 function buildFinalInsight(
   llmInsight: LlmInsight,
-  candidates: AnomalyInsight[],
+  byId: Map<string, AnomalyInsight>,
 ): AnomalyInsight | null {
-  const sourceCandidates = candidates.filter((candidate) =>
-    llmInsight.source_rule_ids.includes(candidate.rule_id),
-  );
+  const sourceCandidates = llmInsight.source_ids
+    .map((id) => byId.get(id))
+    .filter((c): c is AnomalyInsight => c !== undefined);
 
-  if (sourceCandidates.length === 0) {
-    return null;
-  }
+  if (sourceCandidates.length === 0) return null;
 
   const primary = sourceCandidates[0];
 
-  const transactionIds = [
-    ...new Set(
-      sourceCandidates.flatMap((candidate) => candidate.transaction_ids),
-    ),
-  ];
-
   return {
     rule_id:
-      sourceCandidates.length === 1
-        ? primary.rule_id
-        : "COMBINED_INSIGHT",
+      sourceCandidates.length === 1 ? primary.rule_id : "COMBINED_INSIGHT",
 
+    // The two fields the model owns.
     title: llmInsight.title,
     description: llmInsight.description,
 
-    // These values remain owned by the algorithmic layer.
-    severity: getHighestSeverity(sourceCandidates),
-    transaction_ids: transactionIds,
+    // Decided by the engine, before the model ever saw these.
+    kind: inheritedKind(sourceCandidates),
 
-    // Never let the LLM choose the icon.
+    // Everything below stays owned by the algorithmic layer.
+    severity: getHighestSeverity(sourceCandidates),
+    transaction_ids: [
+      ...new Set(sourceCandidates.flatMap((c) => c.transaction_ids)),
+    ],
+
+    // Never let the model choose the icon.
     icon: primary.icon,
     emoji: primary.emoji,
 
     supporting_metrics: {
       ...mergeMetrics(sourceCandidates),
-
-      source_rule_ids: sourceCandidates.map(
-        (candidate) => candidate.rule_id,
-      ),
-
-      confidence: getHighestConfidence(sourceCandidates),
+      source_rule_ids: sourceCandidates.map((c) => c.rule_id),
     },
   };
 }
 
-export async function analyzeTransactionInsights(
-  candidates: AnomalyInsight[],
-): Promise<AnomalyInsight[]> {
-  // No anomalies means there is nothing for the LLM to interpret.
-  if (candidates.length === 0) {
-    return [];
+/* =========================================================================
+   WHAT IS WORTH ASKING
+   ========================================================================= */
+
+/**
+ * Findings on one transaction before its ledger row stops being readable.
+ *
+ * Three badges is what the row renders before it starts hiding the rest behind
+ * "+N more", so it is also the point where a person stops being able to read
+ * the row and starts needing it summarised.
+ */
+const CROWDED_ROW = 3;
+
+/**
+ * The findings worth spending a request on.
+ *
+ * A year of real statements produces ~79 findings, and 79 of the 87 rows
+ * carrying any wear one or two. Those rows do not need a model: the engine's
+ * own sentence already names the merchant, the amount and the date, and a
+ * paraphrase of it is not worth a round trip, 30 seconds, or sending the row
+ * upstream.
+ *
+ * What no template can write is what eight findings on one transaction add up
+ * to. That is the whole remit, and on the shipped statements it is a handful of
+ * rows — one request instead of eight.
+ */
+function selectCrowdedFindings(candidates: AnomalyInsight[]): Set<AnomalyInsight> {
+  const perTransaction = new Map<number, number>();
+  for (const insight of candidates) {
+    for (const id of insight.transaction_ids) {
+      perTransaction.set(id, (perTransaction.get(id) ?? 0) + 1);
+    }
   }
 
-  const key = process.env.APERTUS_KEY;
+  return new Set(
+    candidates.filter((insight) =>
+      insight.transaction_ids.some(
+        (id) => (perTransaction.get(id) ?? 0) >= CROWDED_ROW,
+      ),
+    ),
+  );
+}
 
-  // Graceful fallback if the LLM is not configured.
-  if (!key) {
-    console.warn(
-      "APERTUS_KEY is not set. Skipping LLM interpretation and falling back to deterministic insights.",
-    );
+/* =========================================================================
+   BATCHING
+   ========================================================================= */
 
-    return candidates;
+/**
+ * The bucket a finding belongs to, as a person would group them: this
+ * merchant, this month.
+ *
+ * Deliberately the same shape the engine's own consolidation uses, so the two
+ * layers do not disagree about what counts as one event. Findings the context
+ * lookup cannot place fall back to their rule, which at worst reproduces the
+ * old behaviour for that one finding.
+ */
+function clusterKeyOf(
+  insight: AnomalyInsight,
+  contextOf?: AnalyzeOptions["contextOf"],
+): string {
+  const metrics = insight.supporting_metrics;
+  const context = contextOf?.(insight.transaction_ids[0]);
+
+  const merchant =
+    typeof metrics.merchant === "string"
+      ? normalizeMerchant(metrics.merchant)
+      : context
+        ? normalizeMerchant(context.merchant)
+        : null;
+
+  const category =
+    typeof metrics.category === "string"
+      ? metrics.category
+      : (context?.category ?? null);
+
+  const month =
+    typeof metrics.month === "string" ? metrics.month : (context?.month ?? "");
+
+  return `${month}|${merchant ?? category ?? insight.rule_id}`;
+}
+
+/**
+ * What actually crosses the wire for one finding.
+ *
+ * `description` is kept — it is the sentence the model exists to rewrite, and
+ * for the rules that carry no merchant in their metrics it is the only place
+ * the amount appears. `transaction_ids`, `icon` and `emoji` are dropped: the
+ * model has no use for them and they are restored afterwards regardless.
+ *
+ * The transaction's own `description` is deliberately never sent — on a real
+ * statement that field is a payment reference.
+ */
+function project(
+  candidate: Candidate,
+  contextOf?: AnalyzeOptions["contextOf"],
+): Record<string, unknown> {
+  const { id, insight } = candidate;
+  const context = contextOf?.(insight.transaction_ids[0]);
+
+  const metrics: Record<string, number | string | boolean> = {};
+  for (const [key, value] of Object.entries(insight.supporting_metrics)) {
+    if (Object.keys(metrics).length >= MAX_METRIC_KEYS) break;
+    if (Array.isArray(value)) continue;
+    metrics[key] = value;
   }
 
-  const model =
-    process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
+  return {
+    id,
+    rule_id: insight.rule_id,
+    severity: insight.severity,
+    title: insight.title,
+    description: insight.description,
+    ...(context ? { merchant: context.merchant, category: context.category, month: context.month } : {}),
+    metrics,
+  };
+}
 
-  /*
-   * IMPORTANT:
-   *
-   * The LLM is deliberately NOT an anomaly detector.
-   *
-   * The anomaly engine has already determined:
-   * - what is unusual
-   * - severity
-   * - transaction IDs
-   * - numerical metrics
-   * - icons
-   *
-   * The LLM is only responsible for:
-   * - grouping related findings
-   * - writing a useful title
-   * - writing a concise explanation
-   */
+/**
+ * Findings grouped into request-sized batches.
+ *
+ * Clusters are kept whole where they fit and ordered lexicographically, so a
+ * re-scan of unchanged statements batches identically and the model sees the
+ * same context it saw last time.
+ */
+function buildBatches(
+  candidates: Candidate[],
+  contextOf?: AnalyzeOptions["contextOf"],
+): Candidate[][] {
+  const clusters = new Map<string, Candidate[]>();
+  for (const candidate of candidates) {
+    const key = clusterKeyOf(candidate.insight, contextOf);
+    const bucket = clusters.get(key);
+    if (bucket) bucket.push(candidate);
+    else clusters.set(key, [candidate]);
+  }
 
-  const systemPrompt = `You are the narrative layer of a personal finance application.
+  const batches: Candidate[][] = [];
+  let current: Candidate[] = [];
+  let currentChars = 0;
 
-You receive anomaly findings that have ALREADY been detected by deterministic algorithms.
+  const flush = () => {
+    if (current.length > 0) batches.push(current);
+    current = [];
+    currentChars = 0;
+  };
 
-Your job is ONLY to turn those findings into clear, concise human-readable insights.
+  for (const key of [...clusters.keys()].sort()) {
+    for (const candidate of clusters.get(key)!) {
+      const chars = JSON.stringify(project(candidate, contextOf)).length;
+      if (
+        current.length > 0 &&
+        (current.length >= MAX_BATCH_CANDIDATES ||
+          currentChars + chars > MAX_BATCH_CHARS)
+      ) {
+        flush();
+      }
+      current.push(candidate);
+      currentChars += chars;
+    }
+  }
+  flush();
 
-You are NOT an anomaly detector.
+  return batches;
+}
+
+/* =========================================================================
+   PROMPTS
+   ========================================================================= */
+
+const SYSTEM_PROMPT = `You are the narrative layer of a personal finance application.
+
+You receive several anomaly findings that ALL concern the same few transactions,
+detected by deterministic algorithms.
+
+They are being sent to you because there are too many of them to read one by one.
+
+Your job is ONLY to say what they add up to, in plain language.
+
+You are NOT an anomaly detector, and you do not classify anything.
 
 IMPORTANT RULES:
 
@@ -164,16 +379,14 @@ IMPORTANT RULES:
 6. Never estimate missing values.
 7. Never invent merchants, categories, dates, amounts, transactions, or trends.
 8. Never infer user intent.
-9. Never suggest fraud.
+9. Never suggest fraud, and never use the words "fraud", "scam", "stolen" or "theft".
 10. Never provide financial, investment, tax, legal, or budgeting advice.
 11. Never tell the user what they should do.
 12. Never provide generic financial advice.
 13. Never exaggerate the importance of an anomaly.
 14. Do not change severity.
-15. Do not change confidence.
-16. Do not invent rule IDs.
-17. Do not invent transaction IDs.
-18. Do not invent metrics.
+15. Do not invent IDs.
+16. Do not invent metrics.
 
 GROUPING:
 
@@ -199,15 +412,20 @@ For example:
 must NOT be combined.
 
 When combining findings:
-- Include every source rule ID.
-- Do not invent additional rule IDs.
+- Include every source id.
+- Do not invent additional ids.
 - Base the resulting insight only on the supplied evidence.
 - Do not create new numerical metrics.
+
+COVERAGE:
+
+Every finding you are given must appear in exactly one insight's source_ids.
+Do not drop a finding because it seems minor.
 
 WRITING STYLE:
 
 Titles:
-- 3–8 words.
+- 3-8 words.
 - Concrete.
 - Factual.
 - No clickbait.
@@ -215,7 +433,7 @@ Titles:
 - Avoid generic titles such as "Financial Update" or "Something Changed".
 
 Descriptions:
-- 1–2 sentences.
+- 1-2 sentences.
 - State what happened.
 - Include the most relevant supplied number when available.
 - Explain why it is notable using ONLY the supplied evidence.
@@ -239,7 +457,8 @@ BAD:
 
 Return ONLY valid JSON matching the requested schema.`;
 
-  const userPrompt = `The following findings were produced by our anomaly detection algorithms.
+function buildUserPrompt(payload: string): string {
+  return `The following findings were produced by our anomaly detection algorithms.
 
 They are authoritative evidence.
 
@@ -247,7 +466,7 @@ Do not reinterpret their numerical values.
 
 ANOMALY FINDINGS:
 
-${JSON.stringify(candidates, null, 2)}
+${payload}
 
 Create human-readable narratives for these findings.
 
@@ -264,8 +483,7 @@ Do NOT:
 - calculate new statistics
 - modify numerical values
 - invent evidence
-- invent rule IDs
-- invent transaction IDs
+- invent ids
 - invent metrics
 - give financial advice
 
@@ -274,187 +492,203 @@ Return ONLY this JSON structure:
 {
   "insights": [
     {
-      "source_rule_ids": ["EXISTING_RULE_ID"],
+      "source_ids": ["c0"],
       "title": "Short factual title",
       "description": "One or two factual sentences."
     }
   ]
 }
 
-Every source_rule_id MUST correspond exactly to a rule_id present in the input.`;
+Every source_id MUST be one of the ids listed above, and every id above must appear exactly once.`;
+}
+
+/* =========================================================================
+   ONE REQUEST
+   ========================================================================= */
+
+/**
+ * Narratives for one batch, or `null` if anything at all went wrong.
+ *
+ * Never throws: every failure mode here is a reason to keep the deterministic
+ * findings, not a reason to fail the scan.
+ */
+type BatchResult = {
+  narratives: AnomalyInsight[];
+  /** Ids of the findings those narratives were built from. */
+  consumed: Set<string>;
+};
+
+async function requestBatch(
+  batch: Candidate[],
+  key: string,
+  model: string,
+  contextOf: AnalyzeOptions["contextOf"],
+  deadline: AbortSignal,
+): Promise<BatchResult | null> {
+  const payload = JSON.stringify(batch.map((c) => project(c, contextOf)));
 
   try {
     const response = await fetch(APERTUS_URL, {
       method: "POST",
-
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-
       body: JSON.stringify({
         model,
-
         messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: userPrompt,
-          },
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildUserPrompt(payload) },
         ],
-
-        response_format: {
-          type: "json_object",
-        },
-
+        response_format: { type: "json_object" },
         max_tokens: 1500,
-
-        // Low temperature is intentional.
-        // We want deterministic factual rewriting rather than creativity.
+        // Low temperature is intentional. We want deterministic factual
+        // rewriting rather than creativity.
         temperature: 0.1,
       }),
-
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        deadline,
+      ]),
     });
 
     if (!response.ok) {
-      console.error(
-        `LLM API failed with status ${response.status}. Falling back to deterministic insights.`,
-      );
-
-      return candidates;
+      console.error(`LLM API failed with status ${response.status}.`);
+      return null;
     }
 
-    const raw = await response.text();
-
-    let data: {
-      choices?: Array<{
-        message?: {
-          content?: string;
-        };
-      }>;
-    };
-
+    let content: string;
     try {
-      data = JSON.parse(raw);
+      const data = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      content = data.choices?.[0]?.message?.content ?? "";
     } catch (error) {
-      console.error(
-        "LLM API returned invalid JSON response. Falling back.",
-        error,
-      );
-
-      return candidates;
+      console.error("LLM API returned an unreadable envelope.", error);
+      return null;
     }
-
-    const content = data.choices?.[0]?.message?.content ?? "";
 
     if (!content) {
-      console.error(
-        "LLM response did not contain message content. Falling back.",
-      );
-
-      return candidates;
+      console.error("LLM response did not contain message content.");
+      return null;
     }
 
-    let parsedContent: unknown;
-
+    let parsed: unknown;
     try {
-      parsedContent = JSON.parse(content);
+      parsed = JSON.parse(content);
     } catch (error) {
-      console.error(
-        "LLM did not return valid JSON content. Falling back.",
-        error,
-      );
-
-      return candidates;
+      // Most often a response truncated at `max_tokens` mid-object.
+      console.error("LLM did not return valid JSON content.", error);
+      return null;
     }
 
-    const validated = llmResponseSchema.safeParse(parsedContent);
-
+    const validated = llmResponseSchema.safeParse(parsed);
     if (!validated.success) {
-      console.error(
-        "LLM JSON did not match expected schema. Falling back.",
-        validated.error,
-      );
-
-      return candidates;
+      console.error("LLM JSON did not match the expected schema.", validated.error);
+      return null;
     }
 
     /*
-     * SECURITY / CORRECTNESS CHECK
-     *
-     * The LLM is only allowed to reference rules that actually exist
-     * in the anomaly-engine output.
+     * The model may only cite findings that were actually in this batch.
+     * Anything else is a hallucinated handle, and a narrative built on one
+     * would attach real transactions to invented evidence.
      */
-    const candidateRuleIds = new Set(
-      candidates.map((candidate) => candidate.rule_id),
+    const byId = new Map(batch.map((c) => [c.id, c.insight]));
+    const usable = validated.data.insights.filter((insight) =>
+      insight.source_ids.every((id) => byId.has(id)),
     );
 
-    const validLlmInsights = validated.data.insights.filter(
-      (insight) =>
-        insight.source_rule_ids.length > 0 &&
-        insight.source_rule_ids.every((ruleId) =>
-          candidateRuleIds.has(ruleId),
-        ),
-    );
-
-    if (validLlmInsights.length === 0) {
-      console.warn(
-        "LLM returned no valid insights referencing existing anomaly rules. Falling back.",
-      );
-
-      return candidates;
+    if (usable.length === 0) {
+      console.warn("LLM returned no insights referencing this batch's findings.");
+      return null;
     }
 
-    /*
-     * Convert the LLM's narrative back into the application's
-     * AnomalyInsight format.
-     *
-     * IMPORTANT:
-     *
-     * The LLM does NOT control:
-     * - severity
-     * - transaction IDs
-     * - metrics
-     * - icons
-     * - confidence
-     *
-     * Those are restored from the original algorithmic findings.
-     */
+    const consumed = new Set<string>();
+    const narratives: AnomalyInsight[] = [];
 
-    const finalInsights = validLlmInsights
-      .map((llmInsight) =>
-        buildFinalInsight(llmInsight, candidates),
-      )
-      .filter(
-        (insight): insight is AnomalyInsight =>
-          insight !== null,
-      );
-
-    if (finalInsights.length === 0) {
-      console.warn(
-        "Could not map LLM insights back to anomaly candidates. Falling back.",
-      );
-
-      return candidates;
+    for (const insight of usable) {
+      const built = buildFinalInsight(insight, byId);
+      if (!built) continue;
+      narratives.push(built);
+      for (const id of insight.source_ids) consumed.add(id);
     }
 
-    return finalInsights;
+    return { narratives, consumed };
   } catch (error) {
-    /*
-     * The LLM is an optional enhancement.
-     *
-     * A failure must NEVER prevent the deterministic anomaly
-     * engine from producing useful results.
-     */
-    console.error(
-      "LLM integration error. Falling back to deterministic insights.",
-      error,
-    );
-
-    return candidates;
+    console.error("LLM integration error.", error);
+    return null;
   }
 }
+
+/* =========================================================================
+   ENTRY POINT
+   ========================================================================= */
+
+export async function analyzeTransactionInsights(
+  candidates: AnomalyInsight[],
+  options: AnalyzeOptions = {},
+): Promise<AnomalyInsight[]> {
+  if (candidates.length === 0) return [];
+
+  const key = process.env.APERTUS_KEY;
+  if (!key) {
+    console.warn(
+      "APERTUS_KEY is not set. Skipping LLM interpretation and falling back to deterministic insights.",
+    );
+    return candidates;
+  }
+
+  const model = process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
+  const { contextOf, onProgress } = options;
+
+  const crowded = selectCrowdedFindings(candidates);
+  if (crowded.size === 0) return candidates;
+
+  const withIds: Candidate[] = candidates
+    .filter((insight) => crowded.has(insight))
+    .map((insight, index) => ({ id: `c${index}`, insight }));
+
+  // Everything the model is not being asked about keeps the engine's wording.
+  const results: AnomalyInsight[] = candidates.filter(
+    (insight) => !crowded.has(insight),
+  );
+
+  const batches = buildBatches(withIds, contextOf);
+  const deadline = AbortSignal.timeout(TOTAL_DEADLINE_MS);
+
+  for (const [index, batch] of batches.entries()) {
+    const result = deadline.aborted
+      ? null
+      : await requestBatch(batch, key, model, contextOf, deadline);
+
+    if (result === null) {
+      // This batch keeps its deterministic findings. The others are unaffected.
+      results.push(...batch.map((c) => c.insight));
+    } else {
+      /*
+       * Narratives plus whatever they left behind.
+       *
+       * The union half is not optional. A model that answers nine of ten
+       * findings — routine, since a response that overruns `max_tokens` is cut
+       * off — would otherwise silently delete the tenth from the user's scan.
+       */
+      results.push(...result.narratives);
+      results.push(
+        ...batch.filter((c) => !result.consumed.has(c.id)).map((c) => c.insight),
+      );
+    }
+
+    onProgress?.(index + 1, batches.length);
+  }
+
+  return results;
+}
+
+/** Exported for tests. */
+export const __testing = {
+  buildBatches,
+  clusterKeyOf,
+  inheritedKind,
+  project,
+  selectCrowdedFindings,
+};
