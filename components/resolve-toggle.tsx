@@ -29,12 +29,22 @@ export function ResolveToggle({
   ruleId,
   transactionIds,
   resolved,
+  progress,
   label,
   className = "size-[18px]",
 }: {
   ruleId: string;
   transactionIds: number[];
   resolved: boolean;
+  /**
+   * How much of what this control covers is already ticked off, when that is
+   * more than one thing. The ring draws this fraction, so a control standing
+   * for several findings shows a part-filled circle rather than an empty one
+   * that contradicts the "1 of 2 resolved" beside it.
+   *
+   * Omitted for a single row, where `resolved` says everything there is to say.
+   */
+  progress?: { resolved: number; total: number };
   /** Names what this ticks off — the accessible name of the button. */
   label: string;
   className?: string;
@@ -73,8 +83,8 @@ export function ResolveToggle({
           the button carries the meaning. */}
       <span aria-hidden className="block">
         <ResolveRing
-          resolved={resolved ? 1 : 0}
-          total={1}
+          resolved={progress ? progress.resolved : resolved ? 1 : 0}
+          total={progress ? progress.total : 1}
           label={t(resolved ? "stateResolved" : "stateOpen")}
           className={className}
         />

@@ -117,7 +117,10 @@ function GroupedRows({
     <div className="space-y-4">
       {groups.map((group) => {
         const ids = group.rows.map((row) => row.id);
-        const groupResolved = ids.every((id) => resolvedIds.has(id));
+        const resolvedHere = ids.filter((id) => resolvedIds.has(id)).length;
+        const groupResolved = resolvedHere === ids.length;
+        // Some but not all — the only case the ring alone would be ambiguous.
+        const partly = resolvedHere > 0 && !groupResolved;
         // A group of one already says its amount on its row, so repeating it in
         // the heading would print the same figure twice on adjacent lines.
         const many = group.rows.length > 1;
@@ -135,10 +138,24 @@ function GroupedRows({
                 ruleId={ruleId}
                 transactionIds={ids}
                 resolved={groupResolved}
-                label={t(groupResolved ? "unresolveGroup" : "resolveGroup", {
-                  merchant: group.merchant,
-                  day: formatDay(group.bookedOn),
-                })}
+                progress={{ resolved: resolvedHere, total: ids.length }}
+                label={
+                  /* A part-filled ring is otherwise a shape-only signal: the
+                     group carries no "x of y" text of its own, so the progress
+                     goes into the button's name when there is any to report. */
+                  partly
+                    ? `${t("resolveGroup", {
+                        merchant: group.merchant,
+                        day: formatDay(group.bookedOn),
+                      })} — ${t("resolvedOf", {
+                        resolved: resolvedHere,
+                        total: ids.length,
+                      })}`
+                    : t(groupResolved ? "unresolveGroup" : "resolveGroup", {
+                        merchant: group.merchant,
+                        day: formatDay(group.bookedOn),
+                      })
+                }
               />
               <div className="min-w-0 flex-1">
                 <p
@@ -271,6 +288,13 @@ export default async function AnomalyRulePage({
               ruleId={detail.ruleId}
               transactionIds={allIds}
               resolved={allResolved}
+              /* Draws the same fraction the text beside it states — an empty
+                 circle next to "1 of 2 resolved" was the ring contradicting
+                 its own label. */
+              progress={{
+                resolved: detail.resolvedIds.length,
+                total: detail.transactionCount,
+              }}
               label={t(allResolved ? "unresolveAll" : "resolveAll")}
               className="size-[20px]"
             />
