@@ -648,6 +648,61 @@
     cy 650ms ease;
 }
 
+/* The bar under the jar takes its width from a custom property, so the rule
+   here is the only thing setting `width` on it — see the comment at the call
+   site in `components/savings-pot.tsx` for why an inline width would break the
+   rise below. */
+.pot-bar-fill {
+  width: var(--pot-bar-width);
+}
+
+/* The same rise, on the render that has nothing to transition *from*: a page
+   load draws every pot at its final level, so without this the liquid is
+   simply already there.
+
+   `@starting-style` and not client state, deliberately. The server HTML keeps
+   saying the pot's real level — this rule only supplies the frame the
+   transition starts at — so a reader whose JS never runs, or a browser that
+   does not know the at-rule, sees a correctly filled pot rather than an empty
+   one waiting on hydration. That is the "never animate the page shell in" rule
+   in `.claude/skills/beyond-money/SKILL.md` honoured rather than dodged.
+
+   The pot's elements move three different ways, hence the separate selectors:
+   the liquid's `y`, the two surface ellipses' `cy`, and the pair of clip rects
+   that split the wall glyph at the waterline — so the glyph changes colour as
+   the level passes it, exactly as it does on a deposit. `--pot-base` (the base
+   ellipse's centre) and `--pot-wet-empty` come off `BASE_Y` in
+   `components/savings-pot.tsx` and inherit down into the `<defs>`, so the
+   geometry lives in one place. The bar grows over the same 650ms, so the jar
+   and the bar read as one movement.
+
+   A pot at zero has no liquid in the DOM to rise (see the `fill > 0` guard),
+   and a pot that is already full is drawn sealed from the start — the level
+   climbs under a closed lid, which is the one thing here that `PotSlot`'s
+   crossing sequencing does not get to stage. */
+@starting-style {
+  .pot-liquid-body {
+    y: var(--pot-base);
+  }
+
+  .pot-liquid-surface {
+    cy: var(--pot-base);
+  }
+
+  .pot-liquid-dry {
+    height: var(--pot-base);
+  }
+
+  .pot-liquid-wet {
+    y: var(--pot-base);
+    height: var(--pot-wet-empty);
+  }
+
+  .pot-bar-fill {
+    width: 0%;
+  }
+}
+
 /* The Unallocated tile's alarm: loops for as long as the month is overspent,
    unlike the one-shot pot celebration above. Reduced motion collapses this to
    its resting (no-ring) frame via the block below, rather than a stuck ring —

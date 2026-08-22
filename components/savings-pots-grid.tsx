@@ -95,6 +95,12 @@ export function SavingsPotsGrid({
   /** This month's surplus minus what is already allocated. Can be negative. */
   freeMinor: number;
 }) {
+  // The pool is a drag *source* only while it has money to give. Not merely
+  // zero: `AllocationDialog` floors its limit at zero (see `limit` there), so a
+  // month that overspent — a negative pool — opens a dialog whose one button
+  // can never be enabled. Either way the tile stays a drop *target*, because
+  // dragging a pot onto an empty pool is exactly how money comes back out.
+  const poolDraggable = freeMinor > 0;
   const [transfer, setTransfer] = useState<{ from: Pot; to: Pot } | null>(null);
   const [allocationMove, setAllocationMove] = useState<
     { direction: "into" | "outOf"; goal: Pot } | null
@@ -176,13 +182,16 @@ export function SavingsPotsGrid({
         {month !== null && (
           <UnallocatedSlot
             amountMinor={freeMinor}
+            draggable={poolDraggable}
             dragging={drag !== null && drag.active && drag.fromId === UNALLOCATED_ID}
             offset={drag !== null && drag.fromId === UNALLOCATED_ID ? { x: drag.dx, y: drag.dy } : null}
             over={drag !== null && drag.active && drag.overId === UNALLOCATED_ID}
-            onPointerDown={(event) => handlePointerDown(UNALLOCATED_ID, event)}
-            onPointerMove={handlePointerMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
+            onPointerDown={
+              poolDraggable ? (event) => handlePointerDown(UNALLOCATED_ID, event) : undefined
+            }
+            onPointerMove={poolDraggable ? handlePointerMove : undefined}
+            onPointerUp={poolDraggable ? endDrag : undefined}
+            onPointerCancel={poolDraggable ? endDrag : undefined}
           />
         )}
         {pots.map((pot) => (
@@ -346,6 +355,7 @@ function PotSlot({
  */
 function UnallocatedSlot({
   amountMinor,
+  draggable,
   dragging,
   offset,
   over,
@@ -355,16 +365,23 @@ function UnallocatedSlot({
   onPointerCancel,
 }: {
   amountMinor: number;
+  /**
+   * Whether this tile can start a drag — false once the pool holds nothing to
+   * give. It stays a drop target either way, so the handlers are the only
+   * thing that goes away; see `poolDraggable` in `SavingsPotsGrid`.
+   */
+  draggable: boolean;
   dragging: boolean;
   offset: { x: number; y: number } | null;
   over: boolean;
-  onPointerDown: (event: ReactPointerEvent<HTMLLIElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLLIElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLLIElement>) => void;
-  onPointerCancel: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerDown?: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerMove?: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerUp?: (event: ReactPointerEvent<HTMLLIElement>) => void;
+  onPointerCancel?: (event: ReactPointerEvent<HTMLLIElement>) => void;
 }) {
   const t = useTranslations("Savings");
   const overspent = amountMinor < 0;
+  const empty = amountMinor === 0;
   // The formatter is unsigned; the glyph is a real minus sign (U+2212), not a
   // hyphen — see `components/summary-cards.tsx` for the same convention. The
   // split is on a literal non-breaking space, which is what de-CH joins the
@@ -380,7 +397,11 @@ function UnallocatedSlot({
       onPointerCancel={onPointerCancel}
       style={dragging && offset ? { transform: `translate(${offset.x}px, ${offset.y}px)` } : undefined}
       className={cn(
-        "relative flex cursor-grab touch-none flex-col items-center rounded-lg border px-3 pt-3 pb-4 text-center transition-shadow select-none active:cursor-grabbing",
+        "relative flex flex-col items-center rounded-lg border px-3 pt-3 pb-4 text-center transition-shadow select-none",
+        // `touch-none` only while the tile can actually be dragged: it is what
+        // turns a finger-drag into the gesture instead of a page scroll, so an
+        // inert tile keeps it off and a finger on it scrolls the page again.
+        draggable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-default",
         overspent ? "unallocated-pulse border-danger bg-danger-soft" : "border-line bg-surface",
         dragging && "z-20 opacity-80 shadow-lg pointer-events-none",
         over && "shadow-[0_0_0_2px_var(--accent)]",
@@ -421,9 +442,14 @@ function UnallocatedSlot({
       {/* A negative pool is not an error state to be hidden — it is the month
           saying its pots hold money it cannot account for. So the line stops
           describing the problem and names the fix, which is a gesture the
-          reader can make right here. */}
+          reader can make right here. An empty pool has no gesture to offer at
+          all, and must not keep advertising one it cannot honour. */}
       <p className="mt-0.5 line-clamp-2 font-mono text-[10.5px] text-text-subtle">
-        {overspent ? t("unallocatedTakeBack") : t("unallocatedHint")}
+        {overspent
+          ? t("unallocatedTakeBack")
+          : empty
+            ? t("unallocatedEmpty")
+            : t("unallocatedHint")}
       </p>
     </li>
   );

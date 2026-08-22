@@ -314,6 +314,7 @@
     "transferred": "Moved {amount} from {from} to {to}.",
     "unallocatedLabel": "Unallocated",
     "unallocatedHint": "Drag into a pot to save it",
+    "unallocatedEmpty": "Nothing left to allocate",
     "unallocatedOverspent": "Spent more than you had this month",
     "unallocatedTakeBack": "Drag a pot here to take savings back",
     "allocateTitle": "Put money into {to}",
