@@ -146,7 +146,9 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
         <h2 id="trend-heading" className="text-[15px] font-semibold text-text">
           Month by month
         </h2>
-        <p className="text-[12.5px] text-text-muted">Money in against money out</p>
+        <p className="text-[12.5px] text-text-muted">
+          Money in against money out, in CHF
+        </p>
       </div>
 
       <div className="mt-4">
@@ -185,10 +187,6 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
           ))}
         </tbody>
       </table>
-
-      <p className="mt-3 font-mono text-[11.5px] text-text-subtle">
-        Amounts in CHF. Transfers between your own accounts are excluded.
-      </p>
     </section>
   );
 }
