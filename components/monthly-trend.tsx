@@ -163,29 +163,31 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. Also the relief a sub-3:1 fill requires. */}
-      <table className="sr-only" aria-label="Money in and out, by month">
-        <thead>
-          <tr>
-            <th scope="col">Month</th>
-            <th scope="col">In</th>
-            <th scope="col">Out</th>
-            <th scope="col">Net</th>
-          </tr>
-        </thead>
-        <tbody>
-          {series.map((point) => (
-            <tr key={point.month}>
-              <th scope="row">{point.month}</th>
-              <td>{formatMoney(point.income)}</td>
-              <td>{formatMoney(point.expense)}</td>
-              <td>
-                {point.net < 0 ? "−" : ""}
-                {formatMoney(point.net)}
-              </td>
+      <div className="sr-only">
+        <table aria-label="Money in and out, by month">
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col">In</th>
+              <th scope="col">Out</th>
+              <th scope="col">Net</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {series.map((point) => (
+              <tr key={point.month}>
+                <th scope="row">{point.month}</th>
+                <td>{formatMoney(point.income)}</td>
+                <td>{formatMoney(point.expense)}</td>
+                <td>
+                  {point.net < 0 ? "−" : ""}
+                  {formatMoney(point.net)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

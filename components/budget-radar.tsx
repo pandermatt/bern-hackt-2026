@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   EChart,
@@ -11,6 +11,7 @@ import {
   type EChartsOption,
 } from "@/components/echart";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
+import { useMediaQuery } from "@/lib/use-media-query";
 
 /**
  * Budget against actual, as a radar.
@@ -31,6 +32,107 @@ import { formatMoney, type BudgetRow } from "@/lib/insights";
  */
 
 const HEIGHT = 520;
+
+/**
+ * The phone layout.
+ *
+ * A radar is bounded by the *narrower* side, so on a 320px canvas the dial can
+ * never use a 520px box — leaving the desktop height in place just adds dead
+ * space above and below. The radius has to come down further still: eight axis
+ * names radiate outward from it, and "Marketplace" ran off the right edge of
+ * the canvas at the desktop proportions.
+ */
+const COMPACT = {
+  height: 370,
+  nameSize: 11,
+  percentSize: 12,
+  nameGap: 8,
+  tickSize: 9.5,
+  /**
+   * Only the rim gets a number. Six of them queue up one short spoke, and the
+   * series is drawn over the axis, so the middle ones end up with a polygon
+   * through them. The percentages under each name carry the reading anyway.
+   */
+  ticksOnlyRim: true,
+} as const;
+
+const ROOMY = {
+  height: HEIGHT,
+  nameSize: 12.5,
+  percentSize: 13.5,
+  nameGap: 12,
+  tickSize: 11,
+  ticksOnlyRim: false,
+} as const;
+
+type Layout = typeof COMPACT | typeof ROOMY;
+
+/**
+ * Breaks a long category name at its last space.
+ *
+ * Only helps names that *have* a space — "Marketplace" is one word and stays
+ * one line, which is what the radius has to be sized for.
+ */
+function nameLines(name: string): string[] {
+  if (name.length <= 11) return [name];
+  const at = name.lastIndexOf(" ");
+  return at > 0 ? [name.slice(0, at), name.slice(at + 1)] : [name];
+}
+
+/**
+ * The family the axis names are drawn in.
+ *
+ * Pinned rather than left to the ECharts default so that `textWidth` below is
+ * measuring the same font the canvas paints. If these two ever disagree the
+ * radius is computed against the wrong label width, which is exactly the bug
+ * this whole mechanism exists to avoid.
+ */
+const NAME_FONT = "sans-serif";
+
+/** One reused offscreen context; creating a canvas per label is not free. */
+let ruler: CanvasRenderingContext2D | null = null;
+
+function textWidth(text: string, size: number, weight: number): number {
+  ruler ??= document.createElement("canvas").getContext("2d");
+  // No 2d context is not a crash: fall back to a generous estimate, which
+  // costs a slightly small dial rather than a clipped label.
+  if (!ruler) return text.length * size * 0.6;
+  ruler.font = `${weight} ${size}px ${NAME_FONT}`;
+  return ruler.measureText(text).width;
+}
+
+/**
+ * The dial's radius, in pixels, from the space actually available.
+ *
+ * A percentage cannot do this job. ECharts resolves `radius: "52%"` against
+ * `min(width, height) / 2`, but what has to fit outside the dial is a *text
+ * label*, and text does not scale with the container — so one percentage that
+ * frames the dial nicely at 402px clips "Marketplace" at 320px and wastes
+ * space at 1280px. Measuring the box, measuring the widest label, and
+ * subtracting is the only version of this that holds at every width.
+ */
+function radiusFor(
+  boxWidth: number,
+  rows: BudgetRow[],
+  layout: Layout,
+): number {
+  const labelWidth = rows.reduce((widest, row) => {
+    const name = Math.max(
+      ...nameLines(row.category).map((line) =>
+        textWidth(line, layout.nameSize, 400),
+      ),
+    );
+    // The percentage is bolder and can be the wider of the two on a short name.
+    const share = textWidth("724%", layout.percentSize, 600);
+    return Math.max(widest, name, share);
+  }, 0);
+
+  const byWidth = boxWidth / 2 - layout.nameGap - labelWidth;
+  // Two lines of name plus the percentage, and the legend along the bottom.
+  const byHeight =
+    layout.height / 2 - layout.nameGap - layout.nameSize * 3.4 - 26;
+  return Math.max(44, Math.min(byWidth, byHeight));
+}
 
 /** Spent as a share of the limit — or of the suggestion, when none is set. */
 function share(row: BudgetRow): number {
@@ -88,7 +190,12 @@ function verdict(row: BudgetRow, pct: number): string {
   return "under";
 }
 
-function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
+function buildOption(
+  rows: BudgetRow[],
+  tokens: ChartTokens,
+  layout: Layout,
+  radius: number,
+): EChartsOption {
   const spent = rows.map(share);
   const used = rows.map((row) => row.usedMinor);
   const budget = rows.map((row) => row.limitMinor ?? row.suggestedMinor);
@@ -160,7 +267,7 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
       indicator: indicator as { name: string; max: number }[],
       center: ["50%", "48%"],
       // Room for a two-line axis name at every compass point.
-      radius: "65%",
+      radius,
       splitNumber,
       axisName: {
         // Category on top, its share of budget underneath — the reading most
@@ -168,35 +275,73 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
         formatter: (name?: string) => {
           const entry = name ? byName.get(name) : undefined;
           if (!entry) return name ?? "";
-          return `{name|${name}}\n{${verdict(entry.row, entry.pct)}|${Math.round(entry.pct)}%}`;
+          // One token per line: a `\n` *inside* a rich token is not a line
+          // break, so a wrapped name has to be emitted as separate tokens.
+          const lines = nameLines(name ?? "").map((line) => `{name|${line}}`);
+          const share = `{${verdict(entry.row, entry.pct)}|${Math.round(entry.pct)}%}`;
+          return [...lines, share].join("\n");
         },
         rich: {
-          name: { color: tokens.ink, fontSize: 12.5, lineHeight: 19 },
+          name: {
+            color: tokens.ink,
+            fontFamily: NAME_FONT,
+            fontSize: layout.nameSize,
+            lineHeight: layout.nameSize + 5,
+          },
           // `--positive` and `--danger` rather than the chart fills: these are
           // 12px glyphs, and #a5c400 on white is 2:1.
-          over: { color: tokens.danger, fontSize: 13.5, fontWeight: 600, lineHeight: 18 },
-          close: { color: tokens.positive, fontSize: 13.5, fontWeight: 600, lineHeight: 18 },
-          under: { color: tokens.accent, fontSize: 13.5, fontWeight: 600, lineHeight: 18 },
-          idle: { color: tokens.textSubtle, fontSize: 13.5, fontWeight: 600, lineHeight: 18 },
+          over: {
+            color: tokens.danger,
+            fontFamily: NAME_FONT,
+            fontSize: layout.percentSize,
+            fontWeight: 600,
+            lineHeight: layout.percentSize + 5,
+          },
+          close: {
+            color: tokens.positive,
+            fontFamily: NAME_FONT,
+            fontSize: layout.percentSize,
+            fontWeight: 600,
+            lineHeight: layout.percentSize + 5,
+          },
+          under: {
+            color: tokens.accent,
+            fontFamily: NAME_FONT,
+            fontSize: layout.percentSize,
+            fontWeight: 600,
+            lineHeight: layout.percentSize + 5,
+          },
+          idle: {
+            color: tokens.textSubtle,
+            fontFamily: NAME_FONT,
+            fontSize: layout.percentSize,
+            fontWeight: 600,
+            lineHeight: layout.percentSize + 5,
+          },
         },
       },
-      axisNameGap: 12,
+      axisNameGap: layout.nameGap,
       axisLabel: {
-        show: true,
+        // Below this the dial is small enough that the rim number sits on top
+        // of whichever axis name is nearest the top spoke. The `sr-only` table
+        // still carries every figure exactly.
+        show: layout.ticksOnlyRim ? radius >= 60 : true,
         // No "0%" at the hub: the centre is self-evidently zero, and any spoke
         // that reaches it puts the shape straight through the label.
         showMinLabel: false,
         showMaxLabel: true,
         color: tokens.textMuted,
-        fontSize: 11,
+        fontSize: layout.tickSize,
         // Francs, not rappen, and grouped the Swiss way. The card's subhead
         // names the currency, as it does on every other chart in the app. The
         // rim absorbs anything above it, so its label has to say so rather
         // than claim the shape stops there.
         formatter: (value: number) =>
-          `${Math.round(value / 100).toLocaleString("de-CH")}${
-            value >= max && clipped ? "+" : ""
-          }`,
+          layout.ticksOnlyRim && value < max
+            ? ""
+            : `${Math.round(value / 100).toLocaleString("de-CH")}${
+                value >= max && clipped ? "+" : ""
+              }`,
         // The rings run under these numbers; a plate of page colour keeps them
         // readable without moving them off the spoke.
         backgroundColor: tokens.surface,
@@ -245,50 +390,69 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
 
 export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
   const tokens = useChartTokens();
+  // Tailwind's `sm`, so the chart changes shape at the same width the page
+  // around it does. This picks the type sizes; the radius is measured.
+  const compact = useMediaQuery("(max-width: 639.98px)");
+  const layout = compact ? COMPACT : ROOMY;
+
+  const box = useRef<HTMLDivElement>(null);
+  const [boxWidth, setBoxWidth] = useState(0);
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setBoxWidth(entry.contentRect.width),
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const option = useMemo(
-    () => (tokens ? buildOption(rows, tokens) : null),
-    [rows, tokens],
+    () =>
+      tokens && boxWidth > 0
+        ? buildOption(rows, tokens, layout, radiusFor(boxWidth, rows, layout))
+        : null,
+    [rows, tokens, layout, boxWidth],
   );
 
   if (rows.length === 0) return null;
 
   return (
-    <>
+    <div ref={box}>
       <EChart
         option={option}
-        height={HEIGHT}
+        height={layout.height}
         label="Spending against budget for each category this month, in Swiss francs, with the share of each limit printed beside its category. The table below carries the same figures."
       />
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. */}
-      <table
-        className="sr-only"
-        aria-label="Spending against budget, by category"
-      >
-        <thead>
-          <tr>
-            <th scope="col">Category</th>
-            <th scope="col">Spent</th>
-            <th scope="col">Budget</th>
-            <th scope="col">Share of budget</th>
-            <th scope="col">Suggested</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.category}>
-              <th scope="row">{row.category}</th>
-              <td>{formatMoney(row.usedMinor)}</td>
-              <td>
-                {row.limitMinor === null ? "Not set" : formatMoney(row.limitMinor)}
-              </td>
-              <td>{Math.round(share(row))}%</td>
-              <td>{formatMoney(row.suggestedMinor)}</td>
+      <div className="sr-only">
+        <table aria-label="Spending against budget, by category">
+          <thead>
+            <tr>
+              <th scope="col">Category</th>
+              <th scope="col">Spent</th>
+              <th scope="col">Budget</th>
+              <th scope="col">Share of budget</th>
+              <th scope="col">Suggested</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.category}>
+                <th scope="row">{row.category}</th>
+                <td>{formatMoney(row.usedMinor)}</td>
+                <td>
+                  {row.limitMinor === null ? "Not set" : formatMoney(row.limitMinor)}
+                </td>
+                <td>{Math.round(share(row))}%</td>
+                <td>{formatMoney(row.suggestedMinor)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

@@ -154,32 +154,31 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
         </div>
       </div>
 
-      <table
-        className="sr-only"
-        aria-label="Share of spending by category, whole range"
-      >
-        <thead>
-          <tr>
-            <th scope="col">Category</th>
-            <th scope="col">Total</th>
-            <th scope="col">Share</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stack.bands.map((band) => (
-            <tr key={band.key}>
-              <th scope="row">{band.key}</th>
-              <td>{formatMoney(band.total)}</td>
-              <td>
-                {stack.total > 0
-                  ? ((band.total / stack.total) * 100).toFixed(1)
-                  : "0.0"}
-                %
-              </td>
+      <div className="sr-only">
+        <table aria-label="Share of spending by category, whole range">
+          <thead>
+            <tr>
+              <th scope="col">Category</th>
+              <th scope="col">Total</th>
+              <th scope="col">Share</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {stack.bands.map((band) => (
+              <tr key={band.key}>
+                <th scope="row">{band.key}</th>
+                <td>{formatMoney(band.total)}</td>
+                <td>
+                  {stack.total > 0
+                    ? ((band.total / stack.total) * 100).toFixed(1)
+                    : "0.0"}
+                  %
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
