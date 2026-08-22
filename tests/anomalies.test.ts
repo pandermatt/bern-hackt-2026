@@ -43,10 +43,24 @@ const {
   startAnomalyScan,
 } = await import("@/app/actions/anomalies");
 
+/*
+ * Hashed once for the whole file rather than once per user per test.
+ * scrypt is deliberately expensive — ~60ms a call here — and `beforeEach`
+ * creates two users, so hashing per test put a ~130ms floor under every one of
+ * these cases and accounted for most of the file's runtime. That floor is also
+ * what made the file flaky under load: it scales with CPU contention, and on a
+ * busy box it pushed the cheapest assertions towards the timeout.
+ *
+ * Nothing here ever verifies a password — `getCurrentUser` is mocked and the
+ * tests drive `signedIn.user` directly — so the hash only has to be the real
+ * format, not a fresh derivation per row.
+ */
+const passwordHash = await hashPassword("correct horse");
+
 async function createUser(email: string) {
   const [user] = await db
     .insert(users)
-    .values({ email, passwordHash: await hashPassword("correct horse") })
+    .values({ email, passwordHash })
     .returning();
   return user;
 }
@@ -87,13 +101,31 @@ function history(userId: number, prefix: string): NewTransaction[] {
   return rows;
 }
 
-/** The scan runs in the background, so tests wait for the run row to settle. */
-async function waitForScan(timeoutMs = 20000) {
+/**
+ * The scan runs in the background, so tests wait for the run row to settle.
+ *
+ * `startAnomalyScan` returns as soon as the run row exists and the work
+ * continues as a floating promise — that is the design, so polling the row is
+ * the only honest way to await it from here.
+ *
+ * The budget has to stay under vitest's per-test timeout. It used to be 20s
+ * against a 5s timeout, which meant a scan that genuinely stalled was reported
+ * as an anonymous "Test timed out in 5000ms" — the helper never lived long
+ * enough to say what it had been waiting for. A settled scan takes tens of
+ * milliseconds here, so this is a wide margin that still fails with a sentence
+ * naming the phase it got stuck in.
+ */
+async function waitForScan(timeoutMs = 4000) {
   const deadline = Date.now() + timeoutMs;
+  let last: Awaited<ReturnType<typeof getAnomalyScanStatus>> = null;
   for (;;) {
-    const status = await getAnomalyScanStatus();
-    if (status && status.status !== "running") return status;
-    if (Date.now() > deadline) throw new Error("scan did not finish in time");
+    last = await getAnomalyScanStatus();
+    if (last && last.status !== "running") return last;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `scan did not finish in ${timeoutMs}ms (status: ${last?.status ?? "no run row"}, phase: ${last?.phase ?? "-"})`,
+      );
+    }
     await new Promise((r) => setTimeout(r, 25));
   }
 }
