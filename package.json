@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "npm run db:push && npm run seed && next start",
+    "start": "npm run db:push && npm run seed -- --if-empty && next start",
     "lint": "eslint",
     "db:push": "mkdir -p \"$(dirname \"${DATABASE_PATH:-./data/app.db}\")\" && drizzle-kit push",
     "db:studio": "drizzle-kit studio",
