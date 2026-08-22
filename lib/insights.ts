@@ -741,6 +741,19 @@ export function potFill(savedMinor: number, targetMinor: number): number {
 }
 
 /**
+ * The percentage a pot has reached, **unclamped**.
+ *
+ * The drawing clamps, because a jar has a rim; the label must not, because a
+ * pot holding CHF 300 against a CHF 200 goal that reads "100%" is hiding the
+ * more interesting number. Both come off the same pair of amounts — this is
+ * the one that gets printed.
+ */
+export function potPercent(savedMinor: number, targetMinor: number): number {
+  if (targetMinor <= 0) return savedMinor > 0 ? 100 : 0;
+  return Math.round(Math.max(0, savedMinor / targetMinor) * 100);
+}
+
+/**
  * What a finished month had left over: income it did not spend.
  *
  * `null` while the month is still running, which is a different answer from

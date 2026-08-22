@@ -2,6 +2,7 @@ import { faBaby } from "@fortawesome/free-solid-svg-icons/faBaby";
 import { faBicycle } from "@fortawesome/free-solid-svg-icons/faBicycle";
 import { faCamera } from "@fortawesome/free-solid-svg-icons/faCamera";
 import { faCar } from "@fortawesome/free-solid-svg-icons/faCar";
+import { faCoins } from "@fortawesome/free-solid-svg-icons/faCoins";
 import { faCouch } from "@fortawesome/free-solid-svg-icons/faCouch";
 import { faGift } from "@fortawesome/free-solid-svg-icons/faGift";
 import { faGraduationCap } from "@fortawesome/free-solid-svg-icons/faGraduationCap";
@@ -42,6 +43,17 @@ const RULES: [readonly string[], IconDefinition][] = [
   [
     ["holiday", "vacation", "ferien", "urlaub", "beach", "strand", "sommer", "summer"],
     faUmbrellaBeach,
+  ],
+  [
+    // Ahead of the travel rule: "Investment" has nothing to do with a trip,
+    // but plenty of portfolio names ("ETF Sparplan") would otherwise fall
+    // through to the piggy bank.
+    [
+      "investment", "investieren", "investition", "invest", "aktien", "stocks",
+      "etf", "depot", "börse", "boerse", "fonds", "rendite", "portfolio",
+      "crypto", "krypto", "bitcoin", "vorsorge", "säule", "saeule", "pension",
+    ],
+    faCoins,
   ],
   [["flight", "flug", "reise", "travel", "trip", "japan", "usa"], faPlaneDeparture],
   [["motorrad", "motorcycle", "roller", "vespa", "scooter"], faMotorcycle],
