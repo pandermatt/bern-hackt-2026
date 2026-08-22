@@ -4,6 +4,7 @@ import type { SavingsOverview } from "@/app/actions/savings";
 import { SavingsAllocator } from "@/components/savings-allocator";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
 import { SavingsPot } from "@/components/savings-pot";
+import { Section } from "@/components/section";
 import { formatMoney } from "@/lib/insights";
 
 /**
@@ -31,26 +32,24 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
   const canAllocate = month !== null && monthEnded && surplus > 0;
 
   return (
-    <section className="card overflow-hidden" aria-labelledby="savings-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5">
-        <div>
-          <h2 id="savings-heading" className="text-[14.5px] font-semibold text-text">
-            {t("heading")}
-          </h2>
-          <p className="mt-0.5 text-[12.5px] text-text-muted">
-            {t("subtitle")}
-          </p>
-        </div>
-        {pots.length > 0 && (
-          <p className="font-mono text-[12.5px] tabular-nums text-text-muted">
-            {t("savedOfTarget", {
+    /* The page's one section idiom — big heading on the page's own ground over
+       a grey panel — rather than a card. See `components/section.tsx`.
+
+       The meta slot holds one line, so it carries whichever of the two is
+       worth reading: the running total once there are pots, and the sentence
+       explaining what a pot is when there are none. */
+    <Section
+      id="savings"
+      heading={t("heading")}
+      meta={
+        pots.length > 0
+          ? t("savedOfTarget", {
               saved: formatMoney(savedMinor),
               target: formatMoney(targetMinor),
-            })}
-          </p>
-        )}
-      </div>
-
+            })
+          : t("subtitle")
+      }
+    >
       {pots.length === 0 ? (
         <p className="px-4 py-10 text-center text-[13.5px] text-text-muted sm:px-5">
           {t("empty")}
@@ -74,7 +73,7 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
         />
       ) : (
         month !== null && (
-          <p className="border-t border-line bg-surface-muted/40 px-4 py-3 text-[12.5px] text-text-muted sm:px-5">
+          <p className="border-t border-surface px-4 py-3 text-[12.5px] text-text-muted sm:px-5">
             {!monthEnded
               ? t("monthRunning", { month })
               : surplus === 0
@@ -88,6 +87,6 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
       )}
 
       <SavingsGoalForm />
-    </section>
+    </Section>
   );
 }

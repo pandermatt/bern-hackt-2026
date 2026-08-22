@@ -300,18 +300,43 @@ Unchanged from the template this app grew out of, and still exactly true.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.
-- **The dashboard has one section idiom, and `.card` is not it.**
+- **The signed-in app has one section idiom, and `.card` is not it.**
   `components/section.tsx` is a big heading on the page's own ground (26px,
   30px from `sm`) over a `rounded-lg bg-surface-muted` panel — the same shape
   the ledger's month groups use, so the page reads as one design rather than
   cards stacked on panels. Every block above the ledger goes through it; the
   summary tiles are the same grey panel without a heading of their own, because
-  the page `h1` heads them. `.card` still belongs on `/account`, the auth forms
-  and the error pages. Two consequences worth knowing: the section headings are
+  the page `h1` heads them. **`/anomalies` and `/budget` run on it too**, and
+  their `h1` matches the dashboard's 30/36px — the budget page used to head
+  itself at 22px, which is smaller than the sections underneath it. `.card`
+  still belongs on `/account`, the auth forms and the error pages. Two
+  consequences worth knowing: the section headings are
   deliberately **not** sticky (the month headings are, at `top-16`, and a second
   sticky layer at the same offset collides with them), and the `pt-6` on each
   heading is what spaces sections apart, so the page stacks them with no
   `space-y` of its own.
+- **A `Section` is presentational, so a client component may render it.**
+  `monthly-trend.tsx`, `top-category-bars.tsx` and `budget-editor.tsx` all do.
+  It has no `server-only` import and is not async; what it costs is a small
+  presentational component in the client bundle, not a boundary violation.
+- **Moving a block onto the grey panel means re-checking everything filled with
+  its own ground.** The budget page's conversion needed four: rows divided by
+  `divide-surface` rather than `border-line` (white lines, like the ledger's),
+  strip rules as `border-t border-surface`, secondary buttons given `bg-surface`
+  with a `hover:bg-surface-hover` (hovering to `surface-muted` on a
+  `surface-muted` panel does nothing visible), and the radar's axis-tick plate
+  moved from `tokens.surface` to `tokens.surfaceMuted` — a white chip behind
+  every tick, where it had been a hole in the rings. The `bg-surface-muted/40`
+  header and footer strips those blocks wore went away entirely: they existed to
+  separate themselves from a white card, and there is no white card any more.
+- **The header's tab group is the app's top-level pages; the right-hand pill
+  cluster is account chrome.** `HeaderNav` carries Dashboard, Budget and
+  Auffälligkeiten — the last moved out of the pill cluster, where it read as a
+  setting rather than a page and could not show as current. Its tab keeps the
+  pill's icon and the pill's habit of hiding its label below `sm`: three text
+  tabs plus the account cluster do not fit on a 375px phone. `/` has to match
+  the path exactly (it prefixes everything otherwise); the others own their
+  subtrees, so `/anomalies/AMOUNT_SPIKE` still lights the Auffälligkeiten tab.
 - **On a grey panel, a chart's separators are `--surface-muted`, and a bar
   track is `--surface`.** `useChartTokens()` exposes both. Anything filled with
   its own ground disappears — that is why the donut's wedge borders moved off

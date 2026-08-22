@@ -8,6 +8,7 @@ import { BudgetEditor } from "@/components/budget-editor";
 import { BudgetMonthPicker } from "@/components/budget-month-picker";
 import { BudgetRadar } from "@/components/budget-radar";
 import { SavingsGoals } from "@/components/savings-goals";
+import { Section } from "@/components/section";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/insights";
@@ -53,9 +54,12 @@ export default async function BudgetPage({
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
+      {/* The dashboard's and the anomalies page's own heading size. This used
+          to be 22px, which put the page title below the section headings that
+          sit under it. */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
+          <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
             {t("title")}
           </h1>
           <p className="mt-1 text-[13.5px] text-text-muted">
@@ -71,43 +75,36 @@ export default async function BudgetPage({
       </div>
 
       {rows.length === 0 ? (
-        <div className="card px-5 py-14 text-center">
-          <p className="text-[14.5px] font-medium text-text">
-            {t("emptyTitle")}
-          </p>
-          <p className="mx-auto mt-1 max-w-[42ch] text-[13.5px] text-text-muted">
+        <div className="mt-6 rounded-lg bg-surface-muted px-5 py-14 text-center">
+          <p className="text-[15px] font-medium text-text">{t("emptyTitle")}</p>
+          <p className="mx-auto mt-1 max-w-[42ch] text-[13px] text-text-muted">
             {t("emptyBody")}
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          <section className="card p-5" aria-labelledby="radar-heading">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h2
-                id="radar-heading"
-                className="text-[15px] font-semibold text-text"
-              >
-                {t("radarHeading")}
-              </h2>
-              <p className="text-[12.5px] text-text-muted">
-                {/* `month` is non-null whenever there are rows — `budgetRows`
-                    returns [] without one — but that is not something the type
-                    carries, and "no month" has nothing to say about a month
-                    anyway. */}
-                {budgeted === 0 || !month
-                  ? t("radarNoLimits")
-                  : t("radarMeta", {
-                      spent: formatMoney(totalUsed),
-                      limit: formatMoney(totalLimit),
-                      month,
-                    })}
-              </p>
-            </div>
-
-            <div className="mt-2">
-              <BudgetRadar rows={rows} />
-            </div>
-          </section>
+        /* No `space-y` — every Section brings its own `pt-6`, the rhythm the
+           dashboard, the ledger and the anomalies page already run on. */
+        <div>
+          <Section
+            id="radar"
+            heading={t("radarHeading")}
+            meta={
+              /* `month` is non-null whenever there are rows — `budgetRows`
+                 returns [] without one — but that is not something the type
+                 carries, and "no month" has nothing to say about a month
+                 anyway. */
+              budgeted === 0 || !month
+                ? t("radarNoLimits")
+                : t("radarMeta", {
+                    spent: formatMoney(totalUsed),
+                    limit: formatMoney(totalLimit),
+                    month,
+                  })
+            }
+            panelClassName="p-4 sm:p-5"
+          >
+            <BudgetRadar rows={rows} />
+          </Section>
 
           {/* Keyed on the month: the editor holds the typed-but-unsaved
               values in state, and switching months has to start it over. */}

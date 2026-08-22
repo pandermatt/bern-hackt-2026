@@ -7,6 +7,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { saveBudgets } from "@/app/actions/budget";
+import { Section } from "@/components/section";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
 import { useCategoryLabel } from "@/lib/use-category-label";
 
@@ -89,28 +90,15 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
   }
 
   return (
-    <div className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5">
-        <div>
-          <h2 className="text-[14.5px] font-semibold text-text">
-            {t("limitsHeading")}
-          </h2>
-          <p className="mt-0.5 text-[12.5px] text-text-muted">
-            {t("limitsNote")}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={applySuggestions}
-          disabled={pending}
-          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-line-strong px-2.5 py-1.5 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-default disabled:opacity-60"
-        >
-          <Sparkles className="size-3.5 text-accent" aria-hidden />
-          {t("useSuggestions")}
-        </button>
-      </div>
-
-      <ul>
+    /* The ledger's idiom, not a card: the heading sits on the page's own
+       ground and the rows are a grey panel underneath, so the budget page
+       reads as the same design as the dashboard rather than cards stacked on
+       it. `Section` is a plain presentational component, so a client
+       component may render it — `monthly-trend.tsx` does the same. */
+    <Section id="limits" heading={t("limitsHeading")} meta={t("limitsNote")}>
+      {/* Dividers are the panel's surface showing through, the way the
+          ledger's month panels do it — white lines rather than grey borders. */}
+      <ul className="divide-y divide-surface">
         {rows.map((row) => {
           const limit = row.limitMinor;
           const over = limit !== null && row.usedMinor > limit;
@@ -119,7 +107,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
           return (
             <li
               key={row.category}
-              className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-3.5 last:border-b-0 sm:px-5"
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-surface-hover sm:px-5"
             >
               <span
                 className="size-2.5 shrink-0 rounded-[2px]"
@@ -183,7 +171,25 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
         })}
       </ul>
 
-      <div className="flex items-center justify-end gap-3 border-t border-line px-4 py-3 sm:px-5">
+      {/* Both actions at the foot. "Use suggestions" was a header control back
+          when this had a header bar of its own; the heading is outside the
+          panel now, and a bulk fill of every field below sits better with the
+          save it feeds than floating above the rows. */}
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-surface px-4 py-3 sm:px-5">
+        <button
+          type="button"
+          onClick={applySuggestions}
+          disabled={pending}
+          /* `bg-surface` with a `surface-hover` hover, not the bare border it
+             wore on white: on the grey panel a button that hovers to
+             `surface-muted` is hovering to its own ground and nothing
+             happens. */
+          className="mr-auto flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-default disabled:opacity-60"
+        >
+          <Sparkles className="size-3.5 text-accent" aria-hidden />
+          {t("useSuggestions")}
+        </button>
+
         {dirty && (
           <span className="text-[12.5px] text-text-muted">
             {t("unsavedChanges")}
@@ -199,6 +205,6 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
           {t("save")}
         </button>
       </div>
-    </div>
+    </Section>
   );
 }
