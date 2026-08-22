@@ -122,10 +122,11 @@ export type Dashboard = {
   merchants: Slice[];
   transactions: Transaction[];
   /**
-   * Lets the dashboard prompt for a first scan without mistaking a clean
-   * account for an un-scanned one — see getAnomalyScanState.
+   * Lets the dashboard prompt for a scan without mistaking a clean account for
+   * an un-scanned one, or a re-imported one for either — see
+   * getAnomalyScanState.
    */
-  anomalyScan: { hasCompletedScan: boolean; running: boolean };
+  anomalyScan: { hasCompletedScan: boolean; running: boolean; stale: boolean };
   anomalies: AnomalyInsight[];
   /**
    * What the active `?anomaly=` filter is called, for the chip in the filter

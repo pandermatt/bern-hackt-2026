@@ -208,7 +208,10 @@
     "doneBody": "Die Befunde werden geladen — sie erscheinen gleich bei den Transaktionen unten.",
     "title": "Die Ausreisser erkennen",
     "body": "Es wurde noch nichts analysiert. Analysieren Sie mit KI, um doppelte Belastungen, ungewöhnliche Beträge und ausgebliebene Daueraufträge in Ihren {count} Transaktionen zu markieren.",
+    "staleTitle": "Diese Ergebnisse sind veraltet",
+    "staleBody": "Ihre Kontoauszüge wurden seit der letzten Analyse neu importiert, daher passen die Befunde nicht mehr zu Ihren Transaktionen — bei den Transaktionen unten erscheint deshalb keine Markierung mehr. Analysieren Sie erneut.",
     "cta": "Mit KI analysieren",
+    "staleCta": "Erneut analysieren",
     "retry": "Erneut versuchen"
   },
   "AnomalyScan": {

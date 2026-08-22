@@ -196,10 +196,26 @@ describe("running a scan", () => {
 });
 
 describe("scan state (drives the dashboard prompt)", () => {
+  /** A finding pointing at an id no transaction has — what a re-import leaves. */
+  function leftover(userId: number) {
+    return {
+      userId,
+      transactionId: 999_999,
+      ruleId: "REPEAT_CHARGE",
+      severity: "medium" as const,
+      title: "REPEAT_CHARGE title",
+      description: "REPEAT_CHARGE description",
+      icon: "lucide:arrow-up",
+      emoji: "🔺",
+      metrics: "{}",
+    };
+  }
+
   it("reports no completed scan on a fresh account", async () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: false,
+      stale: false,
     });
   });
 
@@ -211,6 +227,7 @@ describe("scan state (drives the dashboard prompt)", () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: true,
+      stale: false,
     });
   });
 
@@ -225,6 +242,38 @@ describe("scan state (drives the dashboard prompt)", () => {
     const state = await getAnomalyScanState();
     expect(state.hasCompletedScan).toBe(true);
     expect(state.running).toBe(false);
+    // Nothing was left behind, so this is a clean result and not a stale one.
+    expect(state.stale).toBe(false);
+  });
+
+  it("keeps a completed scan un-stale while any finding still has its row", async () => {
+    await db.insert(transactions).values(history(alice.id, "a"));
+    const [live] = await db.select({ id: transactions.id }).from(transactions).limit(1);
+    await db.insert(anomalies).values([
+      { ...leftover(alice.id), transactionId: live.id },
+      // A re-import reissues ids, so some findings can be orphaned while others
+      // survive. One survivor is enough for the results to still be about these
+      // transactions.
+      leftover(alice.id),
+    ]);
+
+    expect((await getAnomalyScanState()).stale).toBe(false);
+  });
+
+  it("reports findings left behind by a re-import as stale", async () => {
+    // What a re-seed leaves: every finding points at a transaction id that no
+    // longer exists, so the ledger shows no badges at all. Without this the
+    // dashboard would silently look like a clean account.
+    await db.insert(transactions).values(history(alice.id, "a"));
+    await db.insert(anomalies).values(leftover(alice.id));
+
+    expect((await getAnomalyScanState()).stale).toBe(true);
+  });
+
+  it("does not call another account's leftovers stale", async () => {
+    await db.insert(anomalies).values(leftover(bob.id));
+
+    expect((await getAnomalyScanState()).stale).toBe(false);
   });
 
   it("reports nothing for a signed-out visitor", async () => {
@@ -232,6 +281,7 @@ describe("scan state (drives the dashboard prompt)", () => {
     expect(await getAnomalyScanState()).toEqual({
       hasCompletedScan: false,
       running: false,
+      stale: false,
     });
   });
 });
