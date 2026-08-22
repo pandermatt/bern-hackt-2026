@@ -338,6 +338,23 @@ Unchanged from the template this app grew out of, and still exactly true.
   ground for words. Every string down there carries its own ground — the cards
   on `bg-surface`, and the all-clear line and the "show all" toggle on surface
   pills, for exactly this reason.
+- **A Dauersparauftrag never moves money.** `savings_goals.monthly_minor` is a
+  plan, not a balance: nothing reads it to create an allocation. It seeds the
+  allocator's fields when a finished month has a surplus, and the reader still
+  presses save. A standing order that quietly filled pots would invent savings
+  out of months that never had the income — and `allocateSurplus` stays the
+  only thing that writes `savings_allocations`.
+- **`savings_goals.target_on` is `YYYY-MM-DD` text and nullable.** Text for the
+  same reason `transactions.booked_on` is: a deadline is a calendar day, and as
+  a timestamp 2026-07-01 renders as 30 June west of UTC. Nullable because
+  plenty of goals are "eventually", and a past date is allowed — that is an
+  overdue goal, which is true. Validate with `isCalendarDate`, not a regex: the
+  shape alone accepts 2026-02-30.
+- **Pots sort by `byTargetDate`: soonest first, undated last.** `null` is
+  "eventually", and eventually is never sooner than a date — sorting undated
+  pots to the top buries the one that is actually due. Ties break on id so a
+  pot does not jump when a sibling is edited. Sorted in JavaScript rather than
+  SQL because that null rule is not SQL's, and because it is worth testing.
 - **Nudges are ranked in `lib/nudges.ts`, which is pure.** No DB import, no
   i18n call — anomaly nudges arrive already translated from
   `app/actions/anomalies.ts` and this module only orders them. `isOverBudget`

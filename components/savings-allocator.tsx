@@ -28,6 +28,19 @@ function toField(minor: number): string {
   return minor === 0 ? "" : (minor / 100).toFixed(2);
 }
 
+/**
+ * What a pot's field starts at.
+ *
+ * Whatever is already allocated for this month wins: those are saved figures
+ * and the reader is editing them, not starting over. Only an untouched pot
+ * falls back to its Dauersparauftrag — which is the whole point of one, and
+ * also the only place a standing order ever influences anything. It still
+ * moves no money: it fills an input, and the input is saved by hand.
+ */
+function seedFor(pot: SavingsPot): number {
+  return pot.monthMinor > 0 ? pot.monthMinor : (pot.monthlyMinor ?? 0);
+}
+
 /** What a field is worth, for the running total. `NaN` for anything unparseable. */
 function toMinor(field: string): number {
   const cleaned = field.trim().replace(/[’'\s]/g, "").replace(",", ".");
@@ -49,7 +62,7 @@ export function SavingsAllocator({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [fields, setFields] = useState<Record<number, string>>(() =>
-    Object.fromEntries(pots.map((pot) => [pot.id, toField(pot.monthMinor)])),
+    Object.fromEntries(pots.map((pot) => [pot.id, toField(seedFor(pot))])),
   );
 
   const amounts = pots.map((pot) => toMinor(fields[pot.id] ?? ""));
@@ -62,6 +75,14 @@ export function SavingsAllocator({
   const dirty = pots.some(
     (pot, index) => amounts[index] !== pot.monthMinor && !Number.isNaN(amounts[index]),
   );
+
+  function applyStandingOrders() {
+    setFields(
+      Object.fromEntries(
+        pots.map((pot) => [pot.id, toField(pot.monthlyMinor ?? 0)]),
+      ),
+    );
+  }
 
   function spreadEvenly() {
     if (pots.length === 0) return;
@@ -201,6 +222,17 @@ export function SavingsAllocator({
               : t("unallocated", { amount: formatMoney(remaining) })}
         </p>
 
+        {/* Only offered when there is something to apply. */}
+        {pots.some((pot) => pot.monthlyMinor !== null) && (
+          <button
+            type="button"
+            onClick={applyStandingOrders}
+            disabled={pending}
+            className="h-9 cursor-pointer rounded-md border border-line-strong px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-default disabled:opacity-60"
+          >
+            {t("useStandingOrders")}
+          </button>
+        )}
         <button
           type="button"
           onClick={spreadEvenly}
