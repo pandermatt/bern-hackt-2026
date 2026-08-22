@@ -13,7 +13,6 @@ export type ActionState = {
 };
 
 export async function generateSyntheticTransactionsAction(options?: {
-  startYear?: number;
   yearsCount?: number;
   targetCount?: number;
 }): Promise<ActionState> {
@@ -23,21 +22,21 @@ export async function generateSyntheticTransactionsAction(options?: {
   }
 
   try {
-    const { count } = await saveGeneratedTransactionsForUser(user.id, options);
-    // Every page sits under `/[locale]`, so the literal "/" and "/account"
-    // these used to name match nothing. The dashboard lives in a `(dashboard)`
-    // route group and its cache tag carries the group, so the pattern has to
-    // as well. Revalidating the pattern covers both languages at once.
-    revalidatePath("/[locale]/(dashboard)", "page");
-    revalidatePath("/[locale]/account", "page");
+    // The window always ends today and runs backwards — the generator clamps
+    // the counts, so a hand-crafted request cannot ask for an absurd volume.
+    const yearsCount = Math.max(1, Math.min(options?.yearsCount ?? 1, 5));
+    const { count } = await saveGeneratedTransactionsForUser(user.id, {
+      yearsCount,
+      targetCount: options?.targetCount,
+    });
+    revalidatePath("/");
+    revalidatePath("/account");
     const yearsText =
-      options?.yearsCount && options.yearsCount > 1
-        ? `${options.yearsCount} years (from ${options.startYear ?? 2025})`
-        : `year ${options?.startYear ?? 2025}`;
+      yearsCount > 1 ? `the last ${yearsCount} years` : "the last 12 months";
 
     return {
       success: true,
-      message: `Successfully generated ${count.toLocaleString()} transactions across ${yearsText} with rich anomalies!`,
+      message: `Successfully generated ${count.toLocaleString()} transactions covering ${yearsText} with rich anomalies!`,
       count,
     };
   } catch (error) {

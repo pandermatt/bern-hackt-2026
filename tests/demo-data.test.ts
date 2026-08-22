@@ -32,7 +32,8 @@ beforeEach(async () => {
 
 describe("Synthetic Transaction Generator (Faker)", () => {
   it("generates realistic transactions spanning all 12 months", () => {
-    const rows = generateYearlyTransactions(user1.id, { startYear: 2025, seed: 42 });
+    // A year-end endDate makes the window exactly the calendar year.
+    const rows = generateYearlyTransactions(user1.id, { endDate: "2025-12-31", seed: 42 });
 
     expect(rows.length).toBeGreaterThan(200);
 
@@ -47,7 +48,7 @@ describe("Synthetic Transaction Generator (Faker)", () => {
 
   it("scales transaction volume according to targetCount and spans multiple years", () => {
     const target500 = generateYearlyTransactions(user1.id, {
-      startYear: 2023,
+      endDate: "2024-12-31",
       yearsCount: 2,
       targetCount: 500,
       seed: 123,
@@ -60,9 +61,37 @@ describe("Synthetic Transaction Generator (Faker)", () => {
     expect(years.has("2024")).toBe(true);
   });
 
+  it("books everything inside the day-exact window ending on endDate", () => {
+    const rows = generateYearlyTransactions(user1.id, {
+      endDate: "2026-08-22",
+      yearsCount: 1,
+      targetCount: 500,
+      seed: 314,
+    });
+
+    for (const row of rows) {
+      expect(row.bookedOn >= "2025-08-23").toBe(true);
+      expect(row.bookedOn <= "2026-08-22").toBe(true);
+    }
+    // Both partial edge months are populated, not skipped.
+    const months = new Set(rows.map((r) => r.bookedOn.slice(0, 7)));
+    expect(months.has("2025-08")).toBe(true);
+    expect(months.has("2026-08")).toBe(true);
+  });
+
+  it("defaults the window to ending today and never books the future", () => {
+    const rows = generateYearlyTransactions(user1.id, { seed: 271 });
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    for (const row of rows) {
+      expect(row.bookedOn <= today).toBe(true);
+    }
+  });
+
   it("injects rich financial anomalies into the transaction history", () => {
     const rows = generateYearlyTransactions(user1.id, {
-      startYear: 2025,
+      endDate: "2025-12-31",
       targetCount: 500,
       seed: 777,
     });
@@ -83,7 +112,7 @@ describe("Synthetic Transaction Generator (Faker)", () => {
   });
 
   it("assigns valid categories, accounts, and signed minor amounts", () => {
-    const rows = generateYearlyTransactions(user1.id, { startYear: 2025, seed: 100 });
+    const rows = generateYearlyTransactions(user1.id, { endDate: "2025-12-31", seed: 100 });
     const validCategories = new Set<string>(CATEGORIES);
 
     for (const row of rows) {
@@ -110,7 +139,7 @@ describe("Synthetic Transaction Generator (Faker)", () => {
 
   it("persists generated transactions into the database scoped to user", async () => {
     const { count } = await saveGeneratedTransactionsForUser(user1.id, {
-      startYear: 2025,
+      endDate: "2025-12-31",
       targetCount: 250,
       seed: 999,
     });

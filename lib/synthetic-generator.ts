@@ -5,10 +5,16 @@ import { db } from "@/db";
 import { transactions, type NewTransaction } from "@/db/schema";
 
 export interface GenerateOptions {
-  startYear?: number;
+  /** How many years the window covers, counting back from `endDate`. 1–5. */
   yearsCount?: number;
   targetCount?: number;
   seed?: number;
+  /**
+   * ISO `YYYY-MM-DD` the window ends on (inclusive). Defaults to today, so a
+   * fresh generation always runs right up to the present and never into the
+   * future. Tests pin it to keep assertions date-independent.
+   */
+  endDate?: string;
 }
 
 const MERCHANTS_BY_CATEGORY: Record<
@@ -68,38 +74,103 @@ function formatIsoDate(year: number, month: number, day: number): string {
   return `${year}-${m}-${d}`;
 }
 
+/** Leap-aware. `month` is 1-based; day 0 of the next month is this month's last. */
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function todayIso(): string {
+  const now = new Date();
+  return formatIsoDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+
 /**
- * Generates an array of realistic synthetic bank transactions with intentional anomalies.
+ * One calendar month of the generation window. The first and last month are
+ * usually partial — the window runs day-exact from `endDate` backwards — so
+ * every date the generator books has to fall inside `[minDay, maxDay]`.
+ */
+type MonthWindow = { year: number; month: number; minDay: number; maxDay: number };
+
+/**
+ * The window as a list of calendar months, oldest first: `yearsCount` years,
+ * ending on `endIso` inclusive. Ending 2026-08-22 with one year runs
+ * 2025-08-23 → 2026-08-22 — thirteen calendar months, two of them partial.
+ */
+function buildWindows(endIso: string, yearsCount: number): MonthWindow[] {
+  const [endYear, endMonth, endDay] = endIso.split("-").map(Number);
+  // Day-exact start: same day-of-month `yearsCount` years back, plus one day.
+  // Date arithmetic absorbs the edges (a Feb 29 that has no earlier twin, a
+  // start day past the month's end).
+  const start = new Date(Date.UTC(endYear - yearsCount, endMonth - 1, endDay));
+  start.setUTCDate(start.getUTCDate() + 1);
+  const startYear = start.getUTCFullYear();
+  const startMonth = start.getUTCMonth() + 1;
+  const startDay = start.getUTCDate();
+
+  const windows: MonthWindow[] = [];
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    windows.push({
+      year,
+      month,
+      minDay: year === startYear && month === startMonth ? startDay : 1,
+      maxDay: year === endYear && month === endMonth ? endDay : daysInMonth(year, month),
+    });
+    month++;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+  return windows;
+}
+
+/**
+ * Generates realistic synthetic bank transactions with intentional anomalies,
+ * covering the `yearsCount` years that end on `endDate` (today by default) —
+ * so the history always reaches the present and never runs past it.
  */
 export function generateYearlyTransactions(
   userId: number,
   options: GenerateOptions = {},
 ): NewTransaction[] {
-  const startYear = options.startYear ?? 2025;
   const yearsCount = Math.max(1, Math.min(options.yearsCount ?? 1, 5));
-  const targetCount = options.targetCount ?? 500;
+  const targetCount = Math.max(0, Math.min(options.targetCount ?? 500, 50000));
+  const endIso = /^\d{4}-\d{2}-\d{2}$/.test(options.endDate ?? "")
+    ? (options.endDate as string)
+    : todayIso();
 
   if (options.seed !== undefined) {
     faker.seed(options.seed);
   }
 
+  const windows = buildWindows(endIso, yearsCount);
   const rows: NewTransaction[] = [];
   let seq = 1;
-  const daysInMonths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
-  for (let y = 0; y < yearsCount; y++) {
-    const currentYear = startYear + y;
-    const monthlySalaryBase = 7200;
+  /** A day inside both the wanted range and the window, or null if they miss —
+   * a fixed booking day can fall outside a partial first or last month. */
+  const dayWithin = (w: MonthWindow, min: number, max: number): number | null => {
+    const lo = Math.max(min, w.minDay);
+    const hi = Math.min(max, w.maxDay);
+    return lo > hi ? null : faker.number.int({ min: lo, max: hi });
+  };
+  const hasDay = (w: MonthWindow, day: number): boolean =>
+    day >= w.minDay && day <= w.maxDay;
+  const pickWindow = (): MonthWindow => faker.helpers.arrayElement(windows);
 
+  const monthlySalaryBase = 7200;
+
+  for (const w of windows) {
     // 1. Monthly Recurring Salary & Standard Inflows
-    for (let month = 1; month <= 12; month++) {
-      const salaryDate = formatIsoDate(currentYear, month, 25);
-      const salaryAmount = (monthlySalaryBase + faker.number.int({ min: -150, max: 350 })) * 100;
-
+    if (hasDay(w, 25)) {
+      const salaryAmount =
+        (monthlySalaryBase + faker.number.int({ min: -150, max: 350 })) * 100;
       rows.push({
         userId,
-        externalId: `faker-${currentYear}-${month}-salary-${seq++}`,
-        bookedOn: salaryDate,
+        externalId: `faker-${w.year}-${w.month}-salary-${seq++}`,
+        bookedOn: formatIsoDate(w.year, w.month, 25),
         kind: "income",
         amountMinor: salaryAmount,
         currency: "CHF",
@@ -107,18 +178,20 @@ export function generateYearlyTransactions(
         account: "Privatkonto",
         merchant: "Employer AG",
         category: "Salary",
-        description: `Salärzahlung Monat ${month}/${currentYear}`,
+        description: `Salärzahlung Monat ${w.month}/${w.year}`,
         createdAt: new Date(),
       });
+    }
 
-      // Regular refund
-      if (month % 3 === 0) {
-        const refDay = faker.number.int({ min: 5, max: 20 });
+    // Regular refund every third calendar month
+    if (w.month % 3 === 0) {
+      const refDay = dayWithin(w, 5, 20);
+      if (refDay !== null) {
         const refAmount = faker.number.int({ min: 25, max: 180 }) * 100;
         rows.push({
           userId,
-          externalId: `faker-${currentYear}-${month}-refund-${seq++}`,
-          bookedOn: formatIsoDate(currentYear, month, refDay),
+          externalId: `faker-${w.year}-${w.month}-refund-${seq++}`,
+          bookedOn: formatIsoDate(w.year, w.month, refDay),
           kind: "income",
           amountMinor: refAmount,
           currency: "CHF",
@@ -132,99 +205,52 @@ export function generateYearlyTransactions(
       }
     }
 
-    // 2. Fixed Monthly Recurring Expenses
-    for (let month = 1; month <= 12; month++) {
-      // Rent
-      const rentAmount = 185000;
+    // 2. Fixed Monthly Recurring Expenses — each on its usual booking day,
+    // skipped when that day falls outside a partial first or last month.
+    const recurring: {
+      day: number;
+      key: string;
+      amountMinor: number;
+      merchant: string;
+      category: string;
+      description: string;
+    }[] = [
+      { day: 1, key: "rent", amountMinor: 185000, merchant: "Rent", category: "Housing", description: `Miete Wohnung ${w.month}/${w.year}` },
+      { day: 4, key: "health", amountMinor: 39500, merchant: "Krankenkasse", category: "Health & Insurance", description: `Monatsprämie ${w.month}/${w.year}` },
+      { day: 10, key: "telecom", amountMinor: 7990, merchant: "Mobile Provider", category: "Utilities & Telecom", description: "Mobile & Internet Abo" },
+      { day: 12, key: "netflix", amountMinor: 2190, merchant: "Netflix", category: "Subscriptions", description: "Netflix Premium Monat" },
+      { day: 15, key: "spotify", amountMinor: 1495, merchant: "Spotify", category: "Subscriptions", description: "Spotify Premium" },
+    ];
+    for (const item of recurring) {
+      if (!hasDay(w, item.day)) continue;
       rows.push({
         userId,
-        externalId: `faker-${currentYear}-${month}-rent-${seq++}`,
-        bookedOn: formatIsoDate(currentYear, month, 1),
+        externalId: `faker-${w.year}-${w.month}-${item.key}-${seq++}`,
+        bookedOn: formatIsoDate(w.year, w.month, item.day),
         kind: "expense",
-        amountMinor: -rentAmount,
+        amountMinor: -item.amountMinor,
         currency: "CHF",
-        originalAmountMinor: rentAmount,
+        originalAmountMinor: item.amountMinor,
         account: "Privatkonto",
-        merchant: "Rent",
-        category: "Housing",
-        description: `Miete Wohnung ${month}/${currentYear}`,
-        createdAt: new Date(),
-      });
-
-      // Health Insurance
-      const healthAmount = 39500;
-      rows.push({
-        userId,
-        externalId: `faker-${currentYear}-${month}-health-${seq++}`,
-        bookedOn: formatIsoDate(currentYear, month, 4),
-        kind: "expense",
-        amountMinor: -healthAmount,
-        currency: "CHF",
-        originalAmountMinor: healthAmount,
-        account: "Privatkonto",
-        merchant: "Krankenkasse",
-        category: "Health & Insurance",
-        description: `Monatsprämie ${month}/${currentYear}`,
-        createdAt: new Date(),
-      });
-
-      // Telecom
-      const telecomAmount = 7990;
-      rows.push({
-        userId,
-        externalId: `faker-${currentYear}-${month}-telecom-${seq++}`,
-        bookedOn: formatIsoDate(currentYear, month, 10),
-        kind: "expense",
-        amountMinor: -telecomAmount,
-        currency: "CHF",
-        originalAmountMinor: telecomAmount,
-        account: "Privatkonto",
-        merchant: "Mobile Provider",
-        category: "Utilities & Telecom",
-        description: "Mobile & Internet Abo",
-        createdAt: new Date(),
-      });
-
-      // Subscriptions
-      rows.push({
-        userId,
-        externalId: `faker-${currentYear}-${month}-netflix-${seq++}`,
-        bookedOn: formatIsoDate(currentYear, month, 12),
-        kind: "expense",
-        amountMinor: -2190,
-        currency: "CHF",
-        originalAmountMinor: 2190,
-        account: "Privatkonto",
-        merchant: "Netflix",
-        category: "Subscriptions",
-        description: "Netflix Premium Monat",
-        createdAt: new Date(),
-      });
-
-      rows.push({
-        userId,
-        externalId: `faker-${currentYear}-${month}-spotify-${seq++}`,
-        bookedOn: formatIsoDate(currentYear, month, 15),
-        kind: "expense",
-        amountMinor: -1495,
-        currency: "CHF",
-        originalAmountMinor: 1495,
-        account: "Privatkonto",
-        merchant: "Spotify",
-        category: "Subscriptions",
-        description: "Spotify Premium",
+        merchant: item.merchant,
+        category: item.category,
+        description: item.description,
         createdAt: new Date(),
       });
     }
+  }
 
-    // 3. ANOMALIES INJECTION per year
+  // 3. ANOMALIES INJECTION — one set per year of window, each landing on a
+  // random month (and a day that month actually covers).
+  for (let y = 0; y < yearsCount; y++) {
     // Anomaly Type A: Outlier high-value luxury / emergency expense (Whale spend)
-    const whaleMonth = faker.number.int({ min: 2, max: 11 });
+    const whale = pickWindow();
+    const whaleDay = dayWithin(whale, whale.minDay, whale.maxDay) as number;
     const whaleAmountMinor = faker.number.int({ min: 4500, max: 9500 }) * 100;
     rows.push({
       userId,
-      externalId: `faker-${currentYear}-anomaly-whale-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, whaleMonth, 14),
+      externalId: `faker-${whale.year}-anomaly-whale-${seq++}`,
+      bookedOn: formatIsoDate(whale.year, whale.month, whaleDay),
       kind: "expense",
       amountMinor: -whaleAmountMinor,
       currency: "CHF",
@@ -236,48 +262,36 @@ export function generateYearlyTransactions(
       createdAt: new Date(),
     });
 
-    // Anomaly Type B: Double-Charge Glitch (Duplicate transaction on same or next day)
-    const dupMonth = faker.number.int({ min: 1, max: 12 });
-    const dupDay = faker.number.int({ min: 1, max: 27 });
+    // Anomaly Type B: Double-Charge Glitch (Duplicate transaction, same day)
+    const dup = pickWindow();
+    const dupDay = dayWithin(dup, dup.minDay, dup.maxDay) as number;
     const dupAmount = 14995;
-    rows.push({
-      userId,
-      externalId: `faker-${currentYear}-anomaly-dup-1-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, dupMonth, dupDay),
-      kind: "expense",
-      amountMinor: -dupAmount,
-      currency: "CHF",
-      originalAmountMinor: dupAmount,
-      account: "KK-Konto",
-      merchant: "Digitec Galaxus",
-      category: "Electronics",
-      description: "ANOMALY: Duplicate Charge (Bank statement glitch #1)",
-      createdAt: new Date(),
-    });
-    rows.push({
-      userId,
-      externalId: `faker-${currentYear}-anomaly-dup-2-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, dupMonth, dupDay),
-      kind: "expense",
-      amountMinor: -dupAmount,
-      currency: "CHF",
-      originalAmountMinor: dupAmount,
-      account: "KK-Konto",
-      merchant: "Digitec Galaxus",
-      category: "Electronics",
-      description: "ANOMALY: Duplicate Charge (Bank statement glitch #2)",
-      createdAt: new Date(),
-    });
+    for (const glitch of [1, 2]) {
+      rows.push({
+        userId,
+        externalId: `faker-${dup.year}-anomaly-dup-${glitch}-${seq++}`,
+        bookedOn: formatIsoDate(dup.year, dup.month, dupDay),
+        kind: "expense",
+        amountMinor: -dupAmount,
+        currency: "CHF",
+        originalAmountMinor: dupAmount,
+        account: "KK-Konto",
+        merchant: "Digitec Galaxus",
+        category: "Electronics",
+        description: `ANOMALY: Duplicate Charge (Bank statement glitch #${glitch})`,
+        createdAt: new Date(),
+      });
+    }
 
     // Anomaly Type C: Rapid Micro-Transactions Burst (Card Testing / Fraud simulation)
-    const fraudMonth = faker.number.int({ min: 1, max: 12 });
-    const fraudDay = faker.number.int({ min: 1, max: 28 });
+    const fraud = pickWindow();
+    const fraudDay = dayWithin(fraud, fraud.minDay, fraud.maxDay) as number;
     const microAmounts = [199, 249, 499, 149, 399];
     for (const micro of microAmounts) {
       rows.push({
         userId,
-        externalId: `faker-${currentYear}-anomaly-micro-${seq++}`,
-        bookedOn: formatIsoDate(currentYear, fraudMonth, fraudDay),
+        externalId: `faker-${fraud.year}-anomaly-micro-${seq++}`,
+        bookedOn: formatIsoDate(fraud.year, fraud.month, fraudDay),
         kind: "expense",
         amountMinor: -micro,
         currency: "CHF",
@@ -290,12 +304,16 @@ export function generateYearlyTransactions(
       });
     }
 
-    // Anomaly Type D: Rare high-risk categories (Casino / Crypto / Penalty Tax)
-    const casinoMonth = faker.number.int({ min: 3, max: 10 });
+    // Anomaly Type D: Rare high-risk categories (Casino / Penalty Tax)
+    const casino = pickWindow();
     rows.push({
       userId,
-      externalId: `faker-${currentYear}-anomaly-casino-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, casinoMonth, 18),
+      externalId: `faker-${casino.year}-anomaly-casino-${seq++}`,
+      bookedOn: formatIsoDate(
+        casino.year,
+        casino.month,
+        dayWithin(casino, casino.minDay, casino.maxDay) as number,
+      ),
       kind: "expense",
       amountMinor: -125000,
       currency: "CHF",
@@ -307,11 +325,15 @@ export function generateYearlyTransactions(
       createdAt: new Date(),
     });
 
-    const taxPenaltyMonth = faker.number.int({ min: 4, max: 9 });
+    const tax = pickWindow();
     rows.push({
       userId,
-      externalId: `faker-${currentYear}-anomaly-tax-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, taxPenaltyMonth, 22),
+      externalId: `faker-${tax.year}-anomaly-tax-${seq++}`,
+      bookedOn: formatIsoDate(
+        tax.year,
+        tax.month,
+        dayWithin(tax, tax.minDay, tax.maxDay) as number,
+      ),
       kind: "expense",
       amountMinor: -348000,
       currency: "CHF",
@@ -324,12 +346,16 @@ export function generateYearlyTransactions(
     });
 
     // Anomaly Type E: Sudden Large Windfall Inflow (Lottery or Insurance payout)
-    const windfallMonth = faker.number.int({ min: 2, max: 11 });
+    const windfall = pickWindow();
     const windfallAmount = faker.number.int({ min: 10000, max: 25000 }) * 100;
     rows.push({
       userId,
-      externalId: `faker-${currentYear}-anomaly-windfall-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, windfallMonth, 11),
+      externalId: `faker-${windfall.year}-anomaly-windfall-${seq++}`,
+      bookedOn: formatIsoDate(
+        windfall.year,
+        windfall.month,
+        dayWithin(windfall, windfall.minDay, windfall.maxDay) as number,
+      ),
       kind: "income",
       amountMinor: windfallAmount,
       currency: "CHF",
@@ -342,11 +368,15 @@ export function generateYearlyTransactions(
     });
 
     // Anomaly Type F: Subscription Price Shock (10x billing glitch)
-    const subGlitchedMonth = faker.number.int({ min: 1, max: 12 });
+    const shock = pickWindow();
     rows.push({
       userId,
-      externalId: `faker-${currentYear}-anomaly-subshock-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, subGlitchedMonth, 16),
+      externalId: `faker-${shock.year}-anomaly-subshock-${seq++}`,
+      bookedOn: formatIsoDate(
+        shock.year,
+        shock.month,
+        dayWithin(shock, shock.minDay, shock.maxDay) as number,
+      ),
       kind: "expense",
       amountMinor: -21900,
       currency: "CHF",
@@ -364,10 +394,8 @@ export function generateYearlyTransactions(
   const remainingNeeded = Math.max(0, targetCount - fixedCount);
 
   for (let i = 0; i < remainingNeeded; i++) {
-    const yearOffset = faker.number.int({ min: 0, max: yearsCount - 1 });
-    const currentYear = startYear + yearOffset;
-    const month = faker.number.int({ min: 1, max: 12 });
-    const day = faker.number.int({ min: 1, max: daysInMonths[month - 1] });
+    const w = pickWindow();
+    const day = faker.number.int({ min: w.minDay, max: w.maxDay });
 
     const categoryKey = faker.helpers.arrayElement(
       Object.keys(MERCHANTS_BY_CATEGORY) as (keyof typeof MERCHANTS_BY_CATEGORY)[],
@@ -385,8 +413,8 @@ export function generateYearlyTransactions(
 
     rows.push({
       userId,
-      externalId: `faker-${currentYear}-${month}-${day}-var-${seq++}`,
-      bookedOn: formatIsoDate(currentYear, month, day),
+      externalId: `faker-${w.year}-${w.month}-${day}-var-${seq++}`,
+      bookedOn: formatIsoDate(w.year, w.month, day),
       kind: "expense",
       amountMinor: -amountMinor,
       currency: "CHF",
@@ -399,36 +427,36 @@ export function generateYearlyTransactions(
     });
   }
 
-  // 5. Compute and add Credit Card Monthly Settlement Transfers
-  for (let y = 0; y < yearsCount; y++) {
-    const currentYear = startYear + y;
-    for (let month = 1; month <= 12; month++) {
-      const monthPrefix = `${currentYear}-${String(month).padStart(2, "0")}`;
-      const kkExpensesThisMonth = rows
-        .filter(
-          (r) =>
-            r.bookedOn.startsWith(monthPrefix) &&
-            r.account === "KK-Konto" &&
-            r.kind === "expense",
-        )
-        .reduce((sum, r) => sum + Math.abs(r.amountMinor), 0);
+  // 5. Compute and add Credit Card Monthly Settlement Transfers. A month whose
+  // window ends before the 24th (the partial month "today" sits in) gets no
+  // settlement — that statement has not been billed yet.
+  for (const w of windows) {
+    if (!hasDay(w, 24)) continue;
+    const monthPrefix = `${w.year}-${String(w.month).padStart(2, "0")}`;
+    const kkExpensesThisMonth = rows
+      .filter(
+        (r) =>
+          r.bookedOn.startsWith(monthPrefix) &&
+          r.account === "KK-Konto" &&
+          r.kind === "expense",
+      )
+      .reduce((sum, r) => sum + Math.abs(r.amountMinor), 0);
 
-      if (kkExpensesThisMonth > 0) {
-        rows.push({
-          userId,
-          externalId: `faker-${currentYear}-${month}-transfer-${seq++}`,
-          bookedOn: formatIsoDate(currentYear, month, 24),
-          kind: "transfer",
-          amountMinor: -kkExpensesThisMonth,
-          currency: "CHF",
-          originalAmountMinor: kkExpensesThisMonth,
-          account: "Privatkonto",
-          merchant: "Credit card payment",
-          category: "Transfer",
-          description: `Kreditkarten-Abrechnung ${month}/${currentYear}`,
-          createdAt: new Date(),
-        });
-      }
+    if (kkExpensesThisMonth > 0) {
+      rows.push({
+        userId,
+        externalId: `faker-${w.year}-${w.month}-transfer-${seq++}`,
+        bookedOn: formatIsoDate(w.year, w.month, 24),
+        kind: "transfer",
+        amountMinor: -kkExpensesThisMonth,
+        currency: "CHF",
+        originalAmountMinor: kkExpensesThisMonth,
+        account: "Privatkonto",
+        merchant: "Credit card payment",
+        category: "Transfer",
+        description: `Kreditkarten-Abrechnung ${w.month}/${w.year}`,
+        createdAt: new Date(),
+      });
     }
   }
 
