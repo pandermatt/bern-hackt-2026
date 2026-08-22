@@ -99,7 +99,11 @@ export function SavingsPot({
   // Where the liquid's surface sits. Measured between the two ellipse centres,
   // so an empty pot's surface is the base and a full one's is the mouth.
   const surface = BASE_Y - (BASE_Y - MOUTH_Y) * fill;
-  const colour = `var(--chart-${pot.slot})`;
+  // The pots' own muted ramp, not `--chart-N`. A jar is a large block of flat
+  // colour sitting next to nine others, where a chart wedge is a thin slice
+  // read against a legend — the full-strength ramp made the grid shout and put
+  // near-white and near-black side by side. See `--pot-N` in `globals.css`.
+  const colour = `var(--pot-${pot.slot})`;
   // The name is the guess; `pot.icon` is what the model named for a goal the
   // keyword rules could not place, and it wins when it is there.
   const icon = goalIcon(pot.name, pot.icon);
@@ -204,7 +208,10 @@ export function SavingsPot({
               <rect x="0" y={surface} width="120" height={BASE_Y + RY} fill={colour} />
               {/* The surface itself, lifted with a white wash — the same trick
                   the light catches on a real liquid, and it is what turns a
-                  flat block into a level. */}
+                  flat block into a level. Lighter-handed than it was: the
+                  muted fills start much closer to the body than the chart ramp
+                  did, so the wash that used to lift the level was washing it
+                  out instead. */}
               <ellipse cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
               <ellipse
                 cx={CX}
@@ -212,7 +219,7 @@ export function SavingsPot({
                 rx={RX}
                 ry={RY}
                 fill="#ffffff"
-                opacity="0.22"
+                opacity="0.14"
               />
             </>
           )}

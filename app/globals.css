@@ -134,6 +134,34 @@
      generated hue. Dark neutral here and Concrete in `.dark`: the palette
      supplies one light and one dark neutral, and each is used on the ground it
      can actually be seen against. */
+
+  /* The savings pots' own ramp: the ten chart hues muted.
+     Same hue, chroma cut to ~45%, and the lightness of all ten compressed
+     into one narrow band — which is the part that does the work. The chart
+     ramp spans near-white (Soft yellow) to near-black (Primary teal), and a
+     grid of jars filled from it reads as ten unrelated objects rather than a
+     set. Compressing brings the pale yellows *down* and the dark teals *up*,
+     so the pots look like one family and the two ends stop shouting.
+     Deliberately not a `color-mix` toward the surface: mixing a fill toward
+     the very ground it sits on is what makes it disappear.
+     Identical in both themes, like `--chart-N`. Against the pot's body
+     (`--surface-muted`) these run 1.7-2.4:1 in light and 5.4-7.6:1 in dark —
+     the light figures are low by design, and are why the pot keeps its
+     percentage label and its progress bar. Those are the relief here that the
+     legend and the `sr-only` tables are for the charts; don't drop them to
+     tidy up a pot. Adjacent slots stay 8.1+ apart in OKLab, so neighbours in
+     the grid remain separable. */
+  --pot-1: #87a5a7;
+  --pot-2: #adbc86;
+  --pot-3: #89b0b1;
+  --pot-4: #d0aa86;
+  --pot-5: #8facc1;
+  --pot-6: #c9be94;
+  --pot-7: #97b9b8;
+  --pot-8: #cdb982;
+  --pot-9: #d09f95;
+  --pot-10: #b6bf8d;
+
   --chart-other: #343a3a;
   /* Dark neutral in its stated role — the diagrams' text, connectors and
      outlines. Canvas cannot read a Tailwind class, so the charts pull this
@@ -261,6 +289,33 @@
   --chart-10: #c8d95b;
   --chart-other: #f2f2f2;
   --chart-ink: #f2f2f2;
+
+  /* The savings pots' own ramp: the ten chart hues muted.
+     Same hue, chroma cut to ~45%, and the lightness of all ten compressed
+     into one narrow band — which is the part that does the work. The chart
+     ramp spans near-white (Soft yellow) to near-black (Primary teal), and a
+     grid of jars filled from it reads as ten unrelated objects rather than a
+     set. Compressing brings the pale yellows *down* and the dark teals *up*,
+     so the pots look like one family and the two ends stop shouting.
+     Deliberately not a `color-mix` toward the surface: mixing a fill toward
+     the very ground it sits on is what makes it disappear.
+     Identical in both themes, like `--chart-N`. Against the pot's body
+     (`--surface-muted`) these run 1.7-2.4:1 in light and 5.4-7.6:1 in dark —
+     the light figures are low by design, and are why the pot keeps its
+     percentage label and its progress bar. Those are the relief here that the
+     legend and the `sr-only` tables are for the charts; don't drop them to
+     tidy up a pot. Adjacent slots stay 8.1+ apart in OKLab, so neighbours in
+     the grid remain separable. */
+  --pot-1: #87a5a7;
+  --pot-2: #adbc86;
+  --pot-3: #89b0b1;
+  --pot-4: #d0aa86;
+  --pot-5: #8facc1;
+  --pot-6: #c9be94;
+  --pot-7: #97b9b8;
+  --pot-8: #cdb982;
+  --pot-9: #d09f95;
+  --pot-10: #b6bf8d;
 
   /* 8.5:1 and 5.1:1 on this surface — better here than on white. */
   --flow-in: #a5c400;
