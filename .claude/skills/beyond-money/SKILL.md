@@ -287,7 +287,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   floating one. The per-column width is why the bars are an ECharts `custom`
   series (`renderItem`): a `bar` series has one width for the whole series,
   and its zero baseline rides an empty companion `bar` series because a custom
-  series cannot carry a `markLine`. The donut carries the category
+  series cannot carry a `markLine`. Above the bars, a slim aligned panel
+  carries the **running account balance** (`MonthPoint.balance`, the running
+  sum of the nets) as an ink line — its own auto-scaled axis in its own grid,
+  because the stock is routinely thirty times the flows and a shared scale
+  squashes the bars into slivers, while a second axis on one plot would be a
+  dual-axis chart. The synthetic generator's solvency pass raises salaries
+  until that balance ends positive, so demo data always has a line worth
+  reading. The donut carries the category
   story — and since the ranked "Where it goes" list was dropped as a second
   telling of it, the donut is the **only** thing carrying it, which is why its
   legend now shows at every width rather than only from `sm` up. A category

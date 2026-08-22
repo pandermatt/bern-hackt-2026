@@ -460,6 +460,30 @@ export function generateYearlyTransactions(
     }
   }
 
+  // 6. Solvency pass: the effective account balance — the running sum of
+  // income minus expenses, transfers excluded, exactly as `monthlySeries`
+  // computes it — must end positive. The variable spending scales with
+  // `targetCount` while the salary does not, so a dense history would
+  // otherwise sink ever deeper into the red. Raising every salary by the same
+  // rounded amount keeps the pay realistic (the per-month jitter survives)
+  // and lands the history at a ~6% savings rate instead of a deficit.
+  const totalIncome = rows
+    .filter((r) => r.kind === "income")
+    .reduce((sum, r) => sum + r.amountMinor, 0);
+  const totalExpense = rows
+    .filter((r) => r.kind === "expense")
+    .reduce((sum, r) => sum + Math.abs(r.amountMinor), 0);
+  const salaries = rows.filter((r) => r.category === "Salary");
+  const shortfall = Math.ceil(totalExpense * 1.06) - totalIncome;
+  if (shortfall > 0 && salaries.length > 0) {
+    // Whole francs per salary, rounded up so the balance clears zero.
+    const raise = Math.ceil(shortfall / salaries.length / 100) * 100;
+    for (const salary of salaries) {
+      salary.amountMinor += raise;
+      salary.originalAmountMinor = salary.amountMinor;
+    }
+  }
+
   // Sort chronologically by date
   return rows.sort((a, b) => a.bookedOn.localeCompare(b.bookedOn));
 }

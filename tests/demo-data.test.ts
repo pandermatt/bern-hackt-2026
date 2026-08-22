@@ -89,6 +89,30 @@ describe("Synthetic Transaction Generator (Faker)", () => {
     }
   });
 
+  it("ends the history with a positive effective account balance", () => {
+    // The balance the dashboard reports: income minus expenses, transfers
+    // excluded — the same sum `monthlySeries` accumulates. Dense histories are
+    // the regression risk: variable spending scales with targetCount, salary
+    // does not, so the solvency pass has to close the gap.
+    const shapes: [number, number, number][] = [
+      [42, 500, 1],
+      [7, 10000, 3],
+      [99, 25000, 5],
+    ];
+    for (const [seed, targetCount, yearsCount] of shapes) {
+      const rows = generateYearlyTransactions(user1.id, {
+        yearsCount,
+        targetCount,
+        seed,
+        endDate: "2026-08-22",
+      });
+      const balance = rows
+        .filter((r) => r.kind !== "transfer")
+        .reduce((sum, r) => sum + r.amountMinor, 0);
+      expect(balance).toBeGreaterThan(0);
+    }
+  });
+
   it("injects rich financial anomalies into the transaction history", () => {
     const rows = generateYearlyTransactions(user1.id, {
       endDate: "2025-12-31",

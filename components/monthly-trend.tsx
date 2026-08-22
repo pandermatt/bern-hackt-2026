@@ -19,10 +19,25 @@ import { useIsNarrow } from "@/lib/use-hydrated";
 
 /**
  * The month's net balance — money in minus money out — as bars diverging from
- * a zero line, one year at a time. A stepper pages between the years the
- * statements cover, and hovering a column widens it and hangs its amount off
- * the data end — the hover feedback *is* the tooltip, so there is no second
- * floating box saying the same thing.
+ * a zero line, one year at a time, with the **running account balance** as an
+ * ink line in its own slim panel above the bars. The bars answer "did this
+ * month keep money"; the line answers "where does that leave the account".
+ *
+ * Two aligned panels, not one plot and not two y-axes: a balance is a stock
+ * and the nets are flows, and the stock is routinely thirty times the flow —
+ * on a shared scale the bars squash into slivers, and a second axis on the
+ * same plot is the dual-axis chart this codebase does not draw. The panels
+ * share the month axis (and the hover), so a column reads vertically through
+ * both.
+ *
+ * A stepper pages between the years the statements cover, and hovering a
+ * column widens it and hangs its amount off the data end — the hover feedback
+ * *is* the tooltip, so there is no second floating box saying the same thing.
+ * The hovered month's balance rides the line's vertex the same way.
+ *
+ * The line wears `--chart-ink`, the palette's annotation role — a balance is
+ * neither a category nor a direction, and the only line in the chart needs no
+ * colour identity; the meta line and the footnote name it.
  *
  * The bars are a `custom` series, not a `bar` series, because the expansion is
  * per column: a bar series has one `barWidth` for all its marks, and every
@@ -50,12 +65,16 @@ const HEIGHT = 320;
 /**
  * On a 390px screen the card leaves ~310px of canvas, and a 58px left gutter
  * spends a fifth of it on axis labels. The narrow gutter is paid for by the
- * `2.5k` formatter below. No legend strip — a single series needs none — so
- * the bottom holds only the month labels; the top holds the hovered bar's
- * amount when the tallest bar is hovered.
+ * `2.5k` formatter below. The balance panel sits on top (its `top` leaves
+ * room for the hovered vertex's amount label); the bars panel takes the rest,
+ * with the bottom holding the month labels. `PANEL_GAP` keeps the balance
+ * panel's gridlines and the tallest bar's hover label apart.
  */
-const GRID = { left: 58, right: 14, top: 26, bottom: 30 };
-const GRID_NARROW = { left: 40, right: 10, top: 24, bottom: 26 };
+const BALANCE_PANEL = { left: 58, right: 14, top: 26, height: 72 };
+const BALANCE_PANEL_NARROW = { left: 40, right: 10, top: 24, height: 60 };
+const PANEL_GAP = 22;
+const GRID = { left: 58, right: 14, bottom: 30 };
+const GRID_NARROW = { left: 40, right: 10, bottom: 26 };
 
 /** Base and hovered column widths. The growth is symmetric about the tick. */
 const BAR = { base: 26, hover: 40 };
@@ -93,6 +112,26 @@ function buildOption(
   const lowest = Math.min(0, ...nets);
   const floor = lowest < 0 ? -niceCeiling(-lowest * 1.08) : 0;
   const bar = narrow ? BAR_NARROW : BAR;
+  const balGrid = narrow ? BALANCE_PANEL_NARROW : BALANCE_PANEL;
+  const barGrid = {
+    ...(narrow ? GRID_NARROW : GRID),
+    top: balGrid.top + balGrid.height + PANEL_GAP,
+  };
+  const monthNames = Array.from({ length: 12 }, (_, index) => monthLabel(index));
+
+  // Francs, not rappen. The footnote says CHF once. On a narrow screen
+  // thousands are abbreviated too — `2.5k` is three characters where `2’500`
+  // is five, which is what buys back the smaller left gutter. Shared by both
+  // panels' axes so they cannot drift apart in format.
+  const francs = (value: number) => {
+    const whole = Math.round(value / 100);
+    if (!narrow || Math.abs(whole) < 1000) {
+      return whole.toLocaleString("de-CH").replace("-", "−");
+    }
+    const thousands = whole / 1000;
+    // A trailing `.0` costs a character and says nothing.
+    return `${Number(thousands.toFixed(1))}k`.replace("-", "−");
+  };
 
   const renderItem: CustomSeriesRenderItem = (params, api) => {
     const { dataIndex } = params;
@@ -160,44 +199,61 @@ function buildOption(
     // The hover expansion and the year-step morph. Snappy enough that sweeping
     // across columns never feels laggy.
     animationDurationUpdate: 250,
-    grid: narrow ? GRID_NARROW : GRID,
-    xAxis: {
-      type: "category",
-      data: Array.from({ length: 12 }, (_, index) => monthLabel(index)),
-      axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
-      axisTick: { show: false },
-      axisLabel: {
-        color: tokens.ink,
-        fontSize: 11,
-        interval: narrow ? 1 : 0,
-      },
-    },
-    yAxis: {
-      type: "value",
-      max: peak,
-      min: floor,
-      axisLabel: {
-        color: withAlpha(tokens.ink, 0.75),
-        fontSize: 10,
-        // Francs, not rappen. The footnote says CHF once. On a narrow screen
-        // thousands are abbreviated too — `2.5k` is three characters where
-        // `2’500` is five, which is what buys back the smaller left gutter.
-        formatter: (value: number) => {
-          const francs = Math.round(value / 100);
-          if (!narrow || Math.abs(francs) < 1000) {
-            return francs.toLocaleString("de-CH").replace("-", "−");
-          }
-          const thousands = francs / 1000;
-          // A trailing `.0` costs a character and says nothing.
-          return `${Number(thousands.toFixed(1))}k`.replace("-", "−");
+    // Panel 0 is the balance strip, panel 1 the bars. They share the left
+    // gutter, so the two plots align column for column.
+    grid: [balGrid, barGrid],
+    xAxis: [
+      // The balance panel's month bands — hidden, the bottom axis names them.
+      { gridIndex: 0, type: "category", data: monthNames, show: false },
+      {
+        gridIndex: 1,
+        type: "category",
+        data: monthNames,
+        axisLine: { lineStyle: { color: withAlpha(tokens.ink, 0.35) } },
+        axisTick: { show: false },
+        axisLabel: {
+          color: tokens.ink,
+          fontSize: 11,
+          interval: narrow ? 1 : 0,
         },
       },
-      splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
-    },
+    ],
+    yAxis: [
+      {
+        gridIndex: 0,
+        type: "value",
+        // Auto-scaled around the data, not zero-based: a slim strip showing a
+        // stock is a sparkline, and pinning it to zero flattens the drift that
+        // is the whole story. A line has no area to lie about.
+        scale: true,
+        // A slim panel affords two bands, no more.
+        splitNumber: 2,
+        axisLabel: {
+          color: withAlpha(tokens.ink, 0.75),
+          fontSize: 10,
+          formatter: francs,
+        },
+        splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.12) } },
+      },
+      {
+        gridIndex: 1,
+        type: "value",
+        max: peak,
+        min: floor,
+        axisLabel: {
+          color: withAlpha(tokens.ink, 0.75),
+          fontSize: 10,
+          formatter: francs,
+        },
+        splitLine: { lineStyle: { color: withAlpha(tokens.ink, 0.18) } },
+      },
+    ],
     series: [
       {
-        id: "balance",
+        id: "net",
         type: "custom",
+        xAxisIndex: 1,
+        yAxisIndex: 1,
         renderItem,
         encode: { x: 0, y: 1 },
         // Unclipped so a tall bar's amount label can use the grid's own top
@@ -206,12 +262,53 @@ function buildOption(
         clip: false,
         data: months.map((point, index) => [index, point ? point.net : NaN]),
       },
+      // The running balance, in its own panel. No symbols — the hovered
+      // month's vertex grows a value label instead, the same interrogation
+      // idiom the bars use. Nulls outside the history span end the line
+      // rather than inventing a balance for months that never happened.
+      // Unclipped so the vertex label can borrow the panel's top padding.
+      {
+        id: "balance",
+        type: "line",
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        clip: false,
+        smooth: false,
+        // A label rides its point's symbol, so the symbols have to exist —
+        // they are simply size zero until their month is hovered, when the
+        // vertex grows a dot to hang the amount off.
+        showSymbol: true,
+        symbolSize: (_value: unknown, params: unknown) =>
+          (params as { dataIndex: number }).dataIndex === hovered ? 7 : 0,
+        connectNulls: false,
+        lineStyle: { color: withAlpha(tokens.ink, 0.8), width: 2 },
+        itemStyle: { color: tokens.ink },
+        // One series-level label whose formatter answers only for the hovered
+        // month — per-item label toggles do not survive merged updates.
+        label: {
+          show: true,
+          position: "top",
+          distance: 6,
+          color: tokens.ink,
+          fontSize: 10.5,
+          formatter: (params: unknown) => {
+            const { dataIndex } = params as { dataIndex: number };
+            const point = months[dataIndex];
+            return hovered === dataIndex && point
+              ? signedFrancs(point.balance)
+              : "";
+          },
+        },
+        data: months.map((point) => (point ? point.balance : null)),
+      },
       // A custom series cannot carry a markLine, so an empty bar series holds
       // the zero baseline the bars diverge from — heavier than the grid so
       // "above or below" is readable at a glance.
       {
         id: "baseline",
         type: "bar",
+        xAxisIndex: 1,
+        yAxisIndex: 1,
         silent: true,
         data: [],
         markLine: {
@@ -383,6 +480,7 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
           <tr>
             <th scope="col">{t("month")}</th>
             <th scope="col">{t("net")}</th>
+            <th scope="col">{t("balance")}</th>
           </tr>
         </thead>
         <tbody>
@@ -390,6 +488,7 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
             <tr key={point.month}>
               <th scope="row">{point.month}</th>
               <td>{signedMoney(point.net)}</td>
+              <td>{signedMoney(point.balance)}</td>
             </tr>
           </thead>
           <tbody>
