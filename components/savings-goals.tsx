@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import type { SavingsOverview } from "@/app/actions/savings";
 import { SavingsAllocator } from "@/components/savings-allocator";
 import { SavingsGoalForm } from "@/components/savings-goal-form";
@@ -17,6 +19,10 @@ import { formatMoney } from "@/lib/insights";
  * and on the 8th that number only ever goes down.
  */
 export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
+  // `useTranslations`, not `getTranslations`: this is a *synchronous* server
+  // component, so the hook works and keeps the call site the same shape the
+  // client components use.
+  const t = useTranslations("Savings");
   const { month, monthEnded, surplusMinor, pots } = overview;
 
   const savedMinor = pots.reduce((sum, pot) => sum + pot.savedMinor, 0);
@@ -29,24 +35,25 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5">
         <div>
           <h2 id="savings-heading" className="text-[14.5px] font-semibold text-text">
-            Sparziele
+            {t("heading")}
           </h2>
           <p className="mt-0.5 text-[12.5px] text-text-muted">
-            Savings goals. Each pot fills as you put a month&rsquo;s leftover
-            money into it.
+            {t("subtitle")}
           </p>
         </div>
         {pots.length > 0 && (
           <p className="font-mono text-[12.5px] tabular-nums text-text-muted">
-            {formatMoney(savedMinor)} of {formatMoney(targetMinor)} saved
+            {t("savedOfTarget", {
+              saved: formatMoney(savedMinor),
+              target: formatMoney(targetMinor),
+            })}
           </p>
         )}
       </div>
 
       {pots.length === 0 ? (
         <p className="px-4 py-10 text-center text-[13.5px] text-text-muted sm:px-5">
-          No goals yet. Add one below — a holiday, a new car — and it appears
-          here as a pot to fill.
+          {t("empty")}
         </p>
       ) : (
         <ul className="grid grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-3 sm:px-5 md:grid-cols-4 lg:grid-cols-5">
@@ -69,10 +76,13 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
         month !== null && (
           <p className="border-t border-line bg-surface-muted/40 px-4 py-3 text-[12.5px] text-text-muted sm:px-5">
             {!monthEnded
-              ? `${month} is still running. Whatever it has left over becomes allocatable once the month is over.`
+              ? t("monthRunning", { month })
               : surplus === 0
-                ? `${month} spent everything it earned, so there is nothing spare to put away.`
-                : `${month} had ${formatMoney(surplus)} left over. Add a goal below to put it somewhere.`}
+                ? t("monthSpentAll", { month })
+                : t("monthLeftOver", {
+                    month,
+                    amount: formatMoney(surplus),
+                  })}
           </p>
         )
       )}

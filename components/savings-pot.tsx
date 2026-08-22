@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { SavingsGoalDelete } from "@/components/savings-goal-delete";
 import { SavingsGoalEdit } from "@/components/savings-goal-edit";
 import { goalIcon, iconPath } from "@/lib/goal-icon";
@@ -51,6 +53,8 @@ const LID_BAND =
   `L ${CX + LID_RX} ${LID_Y} Z`;
 
 export function SavingsPot({ pot }: { pot: Pot }) {
+  // Synchronous server component, so the hook works here — see `SavingsGoals`.
+  const t = useTranslations("Savings");
   const fill = potFill(pot.savedMinor, pot.targetMinor);
   // The drawing clamps because a jar has a rim; the label does not, so a pot
   // funded past its target says 133% rather than a flat, less useful 100%.
@@ -251,7 +255,7 @@ export function SavingsPot({ pot }: { pot: Pot }) {
       <Amount minor={pot.savedMinor} full={full} />
 
       <p className="mt-0.5 font-mono text-[11.5px] tabular-nums text-text-subtle">
-        of {formatMoney(pot.targetMinor)} · {percent}%
+        {t("potOfTarget", { target: formatMoney(pot.targetMinor) })} · {percent}%
       </p>
 
       {/* The same number the pot draws, as a bar. A cylinder is a poor

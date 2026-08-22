@@ -1,6 +1,7 @@
 "use server";
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -69,13 +70,43 @@ const allocationSchema = z.object({
   amount: amountSchema,
 });
 
-/** Major units as typed → rappen, or an error string naming what was wrong. */
-function toMinor(amount: string): number | string {
+/**
+ * Errors are phrased here, not in the component.
+ *
+ * The client raises whatever string it gets straight into a toast, so it has
+ * to arrive already translated — the same shape `app/actions/auth.ts` uses.
+ */
+async function savingsError(
+  key: string,
+  values?: Record<string, string>,
+): Promise<SavingsResult> {
+  const t = await getTranslations("SavingsErrors");
+  return { ok: false, error: t(key, values) };
+}
+
+/**
+ * Major units as typed → rappen, or the *key* of what was wrong.
+ *
+ * A key rather than a sentence: this is called from four actions, and phrasing
+ * the message here would mean reaching for a translator in a helper that is
+ * otherwise pure. The callers hand the key to `savingsError`.
+ */
+type AmountProblem = { key: "notAnAmount"; amount: string } | { key: "tooLarge" };
+
+function toMinor(amount: string): number | AmountProblem {
   const value = Number(amount);
-  if (!Number.isFinite(value) || value < 0) return `“${amount}” is not an amount.`;
+  if (!Number.isFinite(value) || value < 0) return { key: "notAnAmount", amount };
   const minor = Math.round(value * 100);
-  if (minor > MAX_MINOR) return "That amount is larger than this app can hold.";
+  if (minor > MAX_MINOR) return { key: "tooLarge" };
   return minor;
+}
+
+/** The `toMinor` failure branch, as a translated result. */
+function amountError(problem: AmountProblem): Promise<SavingsResult> {
+  return savingsError(
+    problem.key,
+    problem.key === "notAnAmount" ? { amount: problem.amount } : undefined,
+  );
 }
 
 /** Rows this account owns. Scoped by `userId` like every other query here. */
@@ -158,14 +189,14 @@ export async function createSavingsGoal(
   amount: string,
 ): Promise<SavingsResult> {
   const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "Sign in to add a savings goal." };
+  if (!user) return savingsError("notSignedInCreate");
 
   const parsed = goalSchema.safeParse({ name, amount });
-  if (!parsed.success) return { ok: false, error: "Give the goal a name and a target." };
+  if (!parsed.success) return savingsError("malformedGoal");
 
   const target = toMinor(parsed.data.amount);
-  if (typeof target === "string") return { ok: false, error: target };
-  if (target <= 0) return { ok: false, error: "A goal needs a target above zero." };
+  if (typeof target !== "number") return amountError(target);
+  if (target <= 0) return savingsError("targetAboveZero");
 
   try {
     await db
@@ -174,10 +205,10 @@ export async function createSavingsGoal(
   } catch {
     // The unique index on (user_id, name) is the only thing that realistically
     // fails here, and it fails for a reason worth naming.
-    return { ok: false, error: `You already have a goal called “${parsed.data.name}”.` };
+    return savingsError("duplicateName", { name: parsed.data.name });
   }
 
-  revalidatePath("/budget");
+  revalidatePath("/[locale]/budget", "page");
   return { ok: true };
 }
 
@@ -198,14 +229,14 @@ export async function updateSavingsGoal(
   amount: string,
 ): Promise<SavingsResult> {
   const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "Sign in to change a savings goal." };
+  if (!user) return savingsError("notSignedInEdit");
 
   const parsed = amountSchema.safeParse(amount);
-  if (!parsed.success) return { ok: false, error: "That target looks malformed." };
+  if (!parsed.success) return savingsError("malformedTarget");
 
   const target = toMinor(parsed.data);
-  if (typeof target === "string") return { ok: false, error: target };
-  if (target <= 0) return { ok: false, error: "A goal needs a target above zero." };
+  if (typeof target !== "number") return amountError(target);
+  if (target <= 0) return savingsError("targetAboveZero");
 
   const changed = await db
     .update(savingsGoals)
@@ -216,10 +247,10 @@ export async function updateSavingsGoal(
     .returning({ id: savingsGoals.id });
 
   if (changed.length === 0) {
-    return { ok: false, error: "That savings goal no longer exists." };
+    return savingsError("goalGone");
   }
 
-  revalidatePath("/budget");
+  revalidatePath("/[locale]/budget", "page");
   return { ok: true };
 }
 
@@ -232,7 +263,7 @@ export async function updateSavingsGoal(
  */
 export async function deleteSavingsGoal(goalId: number): Promise<SavingsResult> {
   const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "Sign in to change your savings goals." };
+  if (!user) return savingsError("notSignedInDelete");
 
   await db
     .delete(savingsGoals)
@@ -240,7 +271,7 @@ export async function deleteSavingsGoal(goalId: number): Promise<SavingsResult> 
     // anyone's goal by guessing a number.
     .where(and(eq(savingsGoals.id, goalId), eq(savingsGoals.userId, user.id)));
 
-  revalidatePath("/budget");
+  revalidatePath("/[locale]/budget", "page");
   return { ok: true };
 }
 
@@ -257,17 +288,17 @@ export async function allocateSurplus(
   entries: { goalId: number; amount: string }[],
 ): Promise<SavingsResult> {
   const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "Sign in to move money into a pot." };
+  if (!user) return savingsError("notSignedInAllocate");
 
   if (!/^\d{4}-\d{2}$/.test(month)) {
-    return { ok: false, error: "That is not a month." };
+    return savingsError("notAMonth");
   }
   if (!monthHasEnded(month)) {
-    return { ok: false, error: "That month is still running." };
+    return savingsError("monthRunning");
   }
 
   const parsed = z.array(allocationSchema).max(64).safeParse(entries);
-  if (!parsed.success) return { ok: false, error: "That allocation looks malformed." };
+  if (!parsed.success) return savingsError("malformedAllocation");
 
   const rows = await ownedRows(user.id);
   const surplus = monthSurplus(monthlySeries(rows), month, true) ?? 0;
@@ -285,14 +316,14 @@ export async function allocateSurplus(
 
   for (const entry of parsed.data) {
     if (!owned.has(entry.goalId)) {
-      return { ok: false, error: "That savings goal no longer exists." };
+      return savingsError("goalGone");
     }
     if (entry.amount === "") {
       clears.push(entry.goalId);
       continue;
     }
     const minor = toMinor(entry.amount);
-    if (typeof minor === "string") return { ok: false, error: minor };
+    if (typeof minor !== "number") return amountError(minor);
     // Zero and blank mean the same thing here — unlike a budget, where zero is
     // a real limit of nothing. No contribution is no row.
     if (minor === 0) {
@@ -303,12 +334,7 @@ export async function allocateSurplus(
     upserts.push({ goalId: entry.goalId, amountMinor: minor });
   }
 
-  if (total > surplus) {
-    return {
-      ok: false,
-      error: "That is more than the month had left over.",
-    };
-  }
+  if (total > surplus) return savingsError("overSurplus");
 
   try {
     db.transaction((tx) => {
@@ -342,9 +368,9 @@ export async function allocateSurplus(
       }
     });
   } catch {
-    return { ok: false, error: "Could not move that money. Try again." };
+    return savingsError("moveFailed");
   }
 
-  revalidatePath("/budget");
+  revalidatePath("/[locale]/budget", "page");
   return { ok: true };
 }

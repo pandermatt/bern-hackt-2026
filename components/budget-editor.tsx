@@ -1,12 +1,14 @@
 "use client";
 
 import { Loader2, Sparkles } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { saveBudgets } from "@/app/actions/budget";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
+import { useCategoryLabel } from "@/lib/use-category-label";
 
 /**
  * The editable half of the budget page.
@@ -38,6 +40,11 @@ function toMinor(field: string): number | null {
 }
 
 export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
+  const t = useTranslations("Budget");
+  // Category names are data, stored in English; they are translated where they
+  // are shown and nowhere else, so `row.category` stays the key everything
+  // else — the colour slots, the saved limit — is matched on.
+  const categoryLabel = useCategoryLabel();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [fields, setFields] = useState<Record<string, string>>(() =>
@@ -73,7 +80,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
         })),
       );
       if (result.ok) {
-        toast.success("Budget saved.");
+        toast.success(t("saved"));
         router.refresh();
       } else {
         toast.error(result.error);
@@ -85,9 +92,11 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface-muted/40 px-4 py-3 sm:px-5">
         <div>
-          <h2 className="text-[14.5px] font-semibold text-text">Monthly limits</h2>
+          <h2 className="text-[14.5px] font-semibold text-text">
+            {t("limitsHeading")}
+          </h2>
           <p className="mt-0.5 text-[12.5px] text-text-muted">
-            Leave a field empty for no limit.
+            {t("limitsNote")}
           </p>
         </div>
         <button
@@ -97,7 +106,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
           className="flex cursor-pointer items-center gap-1.5 rounded-md border border-line-strong px-2.5 py-1.5 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-default disabled:opacity-60"
         >
           <Sparkles className="size-3.5 text-accent" aria-hidden />
-          Use suggestions
+          {t("useSuggestions")}
         </button>
       </div>
 
@@ -124,9 +133,11 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
               />
 
               <div className="min-w-[9rem] flex-1">
-                <p className="text-[14px] font-medium text-text">{row.category}</p>
+                <p className="text-[14px] font-medium text-text">
+                  {categoryLabel(row.category)}
+                </p>
                 <p className="mt-0.5 font-mono text-[12px] tabular-nums text-text-subtle">
-                  Suggested {formatMoney(row.suggestedMinor)} / month
+                  {t("suggested", { amount: formatMoney(row.suggestedMinor) })}
                 </p>
               </div>
 
@@ -140,13 +151,19 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                 </p>
                 <p className="mt-0.5 font-mono text-[11.5px] tabular-nums text-text-subtle">
                   {limit === null
-                    ? "spent"
-                    : `${share.toFixed(0)}% of limit${over ? " · over" : ""}`}
+                    ? t("spent")
+                    : t(over ? "shareOfLimitOver" : "shareOfLimit", {
+                        share: share.toFixed(0),
+                      })}
                 </p>
               </div>
 
               <label className="shrink-0">
-                <span className="sr-only">{row.category} monthly limit in CHF</span>
+                <span className="sr-only">
+                  {t("limitFieldLabel", {
+                    category: categoryLabel(row.category),
+                  })}
+                </span>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -157,7 +174,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                       [row.category]: event.target.value,
                     }))
                   }
-                  placeholder="No limit"
+                  placeholder={t("noLimitPlaceholder")}
                   className="h-9 w-[8.5rem] rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 />
               </label>
@@ -168,7 +185,9 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
 
       <div className="flex items-center justify-end gap-3 border-t border-line px-4 py-3 sm:px-5">
         {dirty && (
-          <span className="text-[12.5px] text-text-muted">Unsaved changes</span>
+          <span className="text-[12.5px] text-text-muted">
+            {t("unsavedChanges")}
+          </span>
         )}
         <button
           type="button"
@@ -177,7 +196,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
           className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-accent px-4 text-[13.5px] font-medium text-[var(--primary-foreground)] transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-50"
         >
           {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-          Save budget
+          {t("save")}
         </button>
       </div>
     </div>

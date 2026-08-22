@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Settings } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -39,6 +40,7 @@ export function SavingsGoalEdit({
   targetMinor: number;
   savedMinor: number;
 }) {
+  const t = useTranslations("Savings");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
@@ -56,7 +58,7 @@ export function SavingsGoalEdit({
     startTransition(async () => {
       const result = await updateSavingsGoal(id, amount);
       if (result.ok) {
-        toast.success(`“${name}” retargeted.`);
+        toast.success(t("retargeted", { name }));
         setOpen(false);
         router.refresh();
       } else {
@@ -77,7 +79,7 @@ export function SavingsGoalEdit({
       <DialogTrigger asChild>
         <button
           type="button"
-          aria-label={`Adjust ${name}`}
+          aria-label={t("adjustLabel", { name })}
           className="cursor-pointer rounded-md p-1.5 text-text-subtle transition-colors hover:bg-surface-muted hover:text-text"
         >
           <Settings className="size-3.5" aria-hidden />
@@ -96,8 +98,7 @@ export function SavingsGoalEdit({
         <DialogHeader>
           <DialogTitle>{name}</DialogTitle>
           <DialogDescription>
-            {formatMoney(savedMinor)} is already in this pot. Changing the
-            target does not move any of it.
+            {t("editDescription", { amount: formatMoney(savedMinor) })}
           </DialogDescription>
         </DialogHeader>
 
@@ -109,7 +110,7 @@ export function SavingsGoalEdit({
         >
           <label>
             <span className="text-[12.5px] font-medium text-text-muted">
-              Target (CHF)
+              {t("targetLabel")}
             </span>
             <input
               ref={field}
@@ -122,8 +123,8 @@ export function SavingsGoalEdit({
           </label>
           <p className="mt-1.5 h-4 font-mono text-[11.5px] tabular-nums text-text-subtle">
             {preview === null
-              ? "A target above zero."
-              : `The pot would read ${preview}%.`}
+              ? t("editHint")
+              : t("editPreview", { percent: preview })}
           </p>
         </form>
 
@@ -133,7 +134,7 @@ export function SavingsGoalEdit({
               type="button"
               className="h-9 cursor-pointer rounded-md border border-line-strong px-3.5 text-[13.5px] font-medium text-text transition-colors hover:bg-surface-muted"
             >
-              Cancel
+              {t("cancel")}
             </button>
           </DialogClose>
           <button
@@ -143,7 +144,7 @@ export function SavingsGoalEdit({
             className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md bg-accent px-4 text-[13.5px] font-medium text-[var(--primary-foreground)] transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-50"
           >
             {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-            Save target
+            {t("saveTarget")}
           </button>
         </DialogFooter>
       </DialogContent>

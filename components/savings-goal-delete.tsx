@@ -1,6 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ export function SavingsGoalDelete({
   name: string;
   savedMinor: number;
 }) {
+  const t = useTranslations("Savings");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -43,7 +45,7 @@ export function SavingsGoalDelete({
     startTransition(async () => {
       const result = await deleteSavingsGoal(id);
       if (result.ok) {
-        toast.success(`“${name}” removed.`);
+        toast.success(t("removed", { name }));
         router.refresh();
       } else {
         toast.error(result.error);
@@ -57,7 +59,7 @@ export function SavingsGoalDelete({
         <button
           type="button"
           disabled={pending}
-          aria-label={`Delete ${name}`}
+          aria-label={t("deleteLabel", { name })}
           className="cursor-pointer rounded-md p-1.5 text-text-subtle transition-colors hover:bg-danger-soft hover:text-danger disabled:cursor-default disabled:opacity-50"
         >
           <Trash2 className="size-3.5" aria-hidden />
@@ -66,21 +68,21 @@ export function SavingsGoalDelete({
 
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete “{name}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t("deleteTitle", { name })}</AlertDialogTitle>
           <AlertDialogDescription>
             {savedMinor > 0
-              ? `The ${formatMoney(savedMinor)} in this pot goes back to the months it came from, and can be allocated again. This cannot be undone.`
-              : "This pot is empty, so nothing is lost. This cannot be undone."}
+              ? t("deleteBodyFunded", { amount: formatMoney(savedMinor) })
+              : t("deleteBodyEmpty")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={remove}
             className="bg-danger! text-white! hover:bg-danger-hover!"
           >
-            Delete goal
+            {t("deleteConfirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

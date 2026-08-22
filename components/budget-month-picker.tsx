@@ -1,7 +1,10 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { useTransition } from "react";
+
+import { useRouter } from "@/i18n/navigation";
 
 /**
  * Which month the budget page is showing.
@@ -9,6 +12,10 @@ import { useTransition } from "react";
  * State lives in the URL, like the dashboard's filters — a budget view is
  * worth linking to, and the page stays server-rendered around it. Reads
  * `useSearchParams`, so the caller wraps it in a `<Suspense>` boundary.
+ *
+ * `useRouter` is the locale-aware one: `router.replace("/budget?…")` through
+ * `next/navigation` navigates to an unprefixed path, and switching months
+ * would quietly drop the reader back into the default language.
  */
 export function BudgetMonthPicker({
   months,
@@ -17,13 +24,16 @@ export function BudgetMonthPicker({
   months: string[];
   month: string;
 }) {
+  const t = useTranslations("Budget");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
   return (
     <label className="flex items-center gap-2">
-      <span className="text-[12.5px] font-medium text-text-muted">Month</span>
+      <span className="text-[12.5px] font-medium text-text-muted">
+        {t("month")}
+      </span>
       <select
         value={month}
         disabled={pending}

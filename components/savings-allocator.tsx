@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, PiggyBank } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ export function SavingsAllocator({
   surplusMinor: number;
   pots: SavingsPot[];
 }) {
+  const t = useTranslations("Savings");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [fields, setFields] = useState<Record<number, string>>(() =>
@@ -84,7 +86,7 @@ export function SavingsAllocator({
         pots.map((pot) => ({ goalId: pot.id, amount: fields[pot.id] ?? "" })),
       );
       if (result.ok) {
-        toast.success("Money moved into your pots.");
+        toast.success(t("moved"));
         router.refresh();
       } else {
         toast.error(result.error);
@@ -97,13 +99,13 @@ export function SavingsAllocator({
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="flex items-center gap-1.5 text-[13.5px] font-semibold text-text">
           <PiggyBank className="size-4 text-accent" aria-hidden />
-          {month} had money left over
+          {t("allocatorHeading", { month })}
         </h3>
         {/* "left over", not "free": the line below tracks what is still
             unallocated, and two numbers both calling themselves free is how a
             reader ends up trusting neither. */}
         <p className="font-mono text-[12.5px] tabular-nums text-text-muted">
-          {formatMoney(surplusMinor)} left over
+          {t("allocatorLeftOver", { amount: formatMoney(surplusMinor) })}
         </p>
       </div>
 
@@ -120,7 +122,7 @@ export function SavingsAllocator({
             </span>
             <label className="shrink-0">
               <span className="sr-only">
-                Put into {pot.name} from {month}, in CHF
+                {t("allocatorFieldLabel", { name: pot.name, month })}
               </span>
               <input
                 type="text"
@@ -147,10 +149,10 @@ export function SavingsAllocator({
           }`}
         >
           {invalid
-            ? "That is not an amount"
+            ? t("notAnAmount")
             : over
-              ? `${formatMoney(-remaining)} over`
-              : `${formatMoney(remaining)} still unallocated`}
+              ? t("over", { amount: formatMoney(-remaining) })
+              : t("unallocated", { amount: formatMoney(remaining) })}
         </p>
 
         <button
@@ -159,7 +161,7 @@ export function SavingsAllocator({
           disabled={pending}
           className="h-9 cursor-pointer rounded-md border border-line-strong px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-muted disabled:cursor-default disabled:opacity-60"
         >
-          Split evenly
+          {t("splitEvenly")}
         </button>
         <button
           type="button"
@@ -168,7 +170,7 @@ export function SavingsAllocator({
           className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-accent px-4 text-[13.5px] font-medium text-[var(--primary-foreground)] transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-50"
         >
           {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-          Move to pots
+          {t("moveToPots")}
         </button>
       </div>
     </div>

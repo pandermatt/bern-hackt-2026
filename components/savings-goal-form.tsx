@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -15,6 +16,7 @@ import { createSavingsGoal } from "@/app/actions/savings";
  * authoritative parse anyway.
  */
 export function SavingsGoalForm() {
+  const t = useTranslations("Savings");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
@@ -26,7 +28,7 @@ export function SavingsGoalForm() {
     startTransition(async () => {
       const result = await createSavingsGoal(name, amount);
       if (result.ok) {
-        toast.success(`“${name.trim()}” added.`);
+        toast.success(t("goalAdded", { name: name.trim() }));
         setName("");
         setAmount("");
         router.refresh();
@@ -45,20 +47,22 @@ export function SavingsGoalForm() {
       className="flex flex-wrap items-end gap-2.5 border-t border-line px-4 py-3.5 sm:px-5"
     >
       <label className="min-w-[10rem] flex-1">
-        <span className="text-[12.5px] font-medium text-text-muted">Goal</span>
+        <span className="text-[12.5px] font-medium text-text-muted">
+          {t("goalLabel")}
+        </span>
         <input
           type="text"
           value={name}
           maxLength={60}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Holiday, new car, …"
+          placeholder={t("goalPlaceholder")}
           className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[13.5px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
       </label>
 
       <label className="w-[9rem] shrink-0">
         <span className="text-[12.5px] font-medium text-text-muted">
-          Target (CHF)
+          {t("targetLabel")}
         </span>
         <input
           type="text"
@@ -80,7 +84,7 @@ export function SavingsGoalForm() {
         ) : (
           <Plus className="size-3.5" aria-hidden />
         )}
-        Add goal
+        {t("addGoal")}
       </button>
     </form>
   );

@@ -1,5 +1,6 @@
-import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
+import type { Metadata } from "next";
 
 import { getBudgetOverview } from "@/app/actions/budget";
 import { getSavingsOverview } from "@/app/actions/savings";
@@ -7,19 +8,32 @@ import { BudgetEditor } from "@/components/budget-editor";
 import { BudgetMonthPicker } from "@/components/budget-month-picker";
 import { BudgetRadar } from "@/components/budget-radar";
 import { SavingsGoals } from "@/components/savings-goals";
+import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Budget" };
+export async function generateMetadata({
+  params,
+}: PageProps<"/[locale]/budget">): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "Metadata" });
+  return { title: t("budget") };
+}
 
 export default async function BudgetPage({
+  params,
   searchParams,
-}: PageProps<"/budget">) {
+}: PageProps<"/[locale]/budget">) {
+  const { locale } = await params;
+  // `getTranslations`, not `useTranslations`: this component is async, and a
+  // hook cannot be called across an await.
+  const t = await getTranslations({ locale, namespace: "Budget" });
+
   // The proxy only sniffs for a cookie; this is the authoritative check.
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) return redirect({ href: "/login", locale });
 
   const { month: rawMonth } = await searchParams;
   const requested = typeof rawMonth === "string" ? rawMonth : undefined;
@@ -29,7 +43,7 @@ export default async function BudgetPage({
     getBudgetOverview(requested),
     getSavingsOverview(requested),
   ]);
-  if (!overview || !savings) redirect("/login");
+  if (!overview || !savings) return redirect({ href: "/login", locale });
 
   const { months, month, rows } = overview;
 
@@ -42,12 +56,10 @@ export default async function BudgetPage({
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
-            Budget
+            {t("title")}
           </h1>
           <p className="mt-1 text-[13.5px] text-text-muted">
-            {month
-              ? `Set a monthly limit per category and watch ${month} against it.`
-              : "No statements imported yet."}
+            {month ? t("subtitle", { month }) : t("subtitleEmpty")}
           </p>
         </div>
 
@@ -61,11 +73,10 @@ export default async function BudgetPage({
       {rows.length === 0 ? (
         <div className="card px-5 py-14 text-center">
           <p className="text-[14.5px] font-medium text-text">
-            Nothing to budget yet
+            {t("emptyTitle")}
           </p>
           <p className="mx-auto mt-1 max-w-[42ch] text-[13.5px] text-text-muted">
-            Import a statement and this page will suggest a monthly limit for
-            each category, from your own averages.
+            {t("emptyBody")}
           </p>
         </div>
       ) : (
@@ -76,12 +87,20 @@ export default async function BudgetPage({
                 id="radar-heading"
                 className="text-[15px] font-semibold text-text"
               >
-                Spending against budget
+                {t("radarHeading")}
               </h2>
               <p className="text-[12.5px] text-text-muted">
-                {budgeted === 0
-                  ? "No limits set — the ring is your own monthly average"
-                  : `${formatMoney(totalUsed)} spent of ${formatMoney(totalLimit)} in ${month}`}
+                {/* `month` is non-null whenever there are rows — `budgetRows`
+                    returns [] without one — but that is not something the type
+                    carries, and "no month" has nothing to say about a month
+                    anyway. */}
+                {budgeted === 0 || !month
+                  ? t("radarNoLimits")
+                  : t("radarMeta", {
+                      spent: formatMoney(totalUsed),
+                      limit: formatMoney(totalLimit),
+                      month,
+                    })}
               </p>
             </div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/components/echart";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { useCategoryLabel } from "@/lib/use-category-label";
 
 /**
  * Budget against actual, as a radar.
@@ -112,12 +114,12 @@ function textWidth(text: string, size: number, weight: number): number {
  */
 function radiusFor(
   boxWidth: number,
-  rows: BudgetRow[],
+  names: string[],
   layout: Layout,
 ): number {
-  const labelWidth = rows.reduce((widest, row) => {
+  const labelWidth = names.reduce((widest, displayed) => {
     const name = Math.max(
-      ...nameLines(row.category).map((line) =>
+      ...nameLines(displayed).map((line) =>
         textWidth(line, layout.nameSize, 400),
       ),
     );
@@ -189,11 +191,27 @@ function verdict(row: BudgetRow, pct: number): string {
   return "under";
 }
 
+/**
+ * The strings the option builder needs, resolved by the component.
+ *
+ * `useTranslations` is a hook and the builder is not a component, so the
+ * translated text is handed down as functions — the same shape the dashboard's
+ * category chart uses.
+ */
+type ChartText = {
+  spentSeries: string;
+  budgetSeries: string;
+  noLimitTip: () => string;
+  againstLimitTip: (used: string, limit: string, share: number) => string;
+};
+
 function buildOption(
   rows: BudgetRow[],
+  names: string[],
   tokens: ChartTokens,
   layout: Layout,
   radius: number,
+  text: ChartText,
 ): EChartsOption {
   const spent = rows.map(share);
   const used = rows.map((row) => row.usedMinor);
@@ -203,15 +221,14 @@ function buildOption(
   const clipped = used.some((amount) => amount > max);
 
   // Looked up by name from the axis-name formatter, which is handed the
-  // indicator rather than the row.
+  // indicator rather than the row — so this is keyed on the *displayed* name,
+  // not on `row.category`, or a translated spoke finds nothing.
   const byName = new Map(
-    rows.map((row, i) => [row.category, { row, pct: spent[i] }]),
+    rows.map((row, i) => [names[i], { row, pct: spent[i] }]),
   );
 
   const indicator = rows.map((row, i) => ({
-    // Rich text is `{style|text}`, so a brace in a category name would parse
-    // as markup. None of the taxonomy has one; this keeps it that way.
-    name: row.category.replace(/[{}]/g, ""),
+    name: names[i],
     max,
     // Tick labels on the top spoke only. Repeating 0/50/100/150/200 around
     // all eight is the same five numbers eight times over the drawing.
@@ -244,15 +261,19 @@ function buildOption(
           const limit = row.limitMinor;
           const right =
             limit === null
-              ? `<span style="opacity:.7">no limit</span>`
-              : `${formatMoney(row.usedMinor)} / ${formatMoney(limit)} · ${Math.round(pct)}%`;
+              ? `<span style="opacity:.7">${text.noLimitTip()}</span>`
+              : text.againstLimitTip(
+                  formatMoney(row.usedMinor),
+                  formatMoney(limit),
+                  Math.round(pct),
+                );
           const colour =
             limit === null
               ? tokens.textMuted
               : pct > 100
                 ? tokens.danger
                 : tokens.text;
-          return `<span style="opacity:.8">${row.category}</span><span style="float:right;padding-left:18px;color:${colour}">${right}</span>`;
+          return `<span style="opacity:.8">${names[i]}</span><span style="float:right;padding-left:18px;color:${colour}">${right}</span>`;
         });
         return lines.join("<br/>");
       },
@@ -264,11 +285,14 @@ function buildOption(
       itemHeight: 10,
       textStyle: { color: tokens.textMuted, fontSize: 12.5 },
       data: [
-        { name: "Spent this month", icon: "roundRect" },
+        { name: text.spentSeries, icon: "roundRect" },
         // Two blocks filling the full icon box, so the legend swatch reads as
         // the same dashed rule the chart draws. A stroke-based path would not
         // — legend icons are filled with the item colour, never stroked.
-        { name: "Your budget", icon: "path://M0,0 h10 v10 h-10 z M14,0 h10 v10 h-10 z" },
+        {
+          name: text.budgetSeries,
+          icon: "path://M0,0 h10 v10 h-10 z M14,0 h10 v10 h-10 z",
+        },
       ],
     },
     radar: {
@@ -368,7 +392,7 @@ function buildOption(
         symbolSize: 7,
         data: [
           {
-            name: "Spent this month",
+            name: text.spentSeries,
             // Clamped to the rim; the real figure is under the category name,
             // in the tooltip, and in the table.
             value: used.map((amount) => Math.min(amount, max)),
@@ -380,7 +404,7 @@ function buildOption(
             itemStyle: { color: tokens.series[1] },
           },
           {
-            name: "Your budget",
+            name: text.budgetSeries,
             // A threshold, not a quantity: outline only, no `areaStyle`.
             value: budget,
             lineStyle: {
@@ -397,6 +421,11 @@ function buildOption(
 }
 
 export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
+  const t = useTranslations("Budget");
+  // Category names are data, stored in English and translated only where they
+  // are shown — so the stored key keeps matching the colour slot and the saved
+  // limit in either language.
+  const categoryLabel = useCategoryLabel();
   const tokens = useChartTokens();
   // Tailwind's `sm`, so the chart changes shape at the same width the page
   // around it does. This picks the type sizes; the radius is measured.
@@ -415,12 +444,42 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
     return () => observer.disconnect();
   }, []);
 
+  // The name each spoke wears. Resolved once and shared by the sizer and the
+  // builder: the dial's radius is computed from the width of these labels, so
+  // measuring the English key while painting the German one sizes the chart
+  // against a string it never draws.
+  //
+  // Rich text is `{style|text}`, so a brace would parse as markup. None of the
+  // taxonomy has one, in either language, and this keeps it that way.
+  const names = useMemo(
+    () => rows.map((row) => categoryLabel(row.category).replace(/[{}]/g, "")),
+    [rows, categoryLabel],
+  );
+
+  const text = useMemo<ChartText>(
+    () => ({
+      spentSeries: t("seriesSpent"),
+      budgetSeries: t("seriesBudget"),
+      noLimitTip: () => t("tipNoLimit"),
+      againstLimitTip: (used, limit, share) =>
+        t("tipAgainstLimit", { used, limit, share }),
+    }),
+    [t],
+  );
+
   const option = useMemo(
     () =>
       tokens && boxWidth > 0
-        ? buildOption(rows, tokens, layout, radiusFor(boxWidth, rows, layout))
+        ? buildOption(
+            rows,
+            names,
+            tokens,
+            layout,
+            radiusFor(boxWidth, names, layout),
+            text,
+          )
         : null,
-    [rows, tokens, layout, boxWidth],
+    [rows, names, tokens, layout, boxWidth, text],
   );
 
   if (rows.length === 0) return null;
@@ -430,29 +489,31 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
       <EChart
         option={option}
         height={layout.height}
-        label="Spending against budget for each category this month, in Swiss francs, with the share of each limit printed beside its category. The table below carries the same figures."
+        label={t("chartLabel")}
       />
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. */}
       <div className="sr-only">
-        <table aria-label="Spending against budget, by category">
+        <table aria-label={t("tableLabel")}>
           <thead>
             <tr>
-              <th scope="col">Category</th>
-              <th scope="col">Spent</th>
-              <th scope="col">Budget</th>
-              <th scope="col">Share of budget</th>
-              <th scope="col">Suggested</th>
+              <th scope="col">{t("tableCategory")}</th>
+              <th scope="col">{t("tableSpent")}</th>
+              <th scope="col">{t("tableBudget")}</th>
+              <th scope="col">{t("tableShare")}</th>
+              <th scope="col">{t("tableSuggested")}</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.map((row, i) => (
               <tr key={row.category}>
-                <th scope="row">{row.category}</th>
+                <th scope="row">{names[i]}</th>
                 <td>{formatMoney(row.usedMinor)}</td>
                 <td>
-                  {row.limitMinor === null ? "Not set" : formatMoney(row.limitMinor)}
+                  {row.limitMinor === null
+                    ? t("notSet")
+                    : formatMoney(row.limitMinor)}
                 </td>
                 <td>{Math.round(share(row))}%</td>
                 <td>{formatMoney(row.suggestedMinor)}</td>

@@ -1,6 +1,7 @@
 "use server";
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -77,6 +78,20 @@ export async function getBudgetOverview(
 export type SaveBudgetsResult = { ok: true } | { ok: false; error: string };
 
 /**
+ * Errors are phrased here, not in the component.
+ *
+ * The client raises whatever string it gets straight into a toast, so it has
+ * to arrive already translated — the same shape `app/actions/auth.ts` uses.
+ */
+async function budgetError(
+  key: string,
+  values?: Record<string, string>,
+): Promise<SaveBudgetsResult> {
+  const t = await getTranslations("BudgetErrors");
+  return { ok: false, error: t(key, values) };
+}
+
+/**
  * Upserts the limits the user typed and deletes the ones they cleared.
  *
  * One transaction, so a half-saved budget is not a state the page can land in.
@@ -87,10 +102,10 @@ export async function saveBudgets(
   entries: { category: string; amount: string }[],
 ): Promise<SaveBudgetsResult> {
   const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "Sign in to set a budget." };
+  if (!user) return budgetError("notSignedIn");
 
   const parsed = z.array(entrySchema).max(64).safeParse(entries);
-  if (!parsed.success) return { ok: false, error: "That budget looks malformed." };
+  if (!parsed.success) return budgetError("malformed");
 
   const upserts: { category: string; limitMinor: number }[] = [];
   const clears: string[] = [];
@@ -102,12 +117,12 @@ export async function saveBudgets(
     }
     const value = Number(amount);
     if (!Number.isFinite(value) || value < 0) {
-      return { ok: false, error: `“${amount}” is not an amount.` };
+      return budgetError("notAnAmount", { amount });
     }
     // Rappen, rounded — the user types francs and half a rappen is not money.
     const limitMinor = Math.round(value * 100);
     if (limitMinor > 1_000_000_000) {
-      return { ok: false, error: "That limit is larger than this app can hold." };
+      return budgetError("tooLarge");
     }
     upserts.push({ category, limitMinor });
   }
@@ -142,9 +157,9 @@ export async function saveBudgets(
       }
     });
   } catch {
-    return { ok: false, error: "Could not save that budget. Try again." };
+    return budgetError("saveFailed");
   }
 
-  revalidatePath("/budget");
+  revalidatePath("/[locale]/budget", "page");
   return { ok: true };
 }
