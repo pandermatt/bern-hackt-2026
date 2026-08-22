@@ -45,9 +45,29 @@ export function TabBar() {
        */
       className="fixed inset-x-0 bottom-0 z-40 hidden px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] app-shell:block"
     >
+      {/*
+       * A full capsule, not a rounded rectangle. `rounded-[26px]` left a flat
+       * run down each end, which reads as a card with soft corners — against
+       * the corner radius of a current iPhone it looked square. iOS's own tab
+       * bar is a capsule.
+       *
+       * `rounded-full` rather than a bigger number: the browser clamps it to
+       * half the smaller dimension, so this stays a capsule whatever the bar
+       * ends up measuring — and it does not measure what you would guess. The
+       * label inherits its line-height rather than setting one, so the row is
+       * a couple of pixels taller than `min-h-12` implies.
+       *
+       * That is also why the cells below use `rounded-full` instead of a
+       * matching literal. A pill inside a pill wants concentric radii — inner
+       * = outer − padding — or the gap between them pinches at the corners.
+       * Each cell is inset from the bar by exactly `p-1.5` on every side, so
+       * its height is the bar's less twice that, and half of it is therefore
+       * half the bar's less the padding. The two agree by construction, at any
+       * height, with neither number written down.
+       */}
       <nav
         aria-label={t("mainNav")}
-        className="glass mx-auto flex max-w-md items-stretch gap-1 rounded-[26px] p-1.5"
+        className="glass mx-auto flex max-w-md items-stretch gap-1 rounded-full p-1.5"
       >
         {TABS.map((tab) => {
           const Icon = tab.icon;
@@ -69,7 +89,7 @@ export function TabBar() {
               aria-current={active ? "page" : undefined}
               // `min-h-12` clears the 44px tap target a thumb needs; the
               // footer's links solve the same problem with `min-h-10`.
-              className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-[20px] px-1 py-1.5 transition-colors ${
+              className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5 transition-colors ${
                 active
                   ? "bg-accent-soft text-accent"
                   : "text-text-muted active:bg-surface-muted"
