@@ -1,46 +1,18 @@
 import {
   ArrowRight,
-  BarChart3,
   CheckCircle2,
   ChevronRight,
-  Database,
   Lock,
   MessageSquare,
-  ScanSearch,
   ShieldCheck,
   Sparkles,
-  UserPlus,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { LandingDragon } from "@/components/landing-dragon";
-import { TABS } from "@/components/nav-tabs";
 import { Link } from "@/i18n/navigation";
 
-/** The numbers and icons are fixed; the words come from the `Landing`
- *  namespace, keyed by step. The three steps are the route a new account
- *  actually takes — register, put statements in it from `/account`, then read
- *  them. There is no file upload anywhere in the app, so nothing here offers
- *  one. */
-const STEPS = [
-  { number: "01", key: "step1", icon: UserPlus },
-  { number: "02", key: "step2", icon: Database },
-  { number: "03", key: "step3", icon: BarChart3 },
-] as const;
-
-/**
- * One card per tab, in the order the nav puts them, wearing the nav's own
- * icons — `components/nav-tabs.ts` is the single list, so a fifth page added
- * there shows up here too rather than being quietly left off the pitch.
- */
-const FEATURES = TABS.map((tab) => ({ key: tab.key, icon: tab.icon }));
-
 const FAQ_KEYS = ["faq1", "faq2", "faq3", "faq4", "faq5", "faq6"] as const;
-
-/** "home" → "Home", so one array drives both the icon and its message keys. */
-function capitalize(value: string): string {
-  return `${value[0].toUpperCase()}${value.slice(1)}`;
-}
 
 export function Landing() {
   const t = useTranslations("Landing");
@@ -75,7 +47,7 @@ export function Landing() {
               href="/login"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-line bg-surface px-6 text-[15px] font-semibold text-text transition-all duration-200 hover:bg-surface-hover hover:border-line-strong active:scale-95"
             >
-              <span>{t('signInVault')}</span>
+              <span>{t('signIn')}</span>
               <ChevronRight className="size-4 text-text-subtle" />
             </Link>
           </div>
@@ -112,95 +84,7 @@ export function Landing() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. WHAT'S INSIDE — one card per tab, from the nav's own list
-         ───────────────────────────────────────────────────────────── */}
-      <section className="w-full py-16 sm:py-24 bg-surface border-b border-line/60">
-        <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle mb-2">
-            {t("featuresEyebrow")}
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-text">
-            {t("featuresTitle")}
-          </h2>
-
-          <div className="mt-12 grid gap-6 sm:grid-cols-2">
-            {FEATURES.map((feature) => {
-              const Icon = feature.icon;
-              const name = capitalize(feature.key);
-              return (
-                <div
-                  key={feature.key}
-                  className="rounded-2xl border border-line/80 bg-surface p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:border-line-strong hover:shadow-md"
-                >
-                  <div className="mb-5 flex size-11 items-center justify-center rounded-xl bg-surface-muted text-text">
-                    <Icon className="size-5" />
-                  </div>
-                  <h3 className="text-base font-semibold text-text">
-                    {t(`feature${name}Title`)}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                    {t(`feature${name}Body`)}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          4. HOW IT WORKS
-         ───────────────────────────────────────────────────────────── */}
-      <section className="w-full py-16 sm:py-24 border-b border-line/60">
-        <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle mb-2">
-            {t("stepsEyebrow")}
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-text">
-            {t("stepsTitle")}
-          </h2>
-
-          <div className="mt-12 grid gap-6 sm:grid-cols-3">
-            {STEPS.map((step) => {
-              const Icon = step.icon;
-              return (
-                <div
-                  key={step.number}
-                  className="group relative rounded-2xl border border-line/80 bg-surface p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:border-line-strong hover:shadow-md"
-                >
-                  <div className="flex items-center justify-between mb-5">
-                    <div className="flex size-11 items-center justify-center rounded-xl bg-surface-muted text-text group-hover:bg-brand group-hover:text-[#1a1a1a] transition-colors">
-                      <Icon className="size-5" />
-                    </div>
-                    <span className="font-mono text-xs font-bold text-text-subtle">
-                      {step.number}
-                    </span>
-                  </div>
-                  <h3 className="text-base font-semibold text-text">
-                    {t(`${step.key}Title`)}
-                  </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                    {t(`${step.key}Description`)}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* The one claim the steps cannot make on their own: your own
-              statements are not importable yet, and saying so here is cheaper
-              than a disappointed sign-up. */}
-          <div className="mt-8 flex items-start gap-2.5 rounded-xl border border-line/80 bg-surface-hover/50 p-5">
-            <ScanSearch className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
-            <p className="text-[13px] leading-relaxed text-text-muted">
-              {t("stepsNote")}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────────────────────────────────
-          5. FULL-WIDTH POSTFINANCE YELLOW CONTAINER WITH CALL TO ACTION
+          2. FULL-WIDTH POSTFINANCE YELLOW CONTAINER WITH CALL TO ACTION
          ───────────────────────────────────────────────────────────── */}
       <section className="on-brand relative w-full bg-brand text-text py-20 sm:py-28 overflow-hidden border-y border-brand">
         {/* Subtle geometric background watermark */}
@@ -216,14 +100,6 @@ export function Landing() {
         <div className="relative mx-auto w-full max-w-5xl px-5 sm:px-8 text-center sm:text-left">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-10">
             <div className="max-w-2xl">
-              {/* Badge */}
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-text/10 px-3.5 py-1 text-xs font-semibold text-text mb-5">
-                <Sparkles className="size-3.5" />
-                <span className="uppercase tracking-[0.1em] text-[11px]">
-                  {t("ctaBadge")}
-                </span>
-              </div>
-
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-text leading-[1.12]">
                 {t("ctaTitle")}
               </h2>
@@ -273,7 +149,7 @@ export function Landing() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          6. FAQ
+          3. FAQ
          ───────────────────────────────────────────────────────────── */}
       <section className="w-full py-16 sm:py-24 bg-surface">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
