@@ -126,6 +126,8 @@
     "greeting": "Hallo {name}",
     "nudgesLabel": "Wissenswertes",
     "allClear": "Heute braucht nichts Ihre Aufmerksamkeit.",
+    "showAll": "Alle anzeigen ({count})",
+    "showLess": "Weniger anzeigen",
     "overBudgetTitle": "Budget überschritten bei {category}",
     "overBudgetBody": "{amount} über dem von Ihnen gesetzten Limit.",
     "freeMoneyTitle": "{amount} noch nicht zugewiesen",
@@ -316,7 +318,14 @@
     "standingOrderCleared": "Dauersparauftrag für „{name}“ entfernt.",
     "standingOrderSave": "Dauersparauftrag speichern",
     "standingOrderNone": "Legen Sie zuerst ein Sparziel an, dann können Sie einen Dauersparauftrag dafür setzen.",
-    "useStandingOrders": "Dauersparaufträge übernehmen"
+    "useStandingOrders": "Dauersparaufträge übernehmen",
+    "transferTitle": "Geld in {to} verschieben",
+    "transferDescription": "{amount} sind in {from} verfügbar.",
+    "transferFieldLabel": "Zu verschiebender Betrag (CHF)",
+    "transferHint": "Bis zu {amount}.",
+    "transferPreview": "{to} würde {percent}% anzeigen.",
+    "moveMoney": "Geld verschieben",
+    "transferred": "{amount} von {from} nach {to} verschoben."
   },
   "SavingsErrors": {
     "notSignedInCreate": "Melden Sie sich an, um ein Sparziel hinzuzufügen.",
@@ -335,7 +344,10 @@
     "notAnAmount": "„{amount}“ ist kein Betrag.",
     "tooLarge": "Dieser Betrag ist grösser, als diese App speichern kann.",
     "moveFailed": "Geld konnte nicht verschoben werden. Versuchen Sie es erneut.",
-    "notADate": "Das ist kein Datum."
+    "notADate": "Das ist kein Datum.",
+    "notSignedInTransfer": "Melden Sie sich an, um Geld zwischen Töpfen zu verschieben.",
+    "sameGoal": "Wählen Sie zwei verschiedene Töpfe.",
+    "overSaved": "So viel liegt in diesem Topf nicht."
   },
   "AnomalySuggestion": {
     "runningTitle": "Ihre Transaktionen werden mit KI analysiert",
@@ -596,6 +608,22 @@
     "light": "Hell",
     "dark": "Dunkel"
   },
+  "Install": {
+    "heading": "Installieren",
+    "title": "Zum Startbildschirm hinzufügen",
+    "note": "Installieren Sie Beyond Money als App. Sie öffnet sich in einem eigenen Fenster, ohne Browserleiste.",
+    "action": "Installieren",
+    "installed": "Installiert",
+    "installedNote": "Sie nutzen Beyond Money bereits als installierte App.",
+    "browserMenuNote": "Ihr Browser bietet das über sein eigenes Menü an — suchen Sie nach „App installieren“ oder „Zum Startbildschirm hinzufügen“.",
+    "iosNote": "Auf iPhone und iPad läuft das über das Teilen-Menü von Safari.",
+    "iosAction": "Anleitung anzeigen",
+    "iosTitle": "Zum Startbildschirm hinzufügen",
+    "iosIntro": "Safari installiert Apps über sein Teilen-Menü und nicht über die Seite selbst.",
+    "iosStep1": "Tippen Sie in der Safari-Symbolleiste auf „Teilen“.",
+    "iosStep2": "Scrollen Sie die Liste hinunter und wählen Sie „Zum Startbildschirm“.",
+    "iosStep3": "Tippen Sie auf „Hinzufügen“. Beyond Money erscheint auf Ihrem Startbildschirm."
+  },
   "DangerZone": {
     "trigger": "Konto löschen",
     "title": "Konto wirklich löschen?",
@@ -654,7 +682,7 @@
     "body": "Die Seite ist auf einen Fehler gestossen, von dem sie sich nicht erholen konnte. Ein zweiter Versuch hilft meistens.",
     "digestTitle": "Serverseitige Fehlerkennung",
     "tryAgain": "Erneut versuchen",
-    "backToDashboard": "Zurück zum Dashboard",
+    "backHome": "Zurück zur Startseite",
     "globalTitle": "Die App konnte nicht starten",
     "globalBody": "Etwas ist kaputtgegangen, bevor die Seite gerendert werden konnte. Neu laden hilft meistens.",
     "reload": "Neu laden",

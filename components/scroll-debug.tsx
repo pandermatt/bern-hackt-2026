@@ -11,7 +11,7 @@ import { useHydrated } from "@/lib/use-hydrated";
  * Mounted only when the URL carries `?debug=scroll`, so it costs a signed-in
  * reader nothing. Its text is untranslated on purpose — it is instrumentation,
  * not product. Delete this file and its two lines in
- * `app/[locale]/(dashboard)/page.tsx` once the cause is known.
+ * `app/[locale]/dashboard/page.tsx` once the cause is known.
  *
  * It exists to separate three explanations that look identical to the reader
  * but need completely different fixes:

@@ -17,10 +17,10 @@ export default function NotFound() {
         </p>
 
         <Link
-          href="/"
+          href="/home"
           className="mt-6 inline-flex h-10 items-center rounded-md bg-accent px-4 text-[14px] font-medium text-white transition-colors hover:bg-accent-hover"
         >
-          {t("backToDashboard")}
+          {t("backHome")}
         </Link>
       </div>
     </main>

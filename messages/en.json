@@ -126,6 +126,8 @@
     "greeting": "Hello {name}",
     "nudgesLabel": "Things worth knowing",
     "allClear": "Nothing needs your attention today.",
+    "showAll": "Show all ({count})",
+    "showLess": "Show less",
     "overBudgetTitle": "Over budget in {category}",
     "overBudgetBody": "{amount} past the limit you set.",
     "freeMoneyTitle": "{amount} still unassigned",
@@ -316,7 +318,14 @@
     "standingOrderCleared": "Standing order for “{name}” removed.",
     "standingOrderSave": "Save standing order",
     "standingOrderNone": "Add a goal first, then you can set a standing order for it.",
-    "useStandingOrders": "Use standing orders"
+    "useStandingOrders": "Use standing orders",
+    "transferTitle": "Move money into {to}",
+    "transferDescription": "{amount} is available in {from}.",
+    "transferFieldLabel": "Amount to move (CHF)",
+    "transferHint": "Up to {amount}.",
+    "transferPreview": "{to} would read {percent}%.",
+    "moveMoney": "Move money",
+    "transferred": "Moved {amount} from {from} to {to}."
   },
   "SavingsErrors": {
     "notSignedInCreate": "Sign in to add a savings goal.",
@@ -335,7 +344,10 @@
     "notAnAmount": "“{amount}” is not an amount.",
     "tooLarge": "That amount is larger than this app can hold.",
     "moveFailed": "Could not move that money. Try again.",
-    "notADate": "That is not a date."
+    "notADate": "That is not a date.",
+    "notSignedInTransfer": "Sign in to move money between pots.",
+    "sameGoal": "Choose two different pots.",
+    "overSaved": "That pot doesn't hold that much."
   },
   "AnomalySuggestion": {
     "runningTitle": "Analysing your transactions with AI",
@@ -596,6 +608,22 @@
     "light": "Light",
     "dark": "Dark"
   },
+  "Install": {
+    "heading": "Install",
+    "title": "Add to home screen",
+    "note": "Install Beyond Money as an app. It opens in its own window, without browser chrome.",
+    "action": "Install",
+    "installed": "Installed",
+    "installedNote": "You are already running Beyond Money as an installed app.",
+    "browserMenuNote": "Your browser offers this from its own menu — look for “Install app” or “Add to Home Screen”.",
+    "iosNote": "On iPhone and iPad this is done from the Share menu in Safari.",
+    "iosAction": "Show me how",
+    "iosTitle": "Add to Home Screen",
+    "iosIntro": "Safari installs apps from its Share menu rather than from the page itself.",
+    "iosStep1": "Tap the Share button in Safari’s toolbar.",
+    "iosStep2": "Scroll down the list and choose “Add to Home Screen”.",
+    "iosStep3": "Tap “Add”. Beyond Money appears on your home screen."
+  },
   "DangerZone": {
     "trigger": "Delete account",
     "title": "Delete your account?",
@@ -654,7 +682,7 @@
     "body": "The page hit an error it could not recover from. Trying again usually works.",
     "digestTitle": "Server-side error identifier",
     "tryAgain": "Try again",
-    "backToDashboard": "Back to your dashboard",
+    "backHome": "Back to your home page",
     "globalTitle": "The app failed to start",
     "globalBody": "Something broke before the page could render. Reloading usually fixes it.",
     "reload": "Reload",

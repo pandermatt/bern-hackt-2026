@@ -131,7 +131,10 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     );
   }
 
-  const dashboard = await getDashboard({});
+  // `view: "list"` explicitly: the dashboard's default is the calendar, and
+  // building its per-day aggregates costs an account-wide anomaly read that no
+  // chat turn has any use for.
+  const dashboard = await getDashboard({ view: "list" });
   if (!dashboard) {
     record(turnStarted, { status: "error", error: "Session expired mid-turn." });
     return failure("Your session has expired — sign in again to keep chatting.");
@@ -304,7 +307,11 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     // Aggregates scoped to the window come from a second, filtered fetch —
     // the same query path the dashboard itself uses.
     const scoped = period
-      ? ((await getDashboard({ from: period.from, to: period.to })) ?? dashboard)
+      ? ((await getDashboard({
+          from: period.from,
+          to: period.to,
+          view: "list",
+        })) ?? dashboard)
       : dashboard;
 
     // Presentation choices for a display_chart call; the source falls back
@@ -439,7 +446,11 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       dashboard.facets.last,
     );
     const scopedForChart = window
-      ? ((await getDashboard({ from: window.from, to: window.to })) ?? dashboard)
+      ? ((await getDashboard({
+          from: window.from,
+          to: window.to,
+          view: "list",
+        })) ?? dashboard)
       : dashboard;
     if (wantedType) {
       chart =

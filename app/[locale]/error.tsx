@@ -51,11 +51,14 @@ export default function Error({
           >
             {t("tryAgain")}
           </button>
+          {/* /home, not "/": an error can be thrown from any route, and the
+              way out of one is the signed-in entry page. "/" is the marketing
+              landing. */}
           <Link
-            href="/"
+            href="/home"
             className="inline-flex h-10 items-center rounded-md border border-line-strong bg-surface px-4 text-[14px] font-medium text-text transition-colors hover:bg-surface-muted"
           >
-            {t("backToDashboard")}
+            {t("backHome")}
           </Link>
         </div>
       </div>

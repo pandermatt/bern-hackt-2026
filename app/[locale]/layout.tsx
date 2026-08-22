@@ -51,6 +51,30 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
     title: { default: title, template: `%s — ${site.name}` },
     description,
     applicationName: site.name,
+    /*
+     * Declared rather than dropped in as `app/icon.svg`. The file convention
+     * emits its `<link>` relative to the segment it sits in, so under
+     * `[locale]` these were only ever reachable at `/de/icon.svg` — and a
+     * manifest, which is locale-independent, cannot name a path like that.
+     * Both files now live in `public/` at root paths; this is what puts them
+     * back in the `<head>`. `app/favicon.ico` still rides its own convention.
+     */
+    icons: {
+      icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+      apple: "/apple-icon.png",
+    },
+    /*
+     * iOS has no manifest-driven install: `capable` is what makes an added
+     * home-screen icon open standalone instead of in a Safari tab, and `title`
+     * is the name under the icon. `statusBarStyle` stays "default" — the
+     * translucent variant draws the page *under* the status bar, and the
+     * sticky header in `components/app-header.tsx` has no inset for that.
+     */
+    appleWebApp: {
+      capable: true,
+      title: site.name,
+      statusBarStyle: "default",
+    },
     openGraph: {
       type: "website",
       // The card's own language, so `og:locale` is not a claim the copy

@@ -6,11 +6,12 @@ import type { CSSProperties } from "react";
  * layout reads the session), so without this the content area sits blank
  * between navigations — including on every filter change.
  *
- * It lives inside the `(dashboard)` route group, not at the app root, because
- * a root `loading.tsx` is the loading boundary for **every** route beneath it.
- * At the root, clicking "Sign in" flashed this dashboard skeleton over
- * `/login`, and the same went for `/register` and `/account`. The route group
- * scopes it to `/` without changing the URL. Don't move it back up.
+ * It lives beside the dashboard page, not at the app root, because a root
+ * `loading.tsx` is the loading boundary for **every** route beneath it. At the
+ * root, clicking "Sign in" flashed this dashboard skeleton over `/login`, and
+ * the same went for `/register` and `/account`. It used to need a `(dashboard)`
+ * route group for that, back when the dashboard was `/`; now that the page has
+ * its own segment the folder does the scoping. Don't move it back up.
  *
  * Mirrors the dashboard's shape — heading, four tiles, the two charts, the
  * merchant breakdown, filters, rows — so the real content lands in roughly the

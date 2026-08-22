@@ -25,9 +25,17 @@ function Mark() {
   );
 }
 
-export function Logo() {
+/**
+ * The wordmark, which is also the way home — and "home" is not the same address
+ * for everyone. A signed-in reader wants `/home`, the entry page; "/" is the
+ * marketing landing and would only bounce them onward. A signed-out visitor
+ * wants exactly that landing, and sending *them* to `/home` puts a login form
+ * between the logo and the page they are already reading. The header knows
+ * which it is looking at, so it decides.
+ */
+export function Logo({ href = "/" }: { href?: "/" | "/home" }) {
   return (
-    <Link href="/" className="group flex min-h-10 items-center gap-2.5 sm:min-h-0">
+    <Link href={href} className="group flex min-h-10 items-center gap-2.5 sm:min-h-0">
       <Mark />
       <span className="text-[15px] font-semibold tracking-tight text-text">
         {/* The wordmark is the first thing to go on a phone: at 402px this

@@ -118,7 +118,7 @@ export default async function AnomalyRulePage({
               transfer rows, which the ledger hides unless asked. */}
           <Link
             href={{
-              pathname: "/",
+              pathname: "/dashboard",
               query: { anomaly: detail.ruleId, includeTransfers: "true" },
             }}
             className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:underline"

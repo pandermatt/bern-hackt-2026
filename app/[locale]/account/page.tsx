@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { AnomalyScanControls } from "@/components/anomaly-scan-controls";
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
+import { InstallApp } from "@/components/install-app";
 import { LanguageSelector } from "@/components/language-selector";
 import { ProfileSettings } from "@/components/profile-settings";
 import { ThemeSetting } from "@/components/theme-setting";
@@ -76,6 +77,8 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
           </div>
         </div>
       </div>
+
+      <InstallApp />
 
       <AnomalyScanControls />
 
