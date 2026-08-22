@@ -160,6 +160,30 @@ Unchanged from the template this app grew out of, and still exactly true.
   moves, so it renders in the server HTML and needs no hydration. `potFill`
   clamps at 1 — over-funding a goal is allowed, but a 130% fill paints outside
   the jar.
+- **The pot is one cylinder drawn from one viewing angle.** `RY` is the
+  perspective squash, and the *same* ellipse is reused for the mouth, the
+  liquid's surface and the base. Change it in one place or the vessel stops
+  being a solid. The body is `--surface-muted`, not `--surface`: on a card that
+  is already `--surface` the walls would vanish in both themes.
+- **The pot always ships a progress bar underneath it.** A cylinder is a poor
+  instrument for reading a proportion — the eye compares lengths on a shared
+  baseline far better than areas in a jar — so the pot carries the identity and
+  the bar carries the precision. Don't drop it for tidiness; it is the same
+  "relief" argument as the charts' `sr-only` tables.
+- **Goal glyphs are Font Awesome Free, deep-imported.**
+  `@fortawesome/free-solid-svg-icons/faCar`, never the barrel — the barrel is
+  ~2000 definitions, the same reasoning as `echarts/charts`. `lib/goal-icon.ts`
+  guesses from the goal's name in German and English; there is no icon column,
+  because a picker is a second field to fill in for something the name already
+  says. **Free has no palm tree** (`fa-tree-palm` is Pro), so holidays get
+  `fa-umbrella-beach`.
+- **A glyph's box is not always square** — `fa-laptop` is 640×512 — so fit on
+  `max(width, height)` rather than assuming 512. And the glyph is clipped at
+  the waterline and drawn twice, ink above and a faint wash below, so it stays
+  legible over all ten fills without the component having to know which hue it
+  is sitting on. A `clipPath` resolves in the user space of the element that
+  references it, so the clip must sit on an **untransformed** group or the
+  waterline scales with the glyph.
 - **A pot's colour comes from its row id, not its position.** `potSlot` keys on
   the id so deleting one goal does not repaint the rest. Goals have no chart
   counterpart to agree with, so any stable mapping does — this one is stable

@@ -407,6 +407,8 @@ Every other route requires a session.
   name carries its share of that limit as a percentage. Below it, **Sparziele**:
   savings goals drawn as pots that fill, funded by allocating what a finished
   month had left over — a month still running has no final surplus to offer.
+- `lib/goal-icon.ts` — which Font Awesome glyph a savings goal wears, guessed
+  from its name in German and English. Deep imports, never the icon barrel.
 - `lib/clock.ts` — the only module that asks what today is. `lib/insights.ts`
   never constructs a `Date`, so "is this month over" lives here.
 - `app/globals.css` — the design tokens, mapped onto shadcn's token names.
