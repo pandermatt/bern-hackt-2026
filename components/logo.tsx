@@ -3,29 +3,30 @@ import { Link } from "@/i18n/navigation";
 import { site } from "@/lib/site";
 
 /**
- * The dragon mark, on a white tile.
+ * The dragon mark, in the tile that matches the theme.
  *
- * The supplied artwork (`res/logos`) is raster and has **no alpha** — it is
- * drawn for a white ground, exactly like the merchant marks in
- * `components/merchant-avatar.tsx`. So it gets the treatment that file already
- * documents: `bg-logo-tile`, which is `#ffffff` in both themes on purpose, and
- * a `ring-line` so the tile does not float on the dark page. Dropped straight
- * onto `--surface` it would be a white square on a #1c1c1c header.
+ * The artwork ships as a light and a dark **app icon** — the same mark on a
+ * near-white or a near-black rounded tile — and that tile is the whole of the
+ * difference: the bare mark is one file, byte-identical between the two sets.
+ * So this is the one place the pair earns its keep, and it brings its own
+ * tile: the `bg-logo-tile` + `ring-line` scaffolding the previous, alpha-less
+ * artwork needed is gone.
  *
- * This replaced an inline SVG signet that could be filled with `var(--accent)`
- * and stroke-animated on hover. Both went with the vector: a PNG has no path
- * to draw and no fill to re-point. A gentle scale stands in for the flourish;
- * if the dragon is ever redrawn as an SVG, the old animation is worth back.
+ * Drawn as a background image off `--logo-mark`, not as two `<img>`s toggled
+ * with `dark:`. This project has no `@custom-variant dark`, so Tailwind's
+ * `dark:` still keys off `prefers-color-scheme` while the app's own switch
+ * sets a `.dark` class — a `dark:hidden` mark would follow the operating
+ * system and ignore the toggle. The token also fetches one file instead of
+ * two, and it is already how every other themed value here works.
+ *
+ * Decorative: the site name sits beside it, in an `sr-only` span.
  */
 function Mark() {
   return (
-    /* eslint-disable-next-line @next/next/no-img-element */
-    <img
-      src="/icon-192.png"
-      alt=""
-      width={192}
-      height={192}
-      className="size-7 shrink-0 rounded-md bg-logo-tile object-contain ring-1 ring-line transition-transform duration-200 group-hover:scale-105"
+    <span
+      aria-hidden
+      className="size-7 shrink-0 rounded-[7px] bg-contain bg-center bg-no-repeat transition-transform duration-200 group-hover:scale-105"
+      style={{ backgroundImage: "var(--logo-mark)" }}
     />
   );
 }

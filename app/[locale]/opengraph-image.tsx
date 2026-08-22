@@ -33,20 +33,20 @@ const INK = "#1D1D1F";
 const INK_MUTED = "#6E6E73";
 
 /*
- * The app icon, embedded as a data URI.
+ * The bare mark, embedded as a data URI.
  *
- * Read from `public/` at module load rather than fetched over the network:
+ * Read from `res/logos` at module load rather than fetched over the network:
  * this card is generated on the server, and a request back to our own origin
  * to draw our own logo is a round trip that can fail while the page it
  * decorates does not.
  *
- * It used to be an inline SVG whose `fill` this file chose — that is what let
- * the old signet be re-tinted for the ground it sat on. The dragon is raster
- * and has no alpha, so it cannot be tinted and cannot sit directly on the
- * brand ground; it gets the same white tile the header gives it.
+ * The *bare* mark, not the app icon — the artwork has an alpha channel now, so
+ * it sits straight on the Supernova ground. The white tile this used to need
+ * was scaffolding for an earlier, alpha-less file, and a tile here would be a
+ * white rectangle on the brand colour for no reason.
  */
 const MARK_URI = `data:image/png;base64,${readFileSync(
-  join(process.cwd(), "public", "icon-512.png"),
+  join(process.cwd(), "res", "logos", "beyond-money-light-icon-512x512.png"),
 ).toString("base64")}`;
 
 /* Deliberately a static string and not `generateImageMetadata`, which would be
@@ -70,24 +70,15 @@ export default async function OpengraphImage({ params }: PageProps<"/[locale]">)
           background: SUPERNOVA,
         }}
       >
-        {/* The mark, large, on the right. It used to be an oversized silhouette
-            bleeding off the edge — that worked because it was a tintable vector
-            that could be a single Blue Stone shape on the yellow. A raster with
-            a white ground cannot bleed off anything without reading as a torn
-            white rectangle, so it is contained on its own rounded tile
-            instead. The copy column ends at x=820; this starts at x=856. */}
+        {/* The mark, large, on the right, straight on the brand ground — it
+            has its own alpha, so nothing has to sit behind it. The copy column
+            ends at x=820; this starts at x=846. */}
         <img
           src={MARK_URI}
-          width={288}
-          height={288}
+          width={300}
+          height={300}
           alt=""
-          style={{
-            position: "absolute",
-            top: 171,
-            left: 856,
-            borderRadius: 48,
-            background: WHITE,
-          }}
+          style={{ position: "absolute", top: 165, left: 846 }}
         />
 
         <div
@@ -99,17 +90,9 @@ export default async function OpengraphImage({ params }: PageProps<"/[locale]">)
             padding: "72px 80px 56px",
           }}
         >
-          {/* Mark plus wordmark. The mark keeps its white tile here too — the
-              artwork has no alpha, so the tile is not a decision, it is what
-              the file already is. */}
+          {/* Mark plus wordmark, with nothing behind either. */}
           <div style={{ display: "flex", alignItems: "center" }}>
-            <img
-              src={MARK_URI}
-              width={72}
-              height={72}
-              alt=""
-              style={{ borderRadius: 14, background: WHITE }}
-            />
+            <img src={MARK_URI} width={72} height={72} alt="" />
             <div
               style={{
                 display: "flex",

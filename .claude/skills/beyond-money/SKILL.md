@@ -720,13 +720,24 @@ Unchanged from the template this app grew out of, and still exactly true.
   diagrams' text, connectors and outlines.
 - Neutrals are **untinted**. Concrete is a pure neutral (HSL 0, 0, 95) and a
   teal-tinted grey scale fights it.
-- **The mark is raster and has no alpha.** The dragon in `res/logos` is drawn
-  for a white ground, so every surface that shows it puts it on one:
-  `bg-logo-tile` + `ring-line` in `components/logo.tsx` (the treatment
-  `merchant-avatar.tsx` already documents), and a white rounded tile on the OG
-  card. It cannot be re-tinted per theme and cannot be stroke-animated — both
-  went with the vector signet it replaced. There is no `icon.svg`; do not add
-  an SVG entry to the manifest until someone draws the mark as paths.
+- **The header logo is a token, `--logo-mark`, not a `dark:` variant.** This
+  project declares **no `@custom-variant dark`**, so Tailwind's `dark:` still
+  keys off `prefers-color-scheme` while the app's own switch sets a `.dark`
+  class on `<html>`. A `dark:hidden` logo follows the operating system and
+  ignores the toggle. Theme anything through `:root` / `.dark` tokens, the way
+  every other themed value here already works. (`components/ui/input.tsx` and
+  `components/budget-editor.tsx` still use `dark:` — a latent bug, not a
+  pattern to copy.)
+- **Only the tile differs between the light and dark marks.** `res/logos` ships
+  `*-icon-*` (bare, transparent, one artwork — the two PNGs are byte-identical)
+  and `*-appicon-*` (that mark on a near-white or near-black rounded tile). The
+  header uses the appicon pair because it wants a tile; the OG card uses the
+  bare mark because the Supernova ground already is the colour. Do not ship two
+  files where the artwork is the same one.
+- **The app icon cannot be the maskable icon.** It is a rounded tile with
+  transparent corners; Android crops to the central 80% and would show the
+  wallpaper through them. `public/icon-maskable-512.png` is the bare mark on a
+  full-bleed white square instead.
 - **Two themes.** `:root` is light, `.dark` is dark, and `next-themes` puts the
   class on `<html>` — which is why `<html>` needs `suppressHydrationWarning`
   and why `color-scheme` is set alongside each (without it, a native

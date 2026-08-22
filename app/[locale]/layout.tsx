@@ -60,12 +60,14 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
      * back in the `<head>`. `app/favicon.ico` still rides its own convention.
      */
     icons: {
-      /* PNG rather than SVG: the dragon artwork in `res/logos` is raster, so
-         there is no vector to serve. `app/favicon.ico` still rides its own
-         file convention and carries the same mark. */
+      /* The SVG first — `res/logos` ships a real vector again, and a browser
+         that takes it gets one crisp file at every size. The PNG is the
+         fallback for the ones that do not. Both are the bare mark rather than
+         the tiled app icon: a browser draws a favicon on its own chrome, and a
+         tile there is a second rectangle inside the tab. */
       icon: [
+        { url: "/icon.svg", type: "image/svg+xml" },
         { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
-        { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
       ],
       apple: "/apple-icon.png",
     },

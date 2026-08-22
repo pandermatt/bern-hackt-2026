@@ -192,12 +192,8 @@ describe("install", () => {
   });
 
   it("precaches the icons the manifest names", () => {
+    expect(cache.entries.has("/icon.svg")).toBe(true);
     expect(cache.entries.has("/icon-192.png")).toBe(true);
-    // No `/icon.svg`: the dragon artwork is raster, so there is no vector to
-    // serve and the manifest names none. It matters that this list holds only
-    // paths that exist — `cache.addAll` rejects as a whole on a single 404,
-    // which would fail the install and take the offline page with it.
-    expect(cache.entries.has("/icon.svg")).toBe(false);
   });
 
   it("stores a rebuilt response, not the one it fetched", async () => {

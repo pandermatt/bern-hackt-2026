@@ -29,13 +29,13 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#FFCC00",
     /*
      * Chrome wants a 192 and a 512 PNG before it treats the app as
-     * installable; the maskable copy insets the mark into Android's safe zone,
-     * so its adaptive shape crops the white ground rather than the dragon.
-     * They come from `res/logos` — see the README.
+     * installable; the maskable copy insets the *bare* mark into Android's safe
+     * zone on a full-bleed white square. It cannot be the app icon itself —
+     * that is a rounded tile with transparent corners, and Android would crop
+     * the tile and show the wallpaper through them. See the README.
      *
-     * **No SVG entry.** There used to be one, rasterized into these PNGs, but
-     * the dragon artwork is raster-only: there is no vector source to serve.
-     * Add one back the day someone draws the mark as paths.
+     * The SVG is the bare mark; the PNGs are the tiled app icon, which is what
+     * a home screen should show.
      *
      * Every path here is a root path, and has to be: a manifest is fetched
      * without a locale and resolves its icons against `scope`. An entry
@@ -43,6 +43,7 @@ export default function manifest(): MetadataRoute.Manifest {
      * silent 404 here.
      */
     icons: [
+      { src: "/icon.svg", type: "image/svg+xml", sizes: "any" },
       { src: "/icon-192.png", type: "image/png", sizes: "192x192" },
       { src: "/icon-512.png", type: "image/png", sizes: "512x512" },
       {

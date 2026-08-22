@@ -122,9 +122,26 @@ Nothing else hardcodes the product name.
 
 ### Icons
 
-The mark is the **dragon** in `res/logos/`, supplied as a ready-made PNG set.
-Everything under `public/` is a copy of one of those files; there is nothing to
-rasterize.
+The mark is the **dragon** in `res/logos/`, supplied as a ready-made set with a
+light and a dark variant. Two families per theme:
+
+- **`*-icon-*`** — the bare mark, transparent. One artwork: the light and dark
+  PNGs are byte-identical and the SVGs differ only by rounding in a few fill
+  hexes. Used wherever the mark sits on something that is already the right
+  colour: the favicon, the OG card.
+- **`*-appicon-*`** — the same mark on a rounded tile, near-white for light and
+  near-black for dark. **This is the only genuine light/dark difference**, and
+  it is why the header logo is a themed token rather than one file.
+
+```bash
+cp res/logos/beyond-money-light-icon.svg          public/icon.svg
+cp res/logos/beyond-money-light-appicon-192x192.png public/logo-light.png
+cp res/logos/beyond-money-dark-appicon-192x192.png  public/logo-dark.png
+cp res/logos/beyond-money-light-appicon-192x192.png public/icon-192.png
+cp res/logos/beyond-money-light-appicon-512x512.png public/icon-512.png
+cp res/logos/beyond-money-light-appicon-180x180.png public/apple-icon.png
+cp res/logos/beyond-money-light-favicon.ico         app/favicon.ico
+```
 
 All of these are **root paths under `public/`**, and have to be. Next's metadata
 file convention emits an icon's `<link>` relative to the segment the file sits
@@ -133,28 +150,19 @@ in, so an icon under `app/[locale]/` is only ever served at `/de/…` — and
 layout declares them explicitly in `generateMetadata` instead. `app/favicon.ico`
 is the one that stays on a convention: it is already at the `app/` root.
 
-```bash
-cp res/logos/beyond-money-icon-192x192.png public/icon-192.png
-cp res/logos/beyond-money-icon-512x512.png public/icon-512.png
-cp res/logos/beyond-money-icon-180x180.png public/apple-icon.png
-cp res/logos/favicon.ico                    app/favicon.ico
-```
+`public/icon-maskable-512.png` is the one that is not a copy. Android applies
+its own adaptive shape and crops to roughly the central 80%, and the app icon
+is a rounded tile with **transparent corners** — cropping that would show the
+wallpaper through them. It is instead the *bare* mark at 360px, centred on a
+512 white square, so the crop eats white.
 
-`public/icon-maskable-512.png` is the one that is not a straight copy: Android
-applies its own adaptive shape and crops to roughly the central 80%, and the
-supplied icon runs nearly edge to edge. It is the 1024 master scaled to 400px,
-centred on a 512 white square — the crop then eats the white, not the dragon.
-
-**There is no `icon.svg`.** The artwork is raster-only, so there is no vector to
-serve and no SVG entry in the manifest or in `generateMetadata`. `public/sw.js`
-precaches `/icon-192.png` for the same reason — and note that `cache.addAll`
-rejects as a whole if any entry 404s, so a dead path in `PRECACHE` takes the
-service worker's install down with it.
-
-The artwork has **no alpha**: it is drawn for a white ground. That is why
-`components/logo.tsx` puts it on `bg-logo-tile` with a `ring-line`, the same
-treatment `components/merchant-avatar.tsx` documents for merchant marks, and
-why the OG card gives it a white rounded tile rather than letting it bleed.
+The header logo comes from `--logo-mark`, a CSS token pointing at
+`/logo-light.png` or `/logo-dark.png`. It is not a Tailwind `dark:` variant on
+purpose: **this project declares no `@custom-variant dark`**, so `dark:` still
+keys off `prefers-color-scheme` while the app's own switch sets a `.dark`
+class. Anything themed with `dark:` follows the operating system and ignores
+the toggle — worth knowing, because `components/ui/input.tsx` and
+`components/budget-editor.tsx` still do.
 
 ### Merchant logos
 

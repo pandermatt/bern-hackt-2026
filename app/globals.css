@@ -34,6 +34,18 @@
      keeps the tile from floating on the dark page. */
   --logo-tile: #ffffff;
 
+  /* The app mark, as a token, because it changes with the theme like any other
+     one. Two files, not two colours: the artwork ships as a light and a dark
+     app icon that differ only in the tile behind the dragon.
+
+     A token rather than Tailwind's `dark:` variant, and that is not a taste
+     call — this project has no `@custom-variant dark`, so `dark:` still keys
+     off `prefers-color-scheme` while the app's own switch sets a `.dark`
+     class. A `dark:hidden` mark would follow the operating system and ignore
+     the toggle. Going through `:root` / `.dark` is what every other themed
+     value here already does, and it fetches one file instead of two. */
+  --logo-mark: url("/logo-light.png");
+
   --line: #e5e5ea;
   --line-strong: #d1d1d6;
 
@@ -170,6 +182,8 @@
 
   /* Deliberately not re-derived: see the note in `:root`. */
   --logo-tile: #ffffff;
+
+  --logo-mark: url("/logo-dark.png");
 
   --line: #333333;
   /* Control borders need 3:1 against the surface to be perceivable; the light
