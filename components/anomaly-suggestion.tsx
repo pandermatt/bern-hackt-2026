@@ -1,3 +1,4 @@
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 
 /**
@@ -26,9 +27,15 @@ export function AnomalySuggestion({
     <section className="on-brand card border-brand bg-brand px-4 py-3.5 sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
         <div className="flex items-start gap-2.5">
-          <span aria-hidden="true" className="text-[16px] leading-6">
-            ✨
-          </span>
+          {/* Decorative: the heading beside it carries the meaning, and it is
+              aria-hidden, so the icon is not load-bearing for anyone. White on
+              Supernova is only 1.5:1, so the stroke is thickened a little to
+              hold its shape against the yellow. */}
+          <Sparkles
+            aria-hidden="true"
+            strokeWidth={2.25}
+            className="mt-0.5 size-[18px] shrink-0 text-white"
+          />
           <div>
             <p className="text-[14px] font-semibold text-text">
               {running
