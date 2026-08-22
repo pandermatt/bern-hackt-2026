@@ -3,10 +3,11 @@
 import { Loader2, PiggyBank } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { createElement, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { allocateSurplus } from "@/app/actions/savings";
+import { goalIcon } from "@/lib/goal-icon";
 import { formatMoney, type SavingsPot } from "@/lib/insights";
 import { monthLabel } from "@/lib/month-label";
 
@@ -165,11 +166,11 @@ export function SavingsAllocator({
       <ul className="mt-3 space-y-2">
         {pots.map((pot) => (
           <li key={pot.id} className="flex items-center gap-3">
-            <span
-              className="size-2.5 shrink-0 rounded-[2px]"
-              style={{ background: `var(--chart-${pot.slot})` }}
-              aria-hidden
-            />
+            {createElement(goalIcon(pot.name, pot.icon), {
+              className: "size-4 shrink-0",
+              style: { color: `var(--chart-${pot.slot})` },
+              "aria-hidden": true,
+            })}
             <span className="min-w-0 flex-1 truncate text-[13.5px] text-text">
               {pot.name}
             </span>
