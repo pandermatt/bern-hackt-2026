@@ -57,7 +57,6 @@ export default function Loading() {
         <div className="card mt-4 p-5">
           <Bar className="h-[15px] w-[130px]" />
           <Bar className="mt-4 h-[320px] w-full" />
-          <Bar className="mt-3 h-[11px] w-[300px]" />
         </div>
 
         {/* The whole year: 320px of donut. */}

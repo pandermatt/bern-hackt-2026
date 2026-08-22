@@ -154,8 +154,10 @@ export function CategoryPie({ stack }: { stack: CategoryStack }) {
         </div>
       </div>
 
-      <table className="sr-only">
-        <caption>Share of spending by category, whole range</caption>
+      <table
+        className="sr-only"
+        aria-label="Share of spending by category, whole range"
+      >
         <thead>
           <tr>
             <th scope="col">Category</th>

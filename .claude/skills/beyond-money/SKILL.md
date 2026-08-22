@@ -148,16 +148,17 @@ Unchanged from the template this app grew out of, and still exactly true.
   theme changes; it returns `null` until mounted, so the first frame is already
   in the right palette. Don't duplicate the palette into TypeScript — that is
   what breaks "restyle by editing tokens".
-- **The budget radar's rim is framed on the budgets, not on the spending.**
-  The rings are francs on one shared scale, and the rim sits at `HEADROOM` ×
-  the largest limit on the dial. Fitting it to the largest *amount spent* was
-  tried twice and fails the same way both times: one runaway category — CHF
-  6'800 against limits averaging CHF 770 — pushes every dashed ring into a
-  knot at the hub, which is the one thing the chart exists to show. Anything
-  past the rim clamps to it, the max tick grows a `+`, and the real figure is
-  printed under the category name, in the tooltip, and in the `sr-only` table.
-  A percent-of-budget scale fixes the framing but was rejected: the axis has
-  to read in francs.
+- **The budget radar's rim is refitted per month, but capped.** The rings are
+  francs on one shared scale, and the rim follows that month's own peak so a
+  quiet month draws a dial it fills — bounded at `OUTLIER_CAP` × the largest
+  limit. Both halves are load-bearing: a fixed rim leaves most months drawing
+  a tiny shape in a big empty dial, and an uncapped one lets a single runaway
+  category (CHF 8'200 against limits averaging CHF 770) push every dashed ring
+  into a knot at the hub, which is the one thing the chart exists to show.
+  Past the rim the spending clamps, the outer tick grows a `+`, and the real
+  figure is printed under the category name, in the tooltip, and in the
+  `sr-only` table. A percent-of-budget scale solves the framing outright but
+  was rejected: the axis has to read in francs.
 - **Every category name carries its share of budget underneath it.** A franc
   scale cannot separate "half the budget" from "twice it" for a small category
   near the hub, so the shape carries magnitude and the printed percentage
@@ -172,6 +173,11 @@ Unchanged from the template this app grew out of, and still exactly true.
   the category story. A category breakdown was tried in the trend chart and
   drowned the in-versus-out reading in nine bands; if you want detail there,
   add a second chart rather than another dimension to this one.
+- **The `sr-only` tables carry `aria-label`, not `<caption>`.** A caption box
+  belongs to the table *wrapper*, which is not reliably clipped along with the
+  `sr-only` box — Safari paints it as a stray line of text under the chart.
+  `aria-label` gives a screen reader the identical name and renders nothing
+  anywhere. Don't reintroduce `<caption>` on a visually hidden table.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.

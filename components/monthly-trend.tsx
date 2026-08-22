@@ -163,8 +163,7 @@ export function MonthlyTrend({ series }: { series: MonthPoint[] }) {
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the
           canvas fails. Also the relief a sub-3:1 fill requires. */}
-      <table className="sr-only">
-        <caption>Money in and out, by month</caption>
+      <table className="sr-only" aria-label="Money in and out, by month">
         <thead>
           <tr>
             <th scope="col">Month</th>
