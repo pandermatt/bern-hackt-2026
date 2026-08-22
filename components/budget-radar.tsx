@@ -21,36 +21,50 @@ import { formatMoney, type BudgetRow } from "@/lib/insights";
  * category is over budget — which is the whole reason this is a radar rather
  * than a row of bars.
  *
- * **The scale is percent of budget, not francs.** Rent and Pets differ by two
- * orders of magnitude, so a shared franc axis flattens every small category
- * into the centre, and a per-spoke franc axis makes the rings meaningless.
- * Dividing by each category's own limit fixes both: every spoke now means the
- * same thing at the same radius, the budget is the 100% ring on every one of
- * them, and the rings can carry real tick labels again.
+ * **The rings are francs, on one scale shared by every spoke.** That is what
+ * makes the two shapes readable as shapes: a spoke sitting far out is a large
+ * amount of money wherever it is on the dial. The cost is that a small
+ * category's ring sits close to the hub, where "half the budget" and "twice
+ * it" are a few pixels apart — which is why the percentage is printed under
+ * every category name. Read the shape for scale and the number for the
+ * verdict; neither alone is the whole chart.
  */
 
 const HEIGHT = 440;
-
-/** The ring the budget sits on. Everything is measured against it. */
-const BUDGET = 100;
-
-/**
- * The rim, fixed at twice the budget.
- *
- * Letting it follow the data was the obvious first try and it does not work:
- * one 600% category squashes the 100% ring — the only ring anyone reads — into
- * a blob at the centre, and every other spoke with it. A fixed frame costs the
- * ability to see *how far* past the rim an outlier went, which the printed
- * percentage under the category name gives back exactly, and buys two things
- * the auto-scale cannot: the rings never move, so a month can be compared to
- * the one before it, and a vertex on the rim always means the same thing.
- */
-const RIM = 2 * BUDGET;
 
 /** Spent as a share of the limit — or of the suggestion, when none is set. */
 function share(row: BudgetRow): number {
   const reference = row.limitMinor ?? row.suggestedMinor;
   return reference > 0 ? (row.usedMinor / reference) * 100 : 0;
+}
+
+/**
+ * How far past the biggest budget the rim sits.
+ *
+ * The dial is framed on the **budgets**, not on the spending, and this is the
+ * whole reason: fit the rim to the largest amount spent and a single runaway
+ * month — one CHF 6'800 category against limits averaging CHF 770 — pushes
+ * every dashed ring into a knot at the hub, which is the one thing the chart
+ * exists to show. Framing on the budgets keeps the outline using the dial;
+ * anything past the rim clamps to it, and its real figure is printed under
+ * the category name, in the tooltip, and in the table.
+ */
+const HEADROOM = 2.5;
+
+/**
+ * A rim at `HEADROOM` × the largest budget, on a round franc step.
+ *
+ * `1 / 2 / 2.5 / 5` per decade is the usual set, picked so the dial lands on
+ * four to six rings: fewer and the shapes float in empty space, more and the
+ * rings start reading as noise behind them.
+ */
+function scale(topBudgetMinor: number): { max: number; splitNumber: number } {
+  const target = Math.max(10000, topBudgetMinor * HEADROOM);
+  const magnitude = 10 ** Math.floor(Math.log10(target / 4));
+  const steps = [1, 2, 2.5, 5, 10].map((m) => m * magnitude);
+  const step = steps.find((s) => target / s <= 6) ?? steps[steps.length - 1];
+  const splitNumber = Math.ceil(target / step);
+  return { max: splitNumber * step, splitNumber };
 }
 
 /**
@@ -63,14 +77,17 @@ function share(row: BudgetRow): number {
 function verdict(row: BudgetRow, pct: number): string {
   if (row.limitMinor === null) return "idle";
   if (pct === 0) return "idle";
-  if (pct > BUDGET) return "over";
+  if (pct > 100) return "over";
   if (pct >= 90) return "close";
   return "under";
 }
 
 function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
   const spent = rows.map(share);
-  const clipped = spent.some((pct) => pct > RIM);
+  const used = rows.map((row) => row.usedMinor);
+  const budget = rows.map((row) => row.limitMinor ?? row.suggestedMinor);
+  const { max, splitNumber } = scale(Math.max(0, ...budget));
+  const clipped = used.some((amount) => amount > max);
 
   // Looked up by name from the axis-name formatter, which is handed the
   // indicator rather than the row.
@@ -82,7 +99,7 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
     // Rich text is `{style|text}`, so a brace in a category name would parse
     // as markup. None of the taxonomy has one; this keeps it that way.
     name: row.category.replace(/[{}]/g, ""),
-    max: RIM,
+    max,
     // Tick labels on the top spoke only. Repeating 0/50/100/150/200 around
     // all eight is the same five numbers eight times over the drawing.
     // Per-indicator options win over the radar-level ones (they are merged
@@ -110,7 +127,7 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
           const colour =
             limit === null
               ? tokens.textMuted
-              : pct > BUDGET
+              : pct > 100
                 ? tokens.danger
                 : tokens.text;
           return `<span style="opacity:.8">${row.category}</span><span style="float:right;padding-left:18px;color:${colour}">${right}</span>`;
@@ -137,7 +154,7 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
       center: ["50%", "48%"],
       // Room for a two-line axis name at every compass point.
       radius: "62%",
-      splitNumber: RIM / 50,
+      splitNumber,
       axisName: {
         // Category on top, its share of budget underneath — the reading most
         // people came for, without having to measure a radius by eye.
@@ -165,10 +182,14 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
         showMaxLabel: true,
         color: tokens.textMuted,
         fontSize: 11,
-        // The rim absorbs everything above it, so its label has to say so
-        // rather than claim the shape stops there.
+        // Francs, not rappen, and grouped the Swiss way. The card's subhead
+        // names the currency, as it does on every other chart in the app. The
+        // rim absorbs anything above it, so its label has to say so rather
+        // than claim the shape stops there.
         formatter: (value: number) =>
-          value >= RIM && clipped ? `${value}%+` : `${value}%`,
+          `${Math.round(value / 100).toLocaleString("de-CH")}${
+            value >= max && clipped ? "+" : ""
+          }`,
         // The rings run under these numbers; a plate of page colour keeps them
         // readable without moving them off the spoke.
         backgroundColor: tokens.surface,
@@ -188,9 +209,9 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
         data: [
           {
             name: "Spent this month",
-            // Clamped to the rim; the true figure is under the category name,
+            // Clamped to the rim; the real figure is under the category name,
             // in the tooltip, and in the table.
-            value: spent.map((pct) => Math.min(pct, RIM)),
+            value: used.map((amount) => Math.min(amount, max)),
             // Brand lime as a *series* colour, not as `--flow-in`. Nothing on
             // this chart encodes direction — both shapes are spending — so
             // reusing the money-in hue here claims no meaning it shouldn't.
@@ -200,10 +221,8 @@ function buildOption(rows: BudgetRow[], tokens: ChartTokens): EChartsOption {
           },
           {
             name: "Your budget",
-            // A threshold, not a quantity: outline only, no `areaStyle`. And
-            // it is the same ring on every spoke, because that is what
-            // dividing by the limit means.
-            value: rows.map(() => BUDGET),
+            // A threshold, not a quantity: outline only, no `areaStyle`.
+            value: budget,
             lineStyle: {
               width: 2.5,
               color: tokens.accent,
@@ -231,7 +250,7 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
       <EChart
         option={option}
         height={HEIGHT}
-        label="Spending against budget for each category this month, as a percentage of the limit set for it. The dashed ring is the budget; the scale stops at twice it. The table below carries the same figures."
+        label="Spending against budget for each category this month, in Swiss francs, with the share of each limit printed beside its category. The table below carries the same figures."
       />
 
       {/* The same numbers, for screen readers, for JS-off, and for anyone the

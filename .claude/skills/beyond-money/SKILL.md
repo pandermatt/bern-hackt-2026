@@ -165,16 +165,20 @@ Unchanged from the template this app grew out of, and still exactly true.
   theme changes; it returns `null` until mounted, so the first frame is already
   in the right palette. Don't duplicate the palette into TypeScript — that is
   what breaks "restyle by editing tokens".
-- **The budget radar plots percent of budget, on a rim fixed at 200%.** Rent
-  and Pets differ by two orders of magnitude, so francs cannot share an axis;
-  dividing each spoke by its own limit fixes that and puts the budget on the
-  100% ring all the way round, which is the only ring anyone reads. The rim is
-  *fixed*, not fitted to the data: a 600% category on a fitted scale squashes
-  that ring — and every other spoke — into a blob at the hub. Anything past
-  200% clamps to the rim, and the exact figure is printed under the category
-  name, in the tooltip, and in the `sr-only` table. Don't make the rim follow
-  the data; it was tried, and it is also what makes one month comparable to
-  the next.
+- **The budget radar's rim is framed on the budgets, not on the spending.**
+  The rings are francs on one shared scale, and the rim sits at `HEADROOM` ×
+  the largest limit on the dial. Fitting it to the largest *amount spent* was
+  tried twice and fails the same way both times: one runaway category — CHF
+  6'800 against limits averaging CHF 770 — pushes every dashed ring into a
+  knot at the hub, which is the one thing the chart exists to show. Anything
+  past the rim clamps to it, the max tick grows a `+`, and the real figure is
+  printed under the category name, in the tooltip, and in the `sr-only` table.
+  A percent-of-budget scale fixes the framing but was rejected: the axis has
+  to read in francs.
+- **Every category name carries its share of budget underneath it.** A franc
+  scale cannot separate "half the budget" from "twice it" for a small category
+  near the hub, so the shape carries magnitude and the printed percentage
+  carries the verdict. Neither alone is the chart; don't drop one for tidiness.
 - **The percentage under each axis name is `--positive`/`--danger`, not the
   chart fills.** They are 13px glyphs. `--chart-2` (#a5c400) is 2:1 on white
   and unreadable as text; the fill it labels is fine because a 2.5px stroke

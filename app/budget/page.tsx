@@ -30,9 +30,6 @@ export default async function BudgetPage({
   const totalUsed = rows.reduce((sum, row) => sum + row.usedMinor, 0);
   const totalLimit = rows.reduce((sum, row) => sum + (row.limitMinor ?? 0), 0);
   const budgeted = rows.filter((row) => row.limitMinor !== null).length;
-  const over = rows.filter(
-    (row) => row.limitMinor !== null && row.usedMinor > row.limitMinor,
-  );
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -85,12 +82,6 @@ export default async function BudgetPage({
             <div className="mt-2">
               <BudgetRadar rows={rows} />
             </div>
-
-            <p className="mt-1 font-mono text-[11.5px] text-text-subtle">
-              {over.length > 0
-                ? `Over budget in ${over.map((row) => row.category).join(", ")}.`
-                : "Every spoke is a share of that category's own budget, so the dashed ring is 100% all the way round."}
-            </p>
           </section>
 
           {/* Keyed on the month: the editor holds the typed-but-unsaved
