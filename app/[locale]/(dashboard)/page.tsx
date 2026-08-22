@@ -84,13 +84,19 @@ export default async function Home({ params, searchParams }: PageProps<"/[locale
           />
 
           {/* Sits directly above the ledger, because that is where the findings
-              it is offering would show up. Only until the first scan completes —
-              after that, no badges is a genuine answer rather than a gap. */}
-          {!dashboard.anomalyScan.hasCompletedScan &&
+              it is offering would show up. Until the first scan completes —
+              after that, no badges is a genuine answer rather than a gap — and
+              again once the statements have been re-imported underneath the
+              last scan, which leaves findings that describe transactions that
+              no longer exist. The anomalies page says so in words; without this
+              the dashboard just quietly stopped showing badges. */}
+          {(!dashboard.anomalyScan.hasCompletedScan ||
+            dashboard.anomalyScan.stale) &&
             dashboard.totalCount > 0 && (
               <div className="pt-6">
                 <AnomalySuggestion
                   running={dashboard.anomalyScan.running}
+                  stale={dashboard.anomalyScan.stale}
                   transactionCount={dashboard.totalCount}
                 />
               </div>

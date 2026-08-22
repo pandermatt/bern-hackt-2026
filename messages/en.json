@@ -308,7 +308,10 @@
     "doneBody": "Bringing in the findings — they will show up against the transactions below in a moment.",
     "title": "Spot the odd ones out",
     "body": "Nothing has been analysed yet. Analyse with AI to flag duplicate charges, unusual amounts and missed recurring payments across your {count} transactions.",
+    "staleTitle": "These findings are out of date",
+    "staleBody": "Your statements have been re-imported since the last analysis, so its findings no longer line up with your transactions — which is why nothing is flagged against the transactions below. Run it again.",
     "cta": "Analyse with AI",
+    "staleCta": "Analyse again",
     "retry": "Try again"
   },
   "AnomalyScan": {

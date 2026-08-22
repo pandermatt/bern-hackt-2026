@@ -246,32 +246,58 @@ export async function startAnomalyScan(): Promise<
 }
 
 /**
- * Whether this account has ever completed a scan, and whether one is running
- * right now.
+ * Whether this account has ever completed a scan, whether one is running right
+ * now, and whether the last one's findings still describe the transactions.
  *
- * The dashboard needs this to tell two very different states apart: "no
- * findings because nobody has scanned yet" — worth prompting about — and "no
- * findings because a scan ran and the account is clean", which is a result, not
- * a gap. Counting rows in `anomalies` alone cannot distinguish them, and would
- * nag people whose books are simply in order.
+ * The dashboard needs this to tell three very different states apart: "no
+ * findings because nobody has scanned yet" — worth prompting about — "no
+ * findings because a scan ran and the account is clean", which is a result and
+ * not a gap, and a completed scan whose findings all point at transactions that
+ * no longer exist. Counting rows in `anomalies` alone cannot distinguish any of
+ * them, and would nag people whose books are simply in order.
+ *
+ * Staleness is two existence probes rather than a count: whether the account
+ * has any findings at all, and whether any of them still lands on a live
+ * transaction. `anomalies.transactionId` is deliberately not a foreign key — a
+ * scan is a snapshot, and a re-import reissues transaction ids — so the rows
+ * outlive what they describe and the intersection is the only honest test. It
+ * is the same question `getAnomalyOverview` answers from the rows it has
+ * already loaded; here there are no rows to load, so it asks SQLite.
  */
 export async function getAnomalyScanState(): Promise<{
   hasCompletedScan: boolean;
   running: boolean;
+  stale: boolean;
 }> {
   const user = await getCurrentUser();
-  if (!user) return { hasCompletedScan: false, running: false };
+  if (!user) return { hasCompletedScan: false, running: false, stale: false };
 
-  const runs = await db
-    .select({ status: anomalyRuns.status })
-    .from(anomalyRuns)
-    .where(eq(anomalyRuns.userId, user.id))
-    .orderBy(desc(anomalyRuns.id))
-    .limit(20);
+  const [runs, anyFinding, anyLiveFinding] = await Promise.all([
+    db
+      .select({ status: anomalyRuns.status })
+      .from(anomalyRuns)
+      .where(eq(anomalyRuns.userId, user.id))
+      .orderBy(desc(anomalyRuns.id))
+      .limit(20),
+    db
+      .select({ id: anomalies.id })
+      .from(anomalies)
+      .where(eq(anomalies.userId, user.id))
+      .limit(1),
+    db
+      .select({ id: anomalies.id })
+      .from(anomalies)
+      .innerJoin(transactions, eq(anomalies.transactionId, transactions.id))
+      .where(
+        and(eq(anomalies.userId, user.id), eq(transactions.userId, user.id)),
+      )
+      .limit(1),
+  ]);
 
   return {
     hasCompletedScan: runs.some((r) => r.status === "done"),
     running: runs.some((r) => r.status === "running"),
+    stale: anyFinding.length > 0 && anyLiveFinding.length === 0,
   };
 }
 
@@ -507,6 +533,9 @@ export async function getAnomalyOverview(): Promise<AnomalyOverview> {
     // so it reads as a feed of what is new.
     context: groups.filter((g) => attentionFor(g.ruleId) === "context").sort(byLatest),
     ...scan,
+    // Deliberately overrides the `stale` the scan state carries: that one asks
+    // SQLite the same question, this one answers it from the very rows the page
+    // is about to render, so the flag and the empty list can never disagree.
     stale: rows.length > 0 && groups.length === 0,
   };
 }
