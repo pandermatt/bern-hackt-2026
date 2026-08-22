@@ -1080,6 +1080,38 @@ export function defaultBudgetMonth(
  * `Date` — see the note on `formatDay` — and "now" is the caller's business
  * anyway.
  */
+/**
+ * Every franc the account has ever had left over, up to and including `month`.
+ *
+ * The pool the savings pots are earmarks against — which is the same number as
+ * the running account balance, and that is not a coincidence: money left over
+ * and not spent *is* the balance. `MonthPoint.balance` already carries it, so
+ * this only picks the right point.
+ *
+ * Savings are deliberately measured against this rather than against one
+ * month's own leftover. A pot is not spent out of the month it was created in;
+ * it is a claim on money the account is holding, and that money was earned
+ * across the whole history. Pinning each pot to a single month made the two
+ * drift apart the moment a statement changed — the month's leftover moved and
+ * the allocation did not — and produced deficits that were arithmetic
+ * artefacts rather than anything the account holder had done.
+ *
+ * **Unfloored, and summed from raw nets.** A month that spent more than it
+ * earned genuinely leaves less to save, so it pulls the pool down. Flooring
+ * each month at zero would let a run of overspending vanish and quietly
+ * inflate what there is to allocate.
+ */
+export function pooledLeftover(series: MonthPoint[], month: string): number {
+  let pooled = 0;
+  for (const point of series) {
+    // Ascending, and `balance` is already a running sum — so the last point at
+    // or before the month *is* the total, not something to add up again.
+    if (point.month > month) break;
+    pooled = point.balance;
+  }
+  return pooled;
+}
+
 export function defaultSavingsMonth(
   months: string[],
   todayMonth: string,

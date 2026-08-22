@@ -37,7 +37,13 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
   const savedMinor = pots.reduce((sum, pot) => sum + pot.savedMinor, 0);
   const targetMinor = pots.reduce((sum, pot) => sum + pot.targetMinor, 0);
   const surplus = surplusMinor ?? 0;
-  const canAllocate = month !== null && monthEnded && surplus > 0;
+  // What this month may claim: everything still free in the pool, plus
+  // whatever it has already put away — those francs are its to revise. The
+  // gate is the pool rather than the month's own leftover, because a pot is a
+  // claim on money the account is holding, not on one month's pay slip.
+  const monthAllocated = pots.reduce((sum, pot) => sum + pot.monthMinor, 0);
+  const ceilingMinor = freeMinor + monthAllocated;
+  const canAllocate = month !== null && monthEnded && ceilingMinor > 0;
 
   return (
     /* The page's one section idiom — big heading on the page's own ground over
@@ -84,7 +90,7 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
         <SavingsAllocator
           key={`${month}:${pots.map((pot) => `${pot.id}:${pot.monthMinor}`).join(",")}`}
           month={month}
-          surplusMinor={surplus}
+          surplusMinor={ceilingMinor}
           pots={pots}
         />
       ) : (
@@ -92,16 +98,17 @@ export function SavingsGoals({ overview }: { overview: SavingsOverview }) {
            sentences interpolate; the two are null together by construction. */
         monthName !== null && (
           <p className="border-t border-surface px-4 py-3 text-[12.5px] text-text-muted sm:px-5">
+            {/* The month's own figure still leads, because that is the thing
+                the reader just lived through. What follows it is about the
+                pool, which is what actually decides whether anything can be
+                put away. */}
             {!monthEnded
               ? t("monthRunning", { month: monthName })
-              : surplus < 0
-                ? t("monthOverspent", { month: monthName, amount: formatMoney(surplus) })
-                : surplus === 0
-                  ? t("monthSpentAll", { month: monthName })
-                  : t("monthLeftOver", {
-                      month: monthName,
-                      amount: formatMoney(surplus),
-                    })}
+              : freeMinor < 0
+                ? t("poolOverdrawn", { amount: formatMoney(freeMinor) })
+                : surplus < 0
+                  ? t("monthOverspent", { month: monthName, amount: formatMoney(surplus) })
+                  : t("poolEmpty", { month: monthName })}
           </p>
         )
       )}

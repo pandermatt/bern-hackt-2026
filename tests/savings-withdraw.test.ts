@@ -125,10 +125,13 @@ describe("withdrawSavings", () => {
     await withdrawSavings(LATE, goal.id, "900.00");
 
     const overview = (await getSavingsOverview(LATE))!;
-    expect(overview.surplusMinor).toBe(10000); // June left CHF 100
-    expect(overview.allocatedMinor).toBe(0);
+    expect(overview.surplusMinor).toBe(10000); // June alone left CHF 100
+    // The pool is every month up to June: March's CHF 4'000 and June's CHF 100.
+    expect(overview.pooledMinor).toBe(410000);
+    // To date, not this month's — March's allocation still spends the pool.
+    expect(overview.allocatedMinor).toBe(400000);
     expect(overview.withdrawnMinor).toBe(90000);
-    // CHF 100 the month left, plus CHF 900 taken back out.
+    // 4'100 pooled, 4'000 in the pot, 900 taken back out.
     expect(overview.freeMinor).toBe(100000);
     expect(overview.pots[0].savedMinor).toBe(310000);
     expect(overview.pots[0].monthWithdrawnMinor).toBe(90000);
@@ -155,6 +158,53 @@ describe("withdrawSavings", () => {
     expect(
       (await allocateSurplus(LATE, [{ goalId: goal.id, amount: "1000.01" }])).ok,
     ).toBe(false);
+  });
+});
+
+describe("the pool", () => {
+  it("lets a pot outlive the month it was filled from", async () => {
+    // June left CHF 100 of its own, but March left CHF 4'000 and nothing has
+    // claimed it. The old per-month rule rejected this outright.
+    expect(
+      await allocateSurplus(LATE, [{ goalId: goal.id, amount: "3000.00" }]),
+    ).toEqual({ ok: true });
+
+    const overview = (await getSavingsOverview(LATE))!;
+    expect(overview.pooledMinor).toBe(410000);
+    expect(overview.freeMinor).toBe(110000);
+    // The month's own leftover is untouched and still says CHF 100.
+    expect(overview.surplusMinor).toBe(10000);
+  });
+
+  it("stops at what the account has actually had left over", async () => {
+    expect(
+      (await allocateSurplus(LATE, [{ goalId: goal.id, amount: "4100.01" }])).ok,
+    ).toBe(false);
+    expect(
+      await allocateSurplus(LATE, [{ goalId: goal.id, amount: "4100.00" }]),
+    ).toEqual({ ok: true });
+  });
+
+  it("counts another month's allocation against the same pool", async () => {
+    await allocateSurplus(EARLY, [{ goalId: goal.id, amount: "4000.00" }]);
+    // Only CHF 100 of the pool is left, so June cannot claim more than that.
+    expect(
+      (await allocateSurplus(LATE, [{ goalId: goal.id, amount: "100.01" }])).ok,
+    ).toBe(false);
+  });
+
+  it("reads the pool as of the month being viewed", async () => {
+    // Standing in March, June's CHF 100 has not happened yet.
+    expect((await getSavingsOverview(EARLY))!.pooledMinor).toBe(400000);
+    expect((await getSavingsOverview(LATE))!.pooledMinor).toBe(410000);
+  });
+
+  it("does not count a later month's allocation against an earlier view", async () => {
+    await allocateSurplus(LATE, [{ goalId: goal.id, amount: "100.00" }]);
+    const early = (await getSavingsOverview(EARLY))!;
+    expect(early.allocatedMinor).toBe(0);
+    expect(early.pots[0].savedMinor).toBe(0);
+    expect(early.freeMinor).toBe(400000);
   });
 });
 
