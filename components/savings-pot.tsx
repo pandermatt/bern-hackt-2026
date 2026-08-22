@@ -88,7 +88,7 @@ export function SavingsPot({ pot }: { pot: Pot }) {
     `${ICON_CENTRE_Y - (icon.height * iconScale) / 2}) scale(${iconScale})`;
 
   return (
-    <li className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
+    <div className="relative flex flex-col items-center rounded-lg border border-line bg-surface px-3 pt-3 pb-4 text-center">
       {/* Always visible rather than revealed on hover: a hover affordance is
           not reachable on a touch screen. Retarget on the left, delete on the
           right — the reversible action and the irreversible one as far apart
@@ -271,7 +271,7 @@ export function SavingsPot({ pot }: { pot: Pot }) {
           style={{ width: `${Math.max(fill * 100, fill > 0 ? 3 : 0)}%`, background: colour }}
         />
       </div>
-    </li>
+    </div>
   );
 }
 
