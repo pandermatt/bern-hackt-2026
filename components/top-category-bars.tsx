@@ -144,18 +144,24 @@ function escapeHtml(value: string): string {
  * something the build's class scan is guaranteed to keep. The CSS variables
  * resolve normally — the tooltip lives inside the themed document.
  *
- * Merchants without a mark get the monogram fallback; the folded "Other
- * merchants" bucket gets no tile at all, because it is not a merchant.
+ * The monogram is the tile and the mark is laid over it, exactly as
+ * `MerchantAvatar` does it and for the same reason: an icon that 404s — which a
+ * guessed domain can — leaves the initials underneath standing in for it.
+ * `data-merchant-mark` is what puts these images under the same window-level
+ * listener the rest of the app's marks use, which is the whole reason this copy
+ * of the tile needs no error handling of its own. The folded "Other merchants"
+ * bucket gets no tile at all, because it is not a merchant.
  */
 function merchantTitleHtml(rawName: string, displayName: string): string {
   const tile =
     "width:20px;height:20px;border-radius:4px;flex:none;border:1px solid var(--line);";
+  const icon = merchantDomain(rawName)
+    ? `<img src="/api/merchant-icon/${merchantSlug(rawName)}" alt="" data-merchant-mark="" width="20" height="20" style="position:absolute;inset:0;width:100%;height:100%;border-radius:3px;background:var(--logo-tile);object-fit:contain;padding:2px" />`
+    : "";
   const mark =
     rawName === FOLDED_MERCHANTS
       ? ""
-      : merchantDomain(rawName)
-        ? `<img src="/api/merchant-icon/${merchantSlug(rawName)}" alt="" width="20" height="20" style="${tile}background:var(--logo-tile);object-fit:contain;padding:2px" />`
-        : `<span style="${tile}display:inline-flex;align-items:center;justify-content:center;background:var(--surface-muted);font-size:9px;font-weight:600;color:var(--text-muted)">${initials(rawName)}</span>`;
+      : `<span style="${tile}position:relative;display:inline-flex;align-items:center;justify-content:center;background:var(--surface-muted);font-size:9px;font-weight:600;color:var(--text-muted)">${initials(rawName)}${icon}</span>`;
   return `<div style="display:flex;align-items:center;gap:6px">${mark}<span>${escapeHtml(displayName)}</span></div>`;
 }
 

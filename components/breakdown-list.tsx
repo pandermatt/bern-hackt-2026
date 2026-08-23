@@ -107,8 +107,15 @@ export function BreakdownList({
                       — and of the two figures the count is the one nothing
                       else on the row says: the bar already draws the share.
                       The separator goes with it; a "·" with one thing left to
-                      separate is just a mark. */}
-                  <span className="relative min-w-[3ch] shrink-0 text-right font-mono text-[11.5px] tabular-nums text-text-subtle sm:w-[8.5ch]">
+                      separate is just a mark.
+
+                      A *minimum* width rather than a fixed one, and never
+                      wrapping: at `w-[8.5ch]` anything from "10.0% · 20" up
+                      broke across two lines inside a 36px row, which is most
+                      of a leader board's top rows. The minimum is what keeps
+                      the amounts beside it in a column; the rare longer tail
+                      now pushes instead of folding. */}
+                  <span className="relative min-w-[3ch] shrink-0 text-right font-mono text-[11.5px] tabular-nums whitespace-nowrap text-text-subtle sm:min-w-[11ch]">
                     <span className="hidden sm:inline">
                       {slice.share.toFixed(1)}% ·{" "}
                     </span>

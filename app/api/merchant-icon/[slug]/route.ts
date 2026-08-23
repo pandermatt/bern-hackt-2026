@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { domainForSlug } from "@/lib/merchant-brands";
+import { domainsForSlug } from "@/lib/merchant-brands";
 
 // A dynamic segment is never prerendered anyway; declaring it keeps the intent
 // next to the handler, the same way app/api/health/route.ts does.
@@ -66,8 +66,36 @@ const CONTENT_TYPES: Record<string, string> = {
  */
 const globalForIcons = globalThis as unknown as {
   __merchantIconFetches?: Map<string, Promise<CachedIcon | null>>;
+  __merchantIconGuessMisses?: Set<string>;
 };
 const inFlight = (globalForIcons.__merchantIconFetches ??= new Map());
+
+/**
+ * Misses for a *guessed* domain, remembered in memory rather than on disk.
+ *
+ * Two reasons, and both are about the guess rather than the miss. A guessed
+ * slug is not from a fixed list — an outside caller can invent as many as it
+ * likes, and each one recorded on disk is an inode this route hands out to
+ * anybody who asks. And a guess is about a domain that may simply not be
+ * registered yet: `lib/merchant-brands.ts` has no entry to correct, and the
+ * disk cache has no expiry, so "forever" would be literal for a merchant whose
+ * site appears next month. Restarting the process is the retry.
+ *
+ * The cap is what makes it bounded; `Map`/`Set` iteration is insertion-ordered,
+ * so dropping the first key evicts the oldest.
+ */
+const guessMisses = (globalForIcons.__merchantIconGuessMisses ??= new Set());
+const MAX_GUESS_MISSES = 500;
+
+function rememberGuessMiss(slug: string) {
+  if (guessMisses.size >= MAX_GUESS_MISSES) {
+    for (const oldest of guessMisses) {
+      guessMisses.delete(oldest);
+      break;
+    }
+  }
+  guessMisses.add(slug);
+}
 
 type CachedIcon = { body: Uint8Array; ext: string };
 
@@ -99,7 +127,8 @@ async function writeAtomic(name: string, body: Uint8Array | string) {
 
 async function fetchAndCache(
   slug: string,
-  domain: string,
+  domains: string[],
+  guessed: boolean,
 ): Promise<CachedIcon | null> {
   /*
    * Whether every upstream gave us a real answer. A 404 is a fact about the
@@ -110,37 +139,47 @@ async function fetchAndCache(
    */
   let answered = true;
 
-  for (const url of UPSTREAMS) {
-    try {
-      const response = await fetch(url(domain), {
-        // A slow icon service must never hold up a ledger row.
-        signal: AbortSignal.timeout(5_000),
-      });
+  /*
+   * Candidates outside, upstreams inside: a guessed merchant offers `.com` and
+   * `.ch` (see `guessDomains`), and the first *icon* wins rather than the first
+   * domain that answers. Asking both services about `aliexpress.com` before
+   * touching `aliexpress.ch` is what keeps a mapped merchant — one candidate —
+   * behaving exactly as it did.
+   */
+  for (const domain of domains) {
+    for (const url of UPSTREAMS) {
+      try {
+        const response = await fetch(url(domain), {
+          // A slow icon service must never hold up a ledger row.
+          signal: AbortSignal.timeout(5_000),
+        });
 
-      /*
-       * A verdict on the domain, or on this moment? 404 is the first — the
-       * service looked and has nothing. 5xx, 429 and 408 are the second: the
-       * upstream is overloaded, rate-limiting us, or slow. Rate limiting is the
-       * one that actually bites, because a cold dashboard asks for every icon
-       * at once and a burst is exactly what earns a 429.
-       */
-      if (response.status >= 500 || TRANSIENT.has(response.status)) {
+        /*
+         * A verdict on the domain, or on this moment? 404 is the first — the
+         * service looked and has nothing. 5xx, 429 and 408 are the second: the
+         * upstream is overloaded, rate-limiting us, or slow. Rate limiting is
+         * the one that actually bites, because a cold dashboard asks for every
+         * icon at once and a burst is exactly what earns a 429.
+         */
+        if (response.status >= 500 || TRANSIENT.has(response.status)) {
+          answered = false;
+          continue;
+        }
+        if (!response.ok) continue;
+
+        const body = new Uint8Array(await response.arrayBuffer());
+        if (body.byteLength < MIN_BYTES || body.byteLength > MAX_BYTES)
+          continue;
+
+        const ext = (response.headers.get("content-type") ?? "").includes("png")
+          ? "png"
+          : "ico";
+        await writeAtomic(`${slug}.${ext}`, body);
+        return { body, ext };
+      } catch {
+        // Timeout, DNS failure, connection reset — all transient.
         answered = false;
-        continue;
       }
-      if (!response.ok) continue;
-
-      const body = new Uint8Array(await response.arrayBuffer());
-      if (body.byteLength < MIN_BYTES || body.byteLength > MAX_BYTES) continue;
-
-      const ext = (response.headers.get("content-type") ?? "").includes("png")
-        ? "png"
-        : "ico";
-      await writeAtomic(`${slug}.${ext}`, body);
-      return { body, ext };
-    } catch {
-      // Timeout, DNS failure, connection reset — all transient.
-      answered = false;
     }
   }
 
@@ -150,7 +189,10 @@ async function fetchAndCache(
    * network. To retry a recorded miss, delete the file — `data/merchant-icons`
    * is safe to empty at any time, it rebuilds itself on the next request.
    */
-  if (answered) await writeAtomic(`${slug}.miss`, "");
+  if (answered) {
+    if (guessed) rememberGuessMiss(slug);
+    else await writeAtomic(`${slug}.miss`, "");
+  }
   return null;
 }
 
@@ -160,13 +202,17 @@ async function fetchAndCache(
  * **Takes a slug, never a domain.** `proxy.ts` excludes `/api` from its
  * matcher, so this handler runs without the cookie check — a route that fetched
  * whatever host the URL named would be an open proxy pointed at our server.
- * Resolving the slug against the allowlist in `lib/merchant-brands.ts` and
- * 404ing on anything absent removes that outright.
+ * That is still off the table, and not because of the map: the only hosts this
+ * ever contacts are the two in `UPSTREAMS`, and a slug reaches them as a query
+ * parameter. `domainsForSlug` decides *what they are asked about* — a mapped
+ * merchant's own domain, or, for a merchant nobody mapped, a guess derived from
+ * the slug — and a slug it cannot make a domain out of is a 404 before any
+ * fetch happens.
  *
  * Unauthenticated on purpose, which is the one place this departs from the rule
  * that every endpoint resolves its account from the session: it serves public
- * brand logos from a fixed list and reads nothing belonging to a user. Adding a
- * session lookup would cost a query per icon and protect nothing.
+ * brand logos and reads nothing belonging to a user. Adding a session lookup
+ * would cost a query per icon and protect nothing.
  */
 export async function GET(
   _request: Request,
@@ -174,17 +220,21 @@ export async function GET(
 ) {
   const { slug } = await params;
 
-  const domain = domainForSlug(slug);
-  if (!domain) return new Response(null, { status: 404 });
+  const { domains, guessed } = domainsForSlug(slug);
+  if (domains.length === 0) return new Response(null, { status: 404 });
 
   let icon = await readCached(slug);
+  // A guessed miss lives in memory, not on disk — see `guessMisses`.
+  if (icon === undefined && guessMisses.has(slug)) icon = null;
 
   if (icon === undefined) {
     // Second lookup inside the same tick is deliberate: the dedupe map is what
     // makes the burst on a cold dashboard collapse to one fetch per merchant.
     let pending = inFlight.get(slug);
     if (!pending) {
-      pending = fetchAndCache(slug, domain).finally(() => inFlight.delete(slug));
+      pending = fetchAndCache(slug, domains, guessed).finally(() =>
+        inFlight.delete(slug),
+      );
       inFlight.set(slug, pending);
     }
     icon = await pending;

@@ -9,6 +9,7 @@ import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { FlashToaster } from "@/components/flash-toaster";
 import { LocaleSync } from "@/components/locale-sync";
+import { MERCHANT_MARK_SCRIPT } from "@/components/merchant-avatar";
 import { ServiceWorkerRegistrar } from "@/components/sw-register";
 import { TabBar } from "@/components/tab-bar";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -175,6 +176,11 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[lo
           to follow the bar's padding in `components/tab-bar.tsx`. */}
       <body className="min-h-full flex flex-col bg-bg font-sans text-text antialiased app-shell:pb-30">
         <script dangerouslySetInnerHTML={{ __html: STANDALONE_SCRIPT }} />
+        {/* Has to be here rather than anywhere near what it rescues: `error`
+            fires once, so a listener attached after a merchant mark has already
+            failed never hears about it. `MERCHANT_MARK_SCRIPT` carries the
+            rest of the reasoning. */}
+        <script dangerouslySetInnerHTML={{ __html: MERCHANT_MARK_SCRIPT }} />
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>
             <AppHeader user={user} />
