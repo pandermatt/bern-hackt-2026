@@ -715,6 +715,8 @@
     "suggestion2": "Is something shady going on in my account?",
     "suggestion3": "What subscriptions am I paying for?",
     "suggestion4": "How should I split last month's surplus across my saving goals?",
+    "other": "Something else",
+    "askLabel": "Questions you can ask",
     "thinking": "Batzi is thinking",
     "followUpsLabel": "Suggested follow-up questions",
     "inputPlaceholder": "Ask about your finances…",

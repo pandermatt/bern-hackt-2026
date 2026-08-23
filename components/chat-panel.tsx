@@ -179,23 +179,11 @@ export function ChatPanel({
   chat,
   className = "",
   /**
-   * The transcript's own box — its height *and* its vertical padding, because
-   * at the size `HomeChat` folds down to those 32px are a third of the panel
-   * and the shell is the only thing that knows it. The inline panel pins the
-   * height to a constant rather than letting it take the leftover space, so
-   * the page below the chat does not shift on every reply.
+   * The transcript's own box. The inline panel pins it to a constant height
+   * rather than letting it take the leftover space, so the page below the chat
+   * does not shift on every reply.
    */
-  scrollClassName = "flex-1 py-4",
-  /**
-   * The empty state's opening paragraph. A seam rather than a flag because the
-   * shell is the only thing that knows how much room the transcript has: when
-   * `HomeChat` runs its phone-sized panel collapsed, five lines of prose are
-   * the whole box and the starter chips — the thing a first-time reader is
-   * meant to tap — sit below the fold of a 96px scroller. The card's title is
-   * an instruction there ("Ask Batzi") and the chips are examples of it, so
-   * hiding the prose costs nothing and buys the chips.
-   */
-  introClassName = "",
+  scrollClassName = "flex-1",
   /**
    * Optional, and `HomeChat` — the only caller today — deliberately omits it:
    * focusing an input near the top of a mobile page raises the keyboard on
@@ -208,7 +196,6 @@ export function ChatPanel({
   chat: AssistantChat;
   className?: string;
   scrollClassName?: string;
-  introClassName?: string;
   inputRef?: React.Ref<HTMLInputElement>;
   "aria-label"?: string;
 }) {
@@ -230,10 +217,9 @@ export function ChatPanel({
   // this panel (and its scroll container) unmounts whenever the shell toggles
   // away from it, so a hook-side effect keyed on [messages, pending] never
   // re-fires on the way back and the transcript returned scrolled to the top.
-  // Nothing to follow before the first turn, and following anyway is visible:
-  // `HomeChat`'s collapsed panel is 96px of a taller empty state, so a mount
-  // that jumps to the bottom opens the page on the *last* starter chip with
-  // the one above it sliced in half.
+  // Nothing to follow before the first turn, and following anyway is visible
+  // wherever the empty state is taller than its box: the panel opens on the
+  // *last* starter chip with the one above it sliced in half.
   useEffect(() => {
     if (messages.length === 0 && !pending) return;
     const el = scrollRef.current;
@@ -255,13 +241,11 @@ export function ChatPanel({
         /* `overflow-y-auto` lives here rather than in `scrollClassName`: the
            auto-scroll effect writes `scrollTop` on this element, so a caller
            must not be able to take the scrolling away. */
-        className={`space-y-3 overflow-y-auto px-4 ${scrollClassName}`}
+        className={`space-y-3 overflow-y-auto px-4 py-4 ${scrollClassName}`}
       >
         {messages.length === 0 && (
           <div className="duration-500 animate-in fade-in">
-            <p className={`text-[13.5px] text-text-muted ${introClassName}`}>
-              {t("intro")}
-            </p>
+            <p className="text-[13.5px] text-text-muted">{t("intro")}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {SUGGESTION_KEYS.map((key) => (
                 <button
