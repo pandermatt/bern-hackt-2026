@@ -22,17 +22,24 @@ import type { Slice } from "@/lib/insights";
 export type ChatRole = "user" | "assistant";
 
 /**
- * The `Chat` namespace keys of the four starter proposals — the one-tap chips
- * the empty state shows. Shared, not duplicated: the panel renders them on
- * start, and the action re-offers the same questions as follow-up chips on
- * turns where the model proposed none, so both readers stay in lockstep when
- * a proposal is reworded or added.
+ * The `Chat` namespace keys of the starter proposals — the one-tap chips the
+ * empty state shows. Shared, not duplicated: the panel renders them on start,
+ * and the action re-offers the same questions as follow-up chips on turns
+ * where the model proposed none, so both readers stay in lockstep when a
+ * proposal is reworded or added.
+ *
+ * Four of the five are **happy paths** — `matchHappyPath` recognizes them and
+ * the app answers from its own aggregates, so the chips a first-time reader
+ * taps cannot fail. The exception is `suggestion4`: allocating a surplus ends
+ * in an Apply card built by `propose_allocation`, which is a validated action
+ * rather than a summary, and that belongs on the tool loop.
  */
 export const SUGGESTION_KEYS = [
   "suggestion1",
   "suggestion2",
   "suggestion3",
   "suggestion4",
+  "suggestion5",
 ] as const;
 
 export type ChatMessage = {
@@ -100,8 +107,17 @@ const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
 };
 
+/**
+ * The model-facing name of a locale, or nothing for one we have no word for.
+ * Exported because `lib/happy-path.ts` has to name the reply's language in
+ * its own prompt, and two spellings of "German" is one too many.
+ */
+export function languageName(locale: string): string | undefined {
+  return LANGUAGE_NAMES[locale];
+}
+
 export function systemPromptFor(locale: string): string {
-  const language = LANGUAGE_NAMES[locale];
+  const language = languageName(locale);
   if (!language) return SYSTEM_PROMPT;
   return `${SYSTEM_PROMPT}\nAnswer in ${language}, including matching FOLLOWUP lines. The followups should be relevant to the user's question and from the user's perspective. They should be short and listed as array under FOLLOWUP. The followups should either be questions about the users financial data or match a toolcall available to you. If you don't have a matching followup leave it empty. Keep the amounts formatted exactly as the tools return them.`;
 }
