@@ -244,7 +244,7 @@
     "unsavedChanges": "Unsaved changes",
     "save": "Save budget",
     "saved": "Budget saved.",
-    "chartLabel": "Spending against budget for each category this month, drawn as a share of that category\u2019s own budget, with the percentage printed beside its name. The table below carries the same figures in Swiss francs.",
+    "chartLabel": "Spending against budget for each category this month, in Swiss francs, with the share of each limit printed beside its category. The table below carries the same figures.",
     "tableLabel": "Spending against budget, by category",
     "tableCategory": "Category",
     "tableSpent": "Spent",

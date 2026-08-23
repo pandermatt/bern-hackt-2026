@@ -281,52 +281,42 @@ Unchanged from the template this app grew out of, and still exactly true.
   theme changes; it returns `null` until mounted, so the first frame is already
   in the right palette. Don't duplicate the palette into TypeScript — that is
   what breaks "restyle by editing tokens".
-- **The budget radar is normalised per spoke: the dashed budget shape is a
-  circle at 100%.** Every category is drawn as a share of *its own* budget
-  (`shareOf`), so the rings are percentages and there is exactly one thing to
-  look for — fill outside circle. A single shared franc dial was tried first
-  and is what this replaced: categories are budgeted an order of magnitude
-  apart, so the dashed shape came out as a spiky star whose points said nothing
-  about how the month went, and every pair of spokes had to be measured by eye
-  before the picture meant anything. **Don't put the spokes back on one franc
-  scale.** What it costs is magnitude — CHF 60 of a CHF 50 budget draws the
-  same spoke as CHF 6'000 of a CHF 5'000 one — and the francs are carried by
-  the tooltip and the `sr-only` table instead, which is why neither is
-  optional.
-- **The dial is still refitted per month, and still bends when a month needs
-  it.** `lib/budget-scale.ts` owns that arithmetic; the component only draws
-  through the `toDial` / `toPercent` pair it hands back, in basis points of
-  budget (`BUDGET_RING` = 10'000 = 100%). While the month's peak stays inside
-  `OUTLIER_CAP` × budget the rings are plain linear percentage steps. Past that
-  they go logarithmic, with the knee **solved** so the budget ring keeps the
-  radius the cap would have given it — which is what makes the two modes
-  continuous and stops the dial popping as you page months. A month at 683% of
-  one limit and ~95% of four others is the case: on a linear dial fitted to the
-  outlier, "at your line" and "safely under" are three pixels apart.
-- **The budget ring always lands *on* a gridline, and never on the rim.** Every
-  linear step the fitter can pick (10 / 20 / 25 / 50 points) divides 100, and
-  `MIN_RIM` is 120% so the magnitude stays pinned at one decade; on a
-  compressed dial `REFERENCE_RADIUS × COMPRESSED_RINGS` is exactly 2. That is
-  what stops the dashed circle floating a hair off a ring all the way round, or
-  being drawn over by the outer axis line. `tests/budget-scale.test.ts` pins it
-  across the whole range; if you touch `MIN_RIM`, `COMPRESSED_RINGS` or the
-  step set, that test is the alarm.
-- **The rings are chosen first and the curve fitted through them.** Whole
-  percentage points at every ring (`0 · 36 · 100 · 210 · 400 · 740` for the
-  month above), then piecewise interpolation between them — so a tick never
-  prints `137%`, and the printed figure is the *exact* value of the ring it
-  sits on rather than a tidied-up approximation. `roundish` rounds the rim
-  **up**, so nothing ever falls outside the dial.
+- **The budget radar's rings are francs, on one scale shared by every spoke.**
+  A spoke sitting far out is a large amount of money wherever it is on the
+  dial, which is what makes the two shapes readable *as shapes*. Per-spoke
+  normalisation — every category drawn as a share of its own budget, so the
+  dashed shape is a circle at 100% — was tried and reverted: it buys one clean
+  thing to look for and pays for it with the whole magnitude axis, drawing
+  CHF 60 of a CHF 50 budget as the identical spoke to CHF 6'000 of a CHF 5'000
+  one. **The axis reads in francs.** What that costs is the near-hub
+  categories, where "half the budget" and "twice it" are a few pixels apart —
+  which is exactly why the percentage is printed under every name. Read the
+  shape for scale and the number for the verdict; neither alone is the chart.
+- **The dial is refitted per month, and bends when a month needs it.**
+  `lib/budget-scale.ts` owns that arithmetic; the component only draws through
+  the `toDial` / `toMinor` pair it hands back, in minor units. While the
+  month's peak stays inside `OUTLIER_CAP` × the largest budget the rings are
+  plain linear franc steps. Past that they go logarithmic, with the knee
+  **solved** so the largest budget keeps the radius the cap would have given
+  it — which is what makes the two modes continuous and stops the dial popping
+  as you page months. Limits averaging CHF 770 next to one runaway category at
+  CHF 8'200 is the case: on a linear dial fitted to the outlier, every dashed
+  ring knots at the hub.
+- **The rings are chosen first and the curve fitted through them.** Round franc
+  figures at every ring, then piecewise interpolation between them — so a tick
+  never prints `CHF 1'237`, and the printed figure is the *exact* value of the
+  ring it sits on rather than a tidied-up approximation. `roundish` rounds the
+  rim **up**, so nothing ever falls outside the dial.
 - **Nothing clips.** The dial used to stop at the cap and clamp everything past
   it onto the rim behind a `+` on the outer tick, which threw away the one
-  figure the reader was looking at and drew 250% and 683% as the same spoke.
-  **Don't reintroduce a clamp** — bending the scale is what replaced it. The
-  `+` went with it: every tick now means what it says.
+  figure the reader was looking at and drew CHF 2'500 and CHF 8'200 as the same
+  spoke. **Don't reintroduce a clamp** — bending the scale is what replaced it.
+  The `+` went with it: every tick now means what it says.
 - **A compressed month says so, and a linear one does not.** `radarCompressed`
   renders under the chart only when `dial.compressed`. A scale that reads
   differently than it looks has to admit it; a standing caveat under a dial
   that is in fact linear is its own kind of wrong. Note the caveat is about the
-  *spacing* of the rings, not their units — the dial reads in percent in both
+  *spacing* of the rings, not their units — the dial reads in francs in both
   modes.
 - **The radar's radius is measured, not a percentage.** ECharts resolves
   `radius: "65%"` against `min(width, height) / 2`, but what has to fit outside
@@ -341,14 +331,21 @@ Unchanged from the template this app grew out of, and still exactly true.
   smaller type, names broken at their last space, and only the rim tick — six
   axis numbers queue up one short spoke, and the series paints over them. The
   rim tick goes too once the dial is under 60px.
-- **Every category name carries the effective francs spent underneath it** —
-  the magnitude the normalised radius deliberately stopped showing. The colour
-  of that amount is still scored by `share()`, the same figure the spoke is
-  drawn from, so the shape and its scoring cannot disagree; the share as a
-  number lives in the tooltip and the `sr-only` table. The strings are measured
-  per row in `radiusFor`, so the dial sizes itself against what it actually
-  prints. Don't drop the amount for tidiness.
-- **The amount under each axis name is `--positive`/`--danger`, not the
+- **Every category name carries its share of budget underneath it** — the
+  verdict the shared franc dial cannot deliver near the hub, where a 2× overrun
+  on a small limit is a few pixels. `share()` is both what colours it and what
+  the tooltip prints, so the two can never disagree; the francs live in the
+  shape, the tooltip and the `sr-only` table. The strings are measured per row
+  in `radiusFor` **at the weight they are drawn in**, so the dial sizes itself
+  against what it actually prints. Don't drop the percentage for tidiness.
+- **Past 100% that percentage is red *and* bold, and the weights are 500/700
+  for a reason.** Red alone says nothing to a reader who does not see colour,
+  so weight carries the same verdict a second way. Canvas resolves a numeric
+  weight against the faces the family ships, and `sans-serif` typically ships
+  two: CSS font matching sends 600 and up to the bold face and everything below
+  to the regular one, so 600 against 800 would have been the identical glyph
+  twice. `SHARE_WEIGHT` (500) and `OVER_WEIGHT` (700) straddle that boundary.
+- **The percentage under each axis name is `--positive`/`--danger`, not the
   chart fills.** They are 13px glyphs. `--chart-2` (#a5c400) is 2:1 on white
   and unreadable as text; the fill it labels is fine because a 2.5px stroke
   with a translucent area is not text.
