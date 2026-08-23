@@ -255,7 +255,14 @@
     "seriesSpent": "Spent this month",
     "seriesBudget": "Your budget",
     "tipNoLimit": "no limit",
-    "tipAgainstLimit": "{used} / {limit} · {share}%"
+    "tipAgainstLimit": "{used} / {limit} · {share}%",
+    "dragonUnplanned": "No limits set yet — I can suggest some from your own averages.",
+    "dragonOver": "{count, plural, one {One category is} other {# categories are}} over the limit.",
+    "dragonTight": "{category} is getting tight — still inside, but only just.",
+    "dragonClear": "Everything inside its limit this month. Nice.",
+    "dragonNoteOver": "{amount} over the limit, added up",
+    "dragonNoteTight": "{share}% of the limit already spent",
+    "dragonNoteClear": "{count} of {total} categories have a limit"
   },
   "BudgetErrors": {
     "notSignedIn": "Sign in to set a budget.",
@@ -428,7 +435,14 @@
     "stateOpen": "Not resolved",
     "allResolvedTitle": "You're all caught up",
     "allResolvedBody": "{count, plural, one {# kind of finding is} other {# kinds of finding are}} resolved and hidden. Show them again to look back over what you ticked off.",
-    "allResolvedRuleBody": "{count, plural, one {# finding of this kind is} other {All # findings of this kind are}} resolved and hidden. Show them again to look back over what you ticked off."
+    "allResolvedRuleBody": "{count, plural, one {# finding of this kind is} other {All # findings of this kind are}} resolved and hidden. Show them again to look back over what you ticked off.",
+    "dragonUnscanned": "I haven't looked yet. Start a scan and I'll tell you what stands out.",
+    "dragonRunning": "Going through your transactions now…",
+    "dragonOutdated": "Your statements have changed — what's here no longer describes them.",
+    "dragonAction": "{count, plural, one {One thing} other {# things}} worth a look.",
+    "dragonResolved": "All ticked off. Nothing left open.",
+    "dragonClear": "Nothing stood out to me.",
+    "dragonContext": "Nothing needing action."
   },
   "AnomalyErrors": {
     "notSignedIn": "Sign in to resolve a finding.",

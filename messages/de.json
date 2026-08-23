@@ -255,7 +255,14 @@
     "seriesSpent": "Diesen Monat ausgegeben",
     "seriesBudget": "Ihr Budget",
     "tipNoLimit": "kein Limit",
-    "tipAgainstLimit": "{used} / {limit} · {share}%"
+    "tipAgainstLimit": "{used} / {limit} · {share}%",
+    "dragonUnplanned": "Noch keine Limits gesetzt — ich kann Ihnen welche aus Ihren eigenen Durchschnittswerten vorschlagen.",
+    "dragonOver": "{count, plural, one {Eine Kategorie ist} other {# Kategorien sind}} über dem Limit.",
+    "dragonTight": "Es wird eng bei {category} — noch im Rahmen, aber knapp.",
+    "dragonClear": "Alles im Rahmen diesen Monat. Sauber.",
+    "dragonNoteOver": "{amount} über dem Limit, zusammengezählt",
+    "dragonNoteTight": "{share}% des Limits schon ausgegeben",
+    "dragonNoteClear": "{count} von {total} Kategorien mit Limit"
   },
   "BudgetErrors": {
     "notSignedIn": "Melden Sie sich an, um ein Budget festzulegen.",
@@ -428,7 +435,14 @@
     "stateOpen": "Nicht erledigt",
     "allResolvedTitle": "Alles erledigt",
     "allResolvedBody": "{count, plural, one {# Art von Auffälligkeit ist} other {# Arten von Auffälligkeiten sind}} erledigt und ausgeblendet. Blende sie wieder ein, um nachzusehen, was du abgehakt hast.",
-    "allResolvedRuleBody": "{count, plural, one {# Auffälligkeit dieser Art ist} other {Alle # Auffälligkeiten dieser Art sind}} erledigt und ausgeblendet. Blende sie wieder ein, um nachzusehen, was du abgehakt hast."
+    "allResolvedRuleBody": "{count, plural, one {# Auffälligkeit dieser Art ist} other {Alle # Auffälligkeiten dieser Art sind}} erledigt und ausgeblendet. Blende sie wieder ein, um nachzusehen, was du abgehakt hast.",
+    "dragonUnscanned": "Ich habe noch nicht nachgeschaut. Starten Sie einen Scan, dann sage ich Ihnen, was auffällt.",
+    "dragonRunning": "Ich gehe gerade Ihre Transaktionen durch…",
+    "dragonOutdated": "Ihre Kontoauszüge haben sich geändert — was hier steht, beschreibt sie nicht mehr.",
+    "dragonAction": "{count, plural, one {Eine Sache} other {# Sachen}} sollten Sie sich anschauen.",
+    "dragonResolved": "Alles abgehakt. Nichts mehr offen.",
+    "dragonClear": "Ich habe nichts Auffälliges gefunden.",
+    "dragonContext": "Nichts, was Handeln erfordert."
   },
   "AnomalyErrors": {
     "notSignedIn": "Melde dich an, um eine Auffälligkeit zu erledigen.",

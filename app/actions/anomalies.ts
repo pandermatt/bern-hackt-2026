@@ -27,6 +27,7 @@ import {
   type TransactionContext,
 } from "@/lib/llm/analyze-insights";
 import { getCurrentUser } from "@/lib/auth";
+import { isGroupResolved } from "@/lib/nudges";
 import { getAnomalyText, type TranslatableFinding } from "@/lib/anomaly-text";
 import { fingerprintOf } from "@/lib/anomaly-sync";
 import { defaultLocale, isAppLocale, type AppLocale } from "@/i18n/routing";
@@ -755,9 +756,7 @@ export async function getAnomalyOverview(
     // Severity is a dead key in this column — nearly everything here is "low" —
     // so it reads as a feed of what is new.
     context: visible.filter((g) => attentionFor(g.ruleId) === "context").sort(byLatest),
-    resolvedGroupCount: groups.filter(
-      (g) => g.transactionCount > 0 && g.resolvedCount === g.transactionCount,
-    ).length,
+    resolvedGroupCount: groups.filter(isGroupResolved).length,
     ...scan,
   };
 }

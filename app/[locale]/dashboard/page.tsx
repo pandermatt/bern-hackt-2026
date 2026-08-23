@@ -47,6 +47,11 @@ export default async function Dashboard({
           <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
             {t("title")}
           </h1>
+          {/* A flourish, not a divider — the brand's whole colour range at
+              once, under the one line on the page that names it. Decorative and
+              `aria-hidden`: nothing here has to be told apart, which is what
+              makes the ramp safe to use as a sweep. See `globals.css`. */}
+          <div className="rainbow-underline mt-2 w-24" aria-hidden />
           {/* Describes the rows in view, so it tracks the filters. An empty view
               with statements behind it is a filter that matched nothing — a
               different thing to say than having imported nothing at all. */}

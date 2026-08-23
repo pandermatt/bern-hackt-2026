@@ -6,10 +6,12 @@ import { getBudgetOverview } from "@/app/actions/budget";
 import { BudgetEditor } from "@/components/budget-editor";
 import { BudgetMonthPicker } from "@/components/budget-month-picker";
 import { BudgetRadar } from "@/components/budget-radar";
+import { DragonBuddy } from "@/components/dragon-buddy";
 import { Section } from "@/components/section";
 import { Link, redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/insights";
+import { budgetVerdict, dragonForBudget, isOverBudget } from "@/lib/nudges";
 import { monthLabel } from "@/lib/month-label";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +52,47 @@ export default async function BudgetPage({
   const totalLimit = rows.reduce((sum, row) => sum + (row.limitMinor ?? 0), 0);
   const budgeted = rows.filter((row) => row.limitMinor !== null).length;
 
+  /* The dragon's read on the month, decided once in `lib/nudges.ts` so the
+     face and the sentence cannot disagree — the same split the anomaly engine
+     makes between `severity` and `kind`. The figures below are only ever the
+     evidence for the verdict; they never pick it. */
+  const verdict = budgetVerdict(rows);
+  const over = rows.filter(isOverBudget);
+  const overBy = over.reduce(
+    (sum, row) => sum + (row.usedMinor - (row.limitMinor as number)),
+    0,
+  );
+  // The one nearest its limit without having crossed it — the category the
+  // "tight" verdict is actually about.
+  const tightest = rows
+    .filter((row) => row.limitMinor !== null && !isOverBudget(row))
+    .sort(
+      (a, b) =>
+        b.usedMinor / (b.limitMinor as number) - a.usedMinor / (a.limitMinor as number),
+    )[0];
+
+  const dragonLine =
+    verdict === "unplanned"
+      ? t("dragonUnplanned")
+      : verdict === "over"
+        ? t("dragonOver", { count: over.length })
+        : verdict === "tight"
+          ? t("dragonTight", { category: tightest?.category ?? "" })
+          : t("dragonClear");
+
+  const dragonNote =
+    verdict === "over"
+      ? t("dragonNoteOver", { amount: formatMoney(overBy) })
+      : verdict === "tight" && tightest
+        ? t("dragonNoteTight", {
+            share: Math.round(
+              (tightest.usedMinor / (tightest.limitMinor as number)) * 100,
+            ),
+          })
+        : verdict === "clear"
+          ? t("dragonNoteClear", { count: budgeted, total: rows.length })
+          : undefined;
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
       {/* The dashboard's and the anomalies page's own heading size. This used
@@ -59,6 +102,11 @@ export default async function BudgetPage({
         <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
           {t("title")}
         </h1>
+        {/* A flourish, not a divider — the brand's whole colour range at
+            once, under the one line on the page that names it. Decorative and
+            `aria-hidden`: nothing here has to be told apart, which is what
+            makes the ramp safe to use as a sweep. See `globals.css`. */}
+        <div className="rainbow-underline mt-2 w-24" aria-hidden />
         <p className="mt-1 text-[13.5px] text-text-muted">
           {month
             ? /* One sentence with the link inside it, rather than two
@@ -77,6 +125,12 @@ export default async function BudgetPage({
             : t("subtitleEmpty")}
         </p>
       </div>
+
+      {rows.length > 0 && (
+        <div className="mb-6">
+          <DragonBuddy mood={dragonForBudget(verdict)} line={dragonLine} note={dragonNote} />
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <div className="mt-6 rounded-lg bg-surface-muted px-5 py-14 text-center">

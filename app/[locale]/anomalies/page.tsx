@@ -5,12 +5,14 @@ import { Suspense } from "react";
 
 import { getAnomalyOverview, type AnomalyGroup } from "@/app/actions/anomalies";
 import { AnomalyIcon } from "@/components/anomaly-icon";
+import { DragonBuddy } from "@/components/dragon-buddy";
 import { HideResolvedToggle } from "@/components/hide-resolved-toggle";
 import { ResolveRing } from "@/components/resolve-ring";
 import { Section } from "@/components/section";
 import { Link, redirect } from "@/i18n/navigation";
 import type { AnomalySeverity } from "@/lib/anomaly-engine";
 import { getCurrentUser } from "@/lib/auth";
+import { anomalyVerdict, dragonForAnomalies, isGroupResolved } from "@/lib/nudges";
 
 export const dynamic = "force-dynamic";
 
@@ -130,15 +132,61 @@ export default async function AnomaliesPage({
   const overview = await getAnomalyOverview(hidingResolved);
   const total = overview.action.length + overview.context.length;
 
+  /* One decision behind both the face and the sentence — see `anomalyVerdict`,
+     which also explains why "outdated" outranks a clean result. */
+  /* Outstanding work, not rows on the page. With "show resolved" on, a rule
+     everything has been ticked off in is still listed — counting those had the
+     dragon asking for attention that had already been given. */
+  const openAction = overview.action.filter((group) => !isGroupResolved(group));
+  const openContext = overview.context.filter((group) => !isGroupResolved(group));
+
+  const verdict = anomalyVerdict({
+    actionCount: openAction.length,
+    contextCount: openContext.length,
+    resolvedGroupCount: overview.resolvedGroupCount,
+    hasCompletedScan: overview.hasCompletedScan,
+    running: overview.running,
+    outdated: overview.outdated,
+  });
+
+  const dragonLine =
+    verdict === "action"
+      ? t("dragonAction", { count: openAction.length })
+      : t(
+          verdict === "running"
+            ? "dragonRunning"
+            : verdict === "unscanned"
+              ? "dragonUnscanned"
+              : verdict === "outdated"
+                ? "dragonOutdated"
+                : verdict === "resolved"
+                  ? "dragonResolved"
+                  : verdict === "context"
+                    ? "dragonContext"
+                    : "dragonClear",
+        );
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
       <div className="mb-5">
         <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
           {t("title")}
         </h1>
+        {/* A flourish, not a divider — the brand's whole colour range at
+            once, under the one line on the page that names it. Decorative and
+            `aria-hidden`: nothing here has to be told apart, which is what
+            makes the ramp safe to use as a sweep. See `globals.css`. */}
+        <div className="rainbow-underline mt-2 w-24" aria-hidden />
         <p className="mt-1 text-[13.5px] text-text-muted">
           {overview.hasCompletedScan ? t("subtitle") : t("subtitleUnscanned")}
         </p>
+
+        {/* Under the heading rather than among the findings: it is a read on
+            the whole page, and a mascot inside the list would look like one
+            more finding. */}
+        <div className="mt-4">
+          <DragonBuddy mood={dragonForAnomalies(verdict)} line={dragonLine} />
+        </div>
 
         {/* Always, whether or not anything has been ticked off yet — it is the
             switch that governs what this page and every rule page under it
