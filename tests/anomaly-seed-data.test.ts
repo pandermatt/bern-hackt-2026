@@ -86,10 +86,10 @@ const rulesCovering = (id: number) =>
 
 describe("anomaly engine over the shipped seed statements", () => {
   it("imports the expected ledger", () => {
-    // 941 rows across the four exports, 12 of them the same card payments
+    // 950 rows across the four exports, 12 of them the same card payments
     // listed twice (the 2026 ZKB and Revolut exports have no sibling account,
     // so nothing in them dedupes away).
-    expect(rows).toHaveLength(929);
+    expect(rows).toHaveLength(938);
   });
 
   it("reports a readable number of findings", () => {

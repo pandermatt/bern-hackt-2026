@@ -18,6 +18,15 @@ const nextConfig: NextConfig = {
   // The floating dev badge sits on top of the colophon rule.
   devIndicators: false,
 
+  experimental: {
+    // A Server Action body is capped at 1 MB by default, and the CSV uploader
+    // posts the statement itself. The app's own cap is `MAX_CSV_BYTES` (2 MB)
+    // in `lib/csv-import.ts`; this leaves room above it for the multipart
+    // boundaries and part headers, so the limit a person hits is ours — which
+    // comes with a sentence explaining it — rather than a framework 413.
+    serverActions: { bodySizeLimit: "3mb" },
+  },
+
   async headers() {
     return [
       {

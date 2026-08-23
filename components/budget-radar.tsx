@@ -10,7 +10,12 @@ import {
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
-import { budgetScale, type BudgetScale } from "@/lib/budget-scale";
+import {
+  budgetScale,
+  BUDGET_RING,
+  shareOf,
+  type BudgetScale,
+} from "@/lib/budget-scale";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useCategoryLabel } from "@/lib/use-category-label";
@@ -19,22 +24,27 @@ import { useCategoryLabel } from "@/lib/use-category-label";
  * Budget against actual, as a radar.
  *
  * Two shapes over the same spokes: what was actually spent that month, drawn
- * as a translucent fill, and the limit the account holder set, drawn as a
+ * as a translucent fill, and the budget it was spent against, drawn as a
  * dashed outline with no fill. Where the fill pushes past the outline, that
  * category is over budget — which is the whole reason this is a radar rather
  * than a row of bars.
  *
- * **The rings are francs, on one scale shared by every spoke**, and the dial is
- * refitted to each month. That is what makes the two shapes readable as
- * shapes: a spoke sitting far out is a large amount of money wherever it is on
- * the dial. The cost is that a small category's ring sits close to the hub,
- * where "half the budget" and "twice it" are a few pixels apart — which is why
- * the percentage is printed under every category name. Read the shape for
- * scale and the number for the verdict; neither alone is the whole chart.
+ * **Every spoke is normalised against its own budget**, so the rings are
+ * percentages and the outline is a *circle* at 100%. Categories are budgeted
+ * an order of magnitude apart — CHF 120 of transport beside CHF 1'200 of
+ * groceries — and on one shared franc dial that outline is a ten-pointed star
+ * whose spikes say nothing about how the month went: the reader has to measure
+ * each pair of spokes by eye before the shape means anything. Against a circle
+ * there is one thing to look for, and it reads at a glance.
  *
- * A month with an outlier bends that scale rather than clipping it; the rings
- * stay francs either way. `lib/budget-scale.ts` owns the arithmetic and the
- * argument for it, and hands back the two conversions this file draws through.
+ * What that costs is magnitude: a radius no longer says how much money. The
+ * francs are in the tooltip and in the `sr-only` table, and the percentage
+ * under each name is the exact figure the shape is drawn from.
+ *
+ * A month with a runaway category bends the scale rather than clipping it; the
+ * rings stay percentages either way. `lib/budget-scale.ts` owns the arithmetic
+ * and the argument for it, and hands back the two conversions this file draws
+ * through.
  */
 
 const HEIGHT = 520;
@@ -140,10 +150,15 @@ function radiusFor(
   return Math.max(44, Math.min(byWidth, byHeight));
 }
 
-/** Spent as a share of the limit — or of the suggestion, when none is set. */
+/**
+ * Spent as basis points of the limit — or of the suggestion, when none is set.
+ *
+ * The same figure twice over: it is what the spoke is drawn at *and*, divided
+ * by 100, the percentage printed under the category name, so the shape and the
+ * number can never disagree.
+ */
 function share(row: BudgetRow): number {
-  const reference = row.limitMinor ?? row.suggestedMinor;
-  return reference > 0 ? (row.usedMinor / reference) * 100 : 0;
+  return shareOf(row.usedMinor, row.limitMinor ?? row.suggestedMinor);
 }
 
 /**
@@ -184,10 +199,11 @@ function buildOption(
   dial: BudgetScale,
   text: ChartText,
 ): EChartsOption {
-  const spent = rows.map(share);
-  const used = rows.map((row) => row.usedMinor);
-  const budget = rows.map((row) => row.limitMinor ?? row.suggestedMinor);
-  const { max, splitNumber, toDial, toMinor } = dial;
+  // Basis points of each category's own budget, and the same figure as a
+  // percentage for everything that prints one.
+  const shares = rows.map(share);
+  const spent = shares.map((bp) => bp / 100);
+  const { max, splitNumber, toDial, toPercent } = dial;
 
   // Looked up by name from the axis-name formatter, which is handed the
   // indicator rather than the row — so this is keyed on the *displayed* name,
@@ -198,8 +214,9 @@ function buildOption(
 
   const indicator = rows.map((row, i) => ({
     name: names[i],
-    // Dial units, not francs — the rings are only evenly spaced in *money* on
-    // an unbent scale, and `toMinor` is what turns a tick back into a figure.
+    // Dial units, not percentages — the rings are only evenly spaced in
+    // *percent* on an unbent scale, and `toPercent` is what turns a tick back
+    // into a figure.
     max,
     // Tick labels on the top spoke only. Repeating 0/50/100/150/200 around
     // all eight is the same five numbers eight times over the drawing.
@@ -335,14 +352,14 @@ function buildOption(
         showMaxLabel: true,
         color: tokens.textMuted,
         fontSize: layout.tickSize,
-        // Francs, not rappen, and grouped the Swiss way. The card's subhead
-        // names the currency, as it does on every other chart in the app. No
-        // `+` on the rim any more: the scale bends to fit the month's largest
-        // figure rather than clamping it, so every ring is the figure it says.
+        // Share of budget, so the ring at 100% is the dashed circle and every
+        // other ring reads against it. No `+` on the rim: the scale bends to
+        // fit the month's largest figure rather than clamping it, so every ring
+        // is the figure it says.
         formatter: (value: number) =>
           layout.ticksOnlyRim && value < max
             ? ""
-            : Math.round(toMinor(value) / 100).toLocaleString("de-CH"),
+            : `${Math.round(toPercent(value))}%`,
         // The rings run under these numbers; a plate of the panel's own colour
         // keeps them readable without moving them off the spoke. That is
         // `--surface-muted`, not `--surface`: the radar sits on the grey
@@ -365,7 +382,7 @@ function buildOption(
         data: [
           {
             name: text.spentSeries,
-            value: used.map(toDial),
+            value: shares.map(toDial),
             // Brand lime as a *series* colour, not as `--flow-in`. Nothing on
             // this chart encodes direction — both shapes are spending — so
             // reusing the money-in hue here claims no meaning it shouldn't.
@@ -375,8 +392,11 @@ function buildOption(
           },
           {
             name: text.budgetSeries,
-            // A threshold, not a quantity: outline only, no `areaStyle`.
-            value: budget.map(toDial),
+            // A threshold, not a quantity: outline only, no `areaStyle`. One
+            // value for every spoke, because normalising is what turns this
+            // from a star into the ring the fill is read against — and it
+            // lands on a gridline by construction, never between two.
+            value: rows.map(() => toDial(BUDGET_RING)),
             lineStyle: {
               width: 2.5,
               color: tokens.accent,
@@ -438,16 +458,10 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
   );
 
   // Refitted whenever the month changes, which is the whole point of it — a
-  // quiet month draws a dial it fills, and a month with an outlier draws one
-  // that bends rather than clamping the outlier onto the rim.
-  const dial = useMemo(
-    () =>
-      budgetScale(
-        rows.map((row) => row.usedMinor),
-        rows.map((row) => row.limitMinor ?? row.suggestedMinor),
-      ),
-    [rows],
-  );
+  // quiet month draws a dial that stops just past the budget circle, and a
+  // month with a runaway category draws one that bends rather than clamping
+  // the outlier onto the rim.
+  const dial = useMemo(() => budgetScale(rows.map(share)), [rows]);
 
   const option = useMemo(
     () =>
@@ -476,10 +490,11 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
       />
 
       {/* A bent scale that does not say so is a lie told with a straight
-          face: every ring is still labelled in francs, but they no longer
-          climb in equal steps, and the shape reads differently because of it.
-          Only shown on the months that are actually compressed — a standing
-          caveat on a dial that is linear would be its own kind of wrong. */}
+          face: every ring is still labelled with its percentage, but they no
+          longer climb in equal steps, and the shape reads differently because
+          of it. Only shown on the months that are actually compressed — a
+          standing caveat on a dial that is linear would be its own kind of
+          wrong. */}
       {dial.compressed && (
         <p className="mx-auto -mt-1 max-w-[52ch] text-center text-[12px] leading-snug text-text-muted">
           {t("radarCompressed")}
@@ -509,7 +524,7 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
                     ? t("notSet")
                     : formatMoney(row.limitMinor)}
                 </td>
-                <td>{Math.round(share(row))}%</td>
+                <td>{Math.round(share(row) / 100)}%</td>
                 <td>{formatMoney(row.suggestedMinor)}</td>
               </tr>
             ))}

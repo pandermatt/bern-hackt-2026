@@ -219,7 +219,7 @@ export default async function AnomalyRulePage({
   searchParams,
 }: PageProps<"/[locale]/anomalies/[ruleId]">) {
   const { locale, ruleId } = await params;
-  const { tx, hideResolved } = await searchParams;
+  const { tx, showResolved } = await searchParams;
 
   const t = await getTranslations({ locale, namespace: "Anomalies" });
   // Keyed by rule id. `t.has` first, so a finding from an older engine renders
@@ -247,15 +247,16 @@ export default async function AnomalyRulePage({
   ];
   const allResolved = allIds.length > 0 && allIds.every((id) => resolvedIds.has(id));
 
-  // The same literal string the overview reads, and the same flag: switching it
-  // on there and clicking into a rule has to keep the ticked-off rows out of
-  // sight, or the setting would only hold for as long as you stay on one page.
-  const hidingResolved = hideResolved === "true";
+  // The same literal string the overview reads, and the same flag: resolved
+  // rows are hidden by default — ticking one off makes it leave the list on
+  // the refresh — and switching the reveal on there has to hold across the
+  // hop into a rule, or the setting would only last one page.
+  const showingResolved = showResolved === "true";
   // Not a filter in the query: `resolvedIds` is "every finding of this rule on
   // that row is done", which the action works out across findings, and the
   // header's controls still need the full set to have something to reopen.
   const shown = (rows: Transaction[]) =>
-    hidingResolved ? rows.filter((row) => !resolvedIds.has(row.id)) : rows;
+    showingResolved ? rows : rows.filter((row) => !resolvedIds.has(row.id));
 
   const focusRows = shown(detail.focus?.rows ?? []);
   const otherRows = shown(detail.others);
@@ -266,7 +267,7 @@ export default async function AnomalyRulePage({
 
   // Keeps the switch on across the hop back, the same way the list's own rows
   // carry it inward.
-  const backHref = hidingResolved ? "/anomalies?hideResolved=true" : "/anomalies";
+  const backHref = showingResolved ? "/anomalies?showResolved=true" : "/anomalies";
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">

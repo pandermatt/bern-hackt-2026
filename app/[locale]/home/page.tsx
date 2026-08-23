@@ -87,13 +87,23 @@ export default async function HomePage({
        the bottom of the screen and the dragon still sits clear of the glass.
        The pair has to stay equal to the body's `pb-30`, and all three follow
        the bar's own padding in `components/tab-bar.tsx`. */
-    <main className="relative flex-1 bg-linear-to-b from-bg via-pistachio/25 to-pistachio app-shell:-mb-30 app-shell:pb-30">
+    <main className="relative flex flex-1 flex-col bg-linear-to-b from-bg via-pistachio/25 to-pistachio app-shell:-mb-30 app-shell:pb-30">
       {/* One phone-shaped column up to `lg`, where it becomes two. This is an
           entry page, not a dashboard, so it never stretches to the full width
           of a desk monitor — but a single `max-w-md` ribbon down the middle of
           one leaves the chat input scrolled away below the mascot. Two columns
-          put both above the fold without either growing a mouse-journey wide. */}
-      <div className="mx-auto flex min-h-full w-full max-w-md flex-col px-5 py-6 lg:max-w-4xl">
+          put both above the fold without either growing a mouse-journey wide.
+
+          It stretches with `flex-1` in a flex `main`, not with `min-h-full`.
+          That percentage resolved against an ancestor chain whose height is a
+          *minimum* rather than a definite one, so it collapsed to nothing and
+          this column was only as tall as its content — which went unnoticed
+          while the chat was tall enough to overflow a phone screen by itself,
+          and became plainly wrong the moment it folded down to a row: the
+          mascot's `mt-auto` had no free space left to claim and he floated
+          mid-screen in the pistachio. Stretching is what a flex child does
+          without needing a definite height anywhere up the tree. */}
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-5 py-6 lg:max-w-4xl">
         <h1 className="text-[24px] leading-tight font-semibold tracking-tight text-text">
           {t("greeting", { name: displayName(user) })}
         </h1>

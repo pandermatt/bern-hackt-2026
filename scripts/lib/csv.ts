@@ -1,14 +1,19 @@
 /**
  * A minimal RFC 4180 reader — enough for the fixed-shape bank exports in
- * `scripts/seed-data`. Handles quoted fields, embedded commas and newlines,
- * doubled quotes, and CRLF.
+ * `scripts/seed-data`. Handles quoted fields, embedded separators and
+ * newlines, doubled quotes, and CRLF.
  *
  * Deliberately not a dependency: this runs once at seed time over 36 KB of
  * trusted input, and `split(",")` is wrong here — four lines in the shipped
  * data carry a comma inside a quoted field ("Pizzeria & Grill, Samedan",
  * "Apartment in Vesterboro, AirBnB", …).
+ *
+ * `delimiter` defaults to a comma, which is every seed-time caller. Uploaded
+ * statements are the reason it is a parameter at all: a ZKB Kontoauszug is
+ * semicolon-separated and a Revolut export is not, and the quoting rules are
+ * identical either way — see `sniffDelimiter` in `lib/csv-import.ts`.
  */
-export function parseCsv(input: string): string[][] {
+export function parseCsv(input: string, delimiter = ","): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -33,7 +38,7 @@ export function parseCsv(input: string): string[][] {
     }
 
     if (ch === '"') quoted = true;
-    else if (ch === ",") {
+    else if (ch === delimiter) {
       row.push(field);
       field = "";
     } else if (ch === "\n") {
@@ -59,8 +64,11 @@ export function parseCsv(input: string): string[][] {
  * ends with an empty `description`, so the parser has to keep trailing empty
  * fields — dropping them would misalign the zip.
  */
-export function toRecords(input: string): Record<string, string>[] {
-  const [header, ...rest] = parseCsv(input);
+export function toRecords(
+  input: string,
+  delimiter = ",",
+): Record<string, string>[] {
+  const [header, ...rest] = parseCsv(input, delimiter);
   if (!header) return [];
   return rest.map((cells) =>
     Object.fromEntries(header.map((key, i) => [key, cells[i] ?? ""])),

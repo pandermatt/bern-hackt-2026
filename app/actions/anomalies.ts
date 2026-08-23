@@ -27,6 +27,10 @@ import {
   type TransactionContext,
 } from "@/lib/llm/analyze-insights";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  applyMerchantOverrides,
+  merchantOverridesFor,
+} from "@/lib/merchant-overrides";
 import { isGroupResolved } from "@/lib/nudges";
 import { getAnomalyText, type TranslatableFinding } from "@/lib/anomaly-text";
 import { fingerprintOf } from "@/lib/anomaly-sync";
@@ -173,10 +177,14 @@ async function runScan(runId: number, userId: number, locale: AppLocale): Promis
   try {
     await setProgress(runId, { phase: "Loading transactions" });
 
-    const rows = await db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.userId, userId));
+    // Overridden the same way the ledger reads them: several rules take their
+    // baseline from a merchant's *category*, so a scan over the importer's
+    // answer would explain a finding in terms of a category the reader no
+    // longer sees on the row.
+    const rows = applyMerchantOverrides(
+      await db.select().from(transactions).where(eq(transactions.userId, userId)),
+      await merchantOverridesFor(userId),
+    );
 
     const total = rows.length;
     await setProgress(runId, { total, phase: "Analysing transactions" });

@@ -6,12 +6,12 @@ import { SavingsGoalDelete } from "@/components/savings-goal-delete";
 import { SavingsGoalEdit } from "@/components/savings-goal-edit";
 import { goalIcon } from "@/lib/goal-icon";
 import {
-  formatDay,
   formatMoney,
   potFill,
   potPercent,
   type SavingsPot as Pot,
 } from "@/lib/insights";
+import { dayLabel } from "@/lib/month-label";
 
 /**
  * One savings goal, drawn as a pot that fills.
@@ -42,6 +42,8 @@ const RX = 40;
 const RY = 11;
 const MOUTH_Y = 22;
 const BASE_Y = 104;
+/** The viewBox's height — the floor the clip rects and the liquid reach down to. */
+const VIEW_H = 128;
 /** The glyph's centre — the wall's midpoint, clear of both ellipses. */
 const ICON_CENTRE_Y = (MOUTH_Y + BASE_Y) / 2;
 
@@ -102,6 +104,10 @@ export function SavingsPot({
 }) {
   // Synchronous server component, so the hook works here — see `SavingsGoals`.
   const t = useTranslations("Savings");
+  const tMonths = useTranslations("Months");
+  // `null` is a goal with no deadline, which is most of them — see the
+  // deadline line below.
+  const due = pot.targetOn ? dayLabel(tMonths, pot.targetOn) : null;
   const fill = potFill(pot.savedMinor, pot.targetMinor);
   // The drawing clamps because a jar has a rim; the label does not, so a pot
   // funded past its target says 133% rather than a flat, less useful 100%.
@@ -179,7 +185,18 @@ export function SavingsPot({
       <svg
         viewBox="0 0 120 128"
         className={`h-[118px] w-[110px] shrink-0 ${celebrating ? "pot-glow" : ""}`}
-        style={celebrating ? ({ "--pot-glow-colour": colour } as CSSProperties) : undefined}
+        /* `--pot-base` and `--pot-wet-empty` are the geometry of an *empty*
+           pot, handed to CSS so the `@starting-style` rule in globals.css can
+           rise the liquid from the base on first render without repeating
+           `BASE_Y` as a magic number. Custom properties inherit, so the two
+           clip rects in `<defs>` below read them off this element. */
+        style={
+          {
+            "--pot-base": `${BASE_Y}px`,
+            "--pot-wet-empty": `${VIEW_H - BASE_Y}px`,
+            ...(celebrating ? { "--pot-glow-colour": colour } : {}),
+          } as CSSProperties
+        }
         role="img"
         aria-label={`${pot.name}: ${formatMoney(pot.savedMinor)} of ${formatMoney(
           pot.targetMinor,
@@ -190,10 +207,16 @@ export function SavingsPot({
             <path d={BODY} />
           </clipPath>
           <clipPath id={dryClip}>
-            <rect className="pot-liquid" x="0" y="0" width="120" height={surface} />
+            <rect className="pot-liquid pot-liquid-dry" x="0" y="0" width="120" height={surface} />
           </clipPath>
           <clipPath id={wetClip}>
-            <rect className="pot-liquid" x="0" y={surface} width="120" height={128 - surface} />
+            <rect
+              className="pot-liquid pot-liquid-wet"
+              x="0"
+              y={surface}
+              width="120"
+              height={VIEW_H - surface}
+            />
           </clipPath>
         </defs>
 
@@ -222,7 +245,7 @@ export function SavingsPot({
                   in globals.css for why a CSS transition is enough here with
                   no client JS. */}
               <rect
-                className="pot-liquid"
+                className="pot-liquid pot-liquid-body"
                 x="0"
                 y={surface}
                 width="120"
@@ -235,9 +258,16 @@ export function SavingsPot({
                   muted fills start much closer to the body than the chart ramp
                   did, so the wash that used to lift the level was washing it
                   out instead. */}
-              <ellipse className="pot-liquid" cx={CX} cy={surface} rx={RX} ry={RY} fill={colour} />
               <ellipse
-                className="pot-liquid"
+                className="pot-liquid pot-liquid-surface"
+                cx={CX}
+                cy={surface}
+                rx={RX}
+                ry={RY}
+                fill={colour}
+              />
+              <ellipse
+                className="pot-liquid pot-liquid-surface"
                 cx={CX}
                 cy={surface}
                 rx={RX}
@@ -363,10 +393,30 @@ export function SavingsPot({
       </p>
 
       {/* The deadline the pots are ordered by, so the order is legible rather
-          than mysterious. */}
+          than mysterious.
+
+          **The preposition is spoken, not printed.** "bis 30. Sep 2026" is
+          81px of text in the 76px a card has at 320px, so it wrapped — and the
+          icon, centred against a two-line block, then pointed at nothing. The
+          calendar glyph already says which kind of date this is to anyone who
+          can see it; the `sr-only` copy keeps the full phrase for anyone who
+          cannot, the same trade the anomaly badges make with their kind word.
+          The date is *not* `whitespace-nowrap`: if a longer language or a
+          narrower card ever runs out of room again, two lines is the graceful
+          end of it and overflowing the card is not.
+
+          `dayLabel`, not `formatDay`: the latter's month table is English by
+          design, and this line printed "24 Dec 2026" on a German page. */}
       <p className="mt-1 mb-2 flex items-center justify-center gap-1 text-[11px] text-text-subtle">
-        <CalendarDays className="size-3" aria-hidden />
-        {pot.targetOn ? t("potDue", { date: formatDay(pot.targetOn) }) : t("potNoDue")}
+        <CalendarDays className="size-3 shrink-0" aria-hidden />
+        {due ? (
+          <>
+            <span className="sr-only">{t("potDue", { date: due })}</span>
+            <span aria-hidden>{due}</span>
+          </>
+        ) : (
+          t("potNoDue")
+        )}
       </p>
 
       {/* The same number the pot draws, as a bar. A cylinder is a poor
@@ -383,8 +433,19 @@ export function SavingsPot({
         aria-hidden
       >
         <div
-          className="h-full rounded-full transition-[width] duration-[650ms] ease-out"
-          style={{ width: `${Math.max(fill * 100, fill > 0 ? 3 : 0)}%`, background: colour }}
+          /* The width arrives as a custom property rather than as `width`
+             itself, so `.pot-bar-fill` in globals.css is the only rule setting
+             it. An inline `width` would outrank the `@starting-style` rule that
+             grows this bar from nothing on first render — the liquid's own
+             `y`/`cy` escape that only because SVG presentation attributes lose
+             to every author rule, and a style attribute does not. */
+          className="pot-bar-fill h-full rounded-full transition-[width] duration-[650ms] ease-out"
+          style={
+            {
+              "--pot-bar-width": `${Math.max(fill * 100, fill > 0 ? 3 : 0)}%`,
+              background: colour,
+            } as CSSProperties
+          }
         />
       </div>
     </div>

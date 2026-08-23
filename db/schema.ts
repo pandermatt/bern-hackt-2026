@@ -452,6 +452,70 @@ export const savingsAllocations = sqliteTable(
 );
 
 /**
+ * What the account holder decided about a merchant, overruling what the
+ * importer decided.
+ *
+ * `scripts/lib/statement.ts` assigns a category to every line at import time
+ * and puts anything it cannot place in `Other`; `lib/merchant-brands.ts`
+ * answers where the brand mark comes from. Both are code, shipped for
+ * everybody, and neither can keep up with a statement somebody uploads. This
+ * table is the same two answers given per account, by the person reading the
+ * ledger — set on `/account`, applied on read.
+ *
+ * **Applied on read, never written into `transactions`.** The rows stay
+ * exactly as the statement produced them, so an override can be changed or
+ * withdrawn without an import, and it covers lines that arrive *later* under
+ * the same merchant name for free. `applyMerchantOverrides` in
+ * `lib/merchant-overrides.ts` is the one place that swaps the category in, and
+ * every read that cares goes through it.
+ *
+ * Keyed on the **merchant name**, which is what the ledger stores and groups
+ * on — the same reason `MERCHANT_BRANDS` is name-keyed rather than slug-keyed.
+ *
+ * Created empty, so `userId` is NOT NULL here like `budgets`; see the note on
+ * `transactions.userId` for why that column is the exception. Both value
+ * columns are nullable and a row with neither is deleted rather than kept:
+ * "no opinion" is the absence of a row, not a row full of nulls.
+ */
+export const merchantOverrides = sqliteTable(
+  "merchant_overrides",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Matches `transactions.merchant` — the canonical name, not free text. */
+    merchant: text("merchant").notNull(),
+    /**
+     * The category this merchant's lines should read as, or NULL for "leave
+     * the importer's answer alone". One of `CATEGORIES` in
+     * `scripts/lib/statement.ts`, checked on the way in *and* on the way out:
+     * the catalog can lose an entry between the save and the read.
+     */
+    category: text("category"),
+    /**
+     * The bare domain the brand mark comes from ("uzh.ch"), or NULL when the
+     * account holder has not named one. Stored bare — no scheme, no path, no
+     * `www.` — because that is what the icon services take, and because it is
+     * a filename in the icon cache. `app/api/merchant-icon/[slug]/route.ts`
+     * validates the shape again before it reaches either.
+     */
+    domain: text("domain"),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    // One opinion per merchant per user, which is what makes saving an upsert
+    // rather than a read-then-write race — the same shape as `budgets`.
+    uniqueIndex("merchant_overrides_user_merchant_idx").on(
+      table.userId,
+      table.merchant,
+    ),
+  ],
+);
+
+/**
  * One browser's Web Push subscription — the endpoint a push service will
  * deliver to, plus the two keys that encrypt the payload for it.
  *
@@ -502,5 +566,6 @@ export type AnomalyRun = typeof anomalyRuns.$inferSelect;
 export type Budget = typeof budgets.$inferSelect;
 export type SavingsGoal = typeof savingsGoals.$inferSelect;
 export type SavingsAllocation = typeof savingsAllocations.$inferSelect;
+export type MerchantOverride = typeof merchantOverrides.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;

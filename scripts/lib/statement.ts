@@ -445,7 +445,7 @@ export function classify(slug: string, label: string): Rule {
 /**
  * The statement line's identity. Deduplicating on this is what stops the 12
  * credit-card payments — which appear byte-identical in both account exports —
- * from counting twice. Verified against the shipped files: 941 rows in, 929
+ * from counting twice. Verified against the shipped files: 950 rows in, 938
  * distinct keys out, and no duplicates *within* any single file — the Revolut
  * converter appends " (2)" to the second of two same-day, same-amount rows at
  * one merchant precisely so this key stays distinct.
@@ -464,4 +464,113 @@ export function naturalKey(row: Record<string, string>): string {
 /** `"46.96976052505031"` → `4697`. Rounds once, at the boundary. */
 export function toMinor(amount: string): number {
   return Math.round(Number(amount) * 100);
+}
+
+/**
+ * The same question as `classify`, asked of a **free-text bank label**.
+ *
+ * `classify` reads a converted export, where the merchant arrives pre-split as
+ * a slug (`SBB_CFF_FSS_Ticket_Shop`). An uploaded statement has no such
+ * column: what it carries is `EINKAUF ZKB VISA DEBIT MIGROS M BERN 23.01.26`,
+ * one string with the merchant buried in the middle of the bank's own noise.
+ *
+ * So: strip the noise, try the slug table, then look for a **canonical
+ * merchant name inside the remainder**, then fall back to `classify`'s own
+ * keyword rules. `MERCHANTS` stays the single source of both the category and
+ * the display name — this only widens how a line reaches it.
+ */
+export function classifyFreeText(label: string): Rule {
+  const cleaned = cleanLabel(label);
+  if (cleaned === "") return { name: "Unknown", category: "Other" };
+
+  // A label that *is* a slug, or that the exports would have spelled as one.
+  const exact = MERCHANTS[cleaned.replace(/\s+/g, "_")];
+  if (exact) return exact;
+
+  const hit = findMerchantName(cleaned);
+  if (hit) return hit;
+
+  // `classify`'s keyword regexes, and its "Other" fallback, on the cleaned
+  // label rather than the raw one. The slug lookup inside it misses by
+  // construction here, which is what the two passes above are for.
+  const rule = classify(cleaned, cleaned);
+  return rule.name === cleaned ? { ...rule, name: presentable(cleaned) } : rule;
+}
+
+/**
+ * Bank ceremony that says nothing about who was paid: the transaction verb,
+ * the card product, a masked card number, the trailing date. Dropping it is
+ * what lets the merchant pass below see a merchant.
+ */
+const LABEL_NOISE: RegExp[] = [
+  /^(einkauf|zahlung|belastung|gutschrift|lastschrift|dauerauftrag|kartenzahlung|kauf|bezug|purchase|payment|card payment|point of sale|pos)\b/i,
+  /\b(visa debit|visa|mastercard|maestro|debitkarte|kreditkarte|debit card|credit card|e-?banking|twint)\b/i,
+  /\bzkb|postfinance|revolut card\b/i,
+  /\b(nr\.?|no\.?)?\s*(x{4,}|\*{2,})\s*\d{2,4}\b/i,
+  /\b\d{2}[./]\d{2}[./]\d{2,4}\b/,
+  /\b\d{4}-\d{2}-\d{2}\b/,
+];
+
+/** The label with the ceremony removed, whitespace collapsed. */
+function cleanLabel(label: string): string {
+  let text = label.replace(/\s+/g, " ").trim();
+  for (const pattern of LABEL_NOISE) text = text.replace(pattern, " ");
+  return text.replace(/\s+/g, " ").replace(/^[\s,;:/-]+|[\s,;:/-]+$/g, "").trim();
+}
+
+/**
+ * An ALL-CAPS remainder set in the ledger's own casing. Card terminals shout;
+ * every merchant name in `MERCHANTS` does not, and a column of them should
+ * agree.
+ */
+function presentable(label: string): string {
+  if (/[a-zäöü]/.test(label)) return label;
+  return label
+    .toLowerCase()
+    .replace(/(^|[\s.'’\-/])([a-zäöü])/g, (_, lead, letter) => lead + letter.toUpperCase());
+}
+
+/**
+ * Canonical merchant names, longest first, each with the regex that finds it
+ * inside a label. Built once — `MERCHANTS` has a few hundred entries and this
+ * runs per uploaded row.
+ */
+let MERCHANT_MATCHERS: { pattern: RegExp; rule: Rule }[] | null = null;
+
+function merchantMatchers() {
+  if (MERCHANT_MATCHERS) return MERCHANT_MATCHERS;
+
+  const byName = new Map<string, Rule>();
+  for (const rule of Object.values(MERCHANTS)) {
+    const key = rule.name.toLowerCase();
+    if (!byName.has(key)) byName.set(key, rule);
+  }
+
+  MERCHANT_MATCHERS = [...byName.entries()]
+    .sort((a, b) => b[0].length - a[0].length)
+    .map(([name, rule]) => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      /*
+       * Word-boundaried, and `\b` will not do it: half these names end in a
+       * non-word character ("DO & CO", "Buchhaus.ch"). Names under four
+       * characters — BP, Eni, CRO, UPS, Pgo — have to match the *whole* label
+       * instead: contained, they fire on any label that happens to spell them,
+       * and a Belgian post office is not a filling station.
+       */
+      const pattern =
+        name.length < 4
+          ? new RegExp(`^${escaped}$`, "i")
+          : new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i");
+      return { pattern, rule };
+    });
+
+  return MERCHANT_MATCHERS;
+}
+
+/** The first canonical merchant name the label contains, longest name first. */
+function findMerchantName(label: string): Rule | null {
+  for (const { pattern, rule } of merchantMatchers()) {
+    if (pattern.test(label)) return rule;
+  }
+  return null;
 }

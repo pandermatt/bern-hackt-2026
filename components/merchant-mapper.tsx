@@ -1,0 +1,240 @@
+"use client";
+
+import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+
+import {
+  saveMerchantOverrides,
+  type MerchantMapping,
+} from "@/app/actions/merchant-overrides";
+import { MerchantAvatar } from "@/components/merchant-avatar";
+import { formatMoney } from "@/lib/insights";
+import { useCategoryLabel } from "@/lib/use-category-label";
+
+/** How many rows show before the list asks to be unfolded. */
+const PREVIEW = 12;
+
+type Field = { category: string; domain: string };
+
+/**
+ * The merchants the importer could not place, and what to do with them.
+ *
+ * `scripts/lib/statement.ts` files anything its rules cannot recognise under
+ * `Other`, and `lib/merchant-brands.ts` has no mark for most of them. Both are
+ * code, shipped for everybody, and neither can be taught about a statement
+ * somebody uploads. This is where the account holder answers both questions for
+ * themselves — the category the lines should read as, and the domain the logo
+ * comes from — and the answers are stored per account and applied on read (see
+ * `db/schema.ts`, `merchant_overrides`).
+ *
+ * Two things about the list are deliberate:
+ *
+ * - **A merchant stays on it after being filed.** The list is "what the
+ *   importer could not place", which is a fact about the statement and does not
+ *   change when somebody makes a decision about it — and a row that vanished on
+ *   save would read as the save having eaten it. The select shows the decision
+ *   instead.
+ * - **`Other` is a real option, and choosing it clears the row.** "Leave it
+ *   alone" is the absence of an opinion rather than an opinion that it belongs
+ *   in `Other`, so it is stored as no row at all.
+ *
+ * Fields are held as typed, and parsed once in the server action — the same
+ * split `components/budget-editor.tsx` makes, for the same reason: a
+ * half-finished "uzh." is a legitimate intermediate state and a field that
+ * rewrites itself under the cursor is a field fighting the person using it.
+ */
+export function MerchantMapper({ mapping }: { mapping: MerchantMapping }) {
+  const t = useTranslations("MerchantMapping");
+  // Category names are data, stored in English; they are translated where they
+  // are shown and nowhere else, so the option's *value* stays the stored key.
+  const categoryLabel = useCategoryLabel();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [expanded, setExpanded] = useState(false);
+  const [fields, setFields] = useState<Record<string, Field>>(() =>
+    Object.fromEntries(
+      mapping.merchants.map((row) => [
+        row.merchant,
+        { category: row.category, domain: row.domain },
+      ]),
+    ),
+  );
+
+  const dirty = mapping.merchants.some((row) => {
+    const field = fields[row.merchant];
+    return (
+      field !== undefined &&
+      (field.category !== row.category || field.domain.trim() !== row.domain)
+    );
+  });
+
+  function update(merchant: string, patch: Partial<Field>) {
+    setFields((previous) => ({
+      ...previous,
+      [merchant]: { ...previous[merchant], ...patch },
+    }));
+  }
+
+  function save() {
+    startTransition(async () => {
+      const result = await saveMerchantOverrides(
+        mapping.merchants.map((row) => ({
+          merchant: row.merchant,
+          category: fields[row.merchant]?.category ?? mapping.unfiled,
+          domain: fields[row.merchant]?.domain ?? "",
+        })),
+      );
+      if (result.ok) {
+        toast.success(t("saved"));
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
+
+  if (mapping.merchants.length === 0) {
+    return (
+      <p className="px-4 py-3.5 text-[13.5px] text-text-muted sm:px-5">
+        {t("empty")}
+      </p>
+    );
+  }
+
+  const shown = expanded
+    ? mapping.merchants
+    : mapping.merchants.slice(0, PREVIEW);
+
+  return (
+    <>
+      {/* Dividers are the panel's own surface showing through, the way every
+          other settings group does it — a grey border on grey is invisible. */}
+      <ul className="divide-y divide-surface">
+        {shown.map((row) => {
+          const field = fields[row.merchant] ?? {
+            category: row.category,
+            domain: row.domain,
+          };
+
+          return (
+            <li
+              key={row.merchant}
+              className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3 sm:px-5"
+            >
+              <div className="flex min-w-0 flex-1 basis-[13rem] items-center gap-2.5">
+                {/* Keyed on the saved domain, and versioned by it: the mark is
+                    cached per account for an hour, and this is the one page
+                    where somebody has just changed which domain it comes from
+                    and is looking straight at it. */}
+                <MerchantAvatar
+                  name={row.merchant}
+                  size={20}
+                  version={row.domain || undefined}
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-medium text-text">
+                    {row.merchant}
+                  </p>
+                  <p className="text-[13px] text-text-muted">
+                    {t("lines", { count: row.count })}
+                    {" · "}
+                    <span className="font-mono tabular-nums">
+                      {formatMoney(row.spentMinor)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Stacked below `sm`, side by side from there. Sharing one
+                  phone row left the select about 200px wide, which truncates
+                  the longest option — and the longest option is the default
+                  one every unfiled merchant is showing. */}
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <label className="min-w-0 sm:flex-none">
+                  <span className="sr-only">
+                    {t("categoryFieldLabel", { merchant: row.merchant })}
+                  </span>
+                  <select
+                    value={field.category}
+                    onChange={(event) =>
+                      update(row.merchant, { category: event.target.value })
+                    }
+                    /* 16px on a phone, 13px from `sm`: anything smaller than
+                       16px makes iOS zoom the page on focus. The same pair the
+                       budget editor's inputs use. */
+                    className="h-9 w-full cursor-pointer truncate rounded-md border border-line-strong bg-surface px-2 text-[16px] text-text transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-[11rem] sm:text-[13px]"
+                  >
+                    {mapping.categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category === mapping.unfiled
+                          ? t("leaveUnfiled", { category: categoryLabel(category) })
+                          : categoryLabel(category)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="min-w-0 sm:flex-none">
+                  <span className="sr-only">
+                    {t("domainFieldLabel", { merchant: row.merchant })}
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="url"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={field.domain}
+                    onChange={(event) =>
+                      update(row.merchant, { domain: event.target.value })
+                    }
+                    /* The placeholder is what the shipped map would answer on
+                       its own, so an empty field reads as "this is where the
+                       logo already comes from" rather than as a gap. */
+                    placeholder={row.suggestedDomain ?? t("domainPlaceholder")}
+                    className="h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[16px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-[10.5rem] sm:text-[13px]"
+                  />
+                </label>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-surface px-4 py-3 sm:px-5">
+        {mapping.merchants.length > PREVIEW && (
+          <button
+            type="button"
+            onClick={() => setExpanded((open) => !open)}
+            /* `bg-surface` with a `surface-hover` hover: on a grey panel a
+               button that hovers to `surface-muted` hovers to its own ground
+               and nothing happens. */
+            className="mr-auto flex h-9 cursor-pointer items-center rounded-md border border-line-strong bg-surface px-2.5 text-[13px] font-medium text-text transition-colors hover:bg-surface-hover"
+          >
+            {expanded
+              ? t("showFewer")
+              : t("showAll", { count: mapping.merchants.length })}
+          </button>
+        )}
+
+        {dirty && (
+          <span className="text-[12.5px] text-text-muted">
+            {t("unsavedChanges")}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={save}
+          disabled={pending || !dirty}
+          className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-accent px-4 text-[13.5px] font-medium text-[var(--primary-foreground)] transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-50"
+        >
+          {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+          {t("save")}
+        </button>
+      </div>
+    </>
+  );
+}

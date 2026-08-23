@@ -33,8 +33,8 @@ never through the UI.
   "tighten" this to NOT NULL** without a deliberate migration plan — and for
   the same reason, do not add a NOT NULL column to `transactions` once it has
   rows.
-- **`budgets`, `savings_goals` and `savings_allocations` are the writable
-  tables.** `transactions` is read-only in the
+- **`budgets`, `savings_goals`, `savings_allocations` and `merchant_overrides`
+  are the writable tables.** `transactions` is read-only in the
   UI; budget limits are not. Its `userId` is **NOT NULL**, unlike
   `transactions.userId` — that column is nullable because it was added to a
   populated table and `drizzle-kit push` deploys without `--force`, whereas
@@ -42,6 +42,19 @@ never through the UI.
   on `(user_id, category)` is what makes saving an upsert rather than a
   read-then-write race. The two savings tables are created empty for the same
   reason and follow the same shape.
+- **`merchant_overrides` is applied on read and never written into
+  `transactions`.** It holds what the account holder decided about a merchant —
+  the category its lines belong to, and the domain its logo comes from — set on
+  `/account` and keyed on the merchant *name*, like `MERCHANT_BRANDS`. The
+  statements stay exactly as they were imported, so a decision can be changed
+  or withdrawn without a re-import and covers lines that arrive later under the
+  same name for free. `applyMerchantOverrides` in `lib/merchant-overrides.ts` is
+  the only implementation of that swap, and **every read that cares about a
+  category has to go through it** — `ownedRows` in `app/actions/transactions.ts`
+  and in `app/actions/budget.ts`, and the row read in `runScan`. Miss one and
+  the donut, the budget and the ledger disagree about the same franc. A row with
+  neither a category nor a domain is deleted rather than stored: no opinion is
+  the absence of a row.
 - **An allocation is keyed by `(goal_id, month)`, not appended as a log.** The
   page's question is "how much of March have I already put away", and with a
   log that answer changes meaning the moment someone revises an allocation.
@@ -114,6 +127,11 @@ Unchanged from the template this app grew out of, and still exactly true.
 
 ## Data access
 
+- **A `"use server"` module may only export async functions.** A plain `const`
+  there fails the build, which is why `UNFILED` sits in
+  `lib/merchant-overrides.ts` and reaches the mapper form as a field of the
+  payload — that module imports `@/db`, so a client component cannot import it
+  either.
 - Every read lives in `app/actions/transactions.ts` behind `"use server"`.
   Client components import from there or from `lib/insights.ts`; they never
   import `@/db`.
@@ -263,35 +281,53 @@ Unchanged from the template this app grew out of, and still exactly true.
   theme changes; it returns `null` until mounted, so the first frame is already
   in the right palette. Don't duplicate the palette into TypeScript — that is
   what breaks "restyle by editing tokens".
-- **The budget radar's dial is refitted per month, and bends when a month
-  needs it.** `lib/budget-scale.ts` owns that arithmetic; the component only
-  draws through the `toDial` / `toMinor` pair it hands back. While the month's
-  peak stays inside `OUTLIER_CAP` × the largest budget the rings are the plain
-  linear franc steps they always were. Past that they go logarithmic, with the
-  knee **solved** so the largest budget keeps the radius the cap would have
-  given it — which is what makes the two modes continuous and stops the dial
-  popping as you page months. Both halves are load-bearing: a fixed rim leaves
-  most months drawing a tiny shape in a big empty dial, and a linear one fitted
-  to a single runaway category (CHF 8'200 against limits averaging CHF 770)
-  pushes every dashed ring into a knot at the hub, which is the one thing the
-  chart exists to show.
-- **The rings are chosen first and the curve fitted through them.** Round
-  francs at every ring (`0 · 440 · 1'200 · 2'500 · 4'800 · 8'900` for the month
-  above), then piecewise interpolation between them — so a tick never prints
-  `CHF 1'237`, and the printed figure is the *exact* value of the ring it sits
-  on rather than a tidied-up approximation. `roundish` rounds the rim **up**,
-  so nothing ever falls outside the dial.
-- **Nothing clips any more.** The dial used to stop at the cap and clamp
-  everything past it onto the rim behind a `+` on the outer tick, which threw
-  away the one figure the reader was looking at and drew CHF 3'000 and
-  CHF 8'200 as the same spoke. **Don't reintroduce a clamp** — bending the
-  scale is what replaced it. The `+` went with it: every tick now means what
-  it says.
+- **The budget radar is normalised per spoke: the dashed budget shape is a
+  circle at 100%.** Every category is drawn as a share of *its own* budget
+  (`shareOf`), so the rings are percentages and there is exactly one thing to
+  look for — fill outside circle. A single shared franc dial was tried first
+  and is what this replaced: categories are budgeted an order of magnitude
+  apart, so the dashed shape came out as a spiky star whose points said nothing
+  about how the month went, and every pair of spokes had to be measured by eye
+  before the picture meant anything. **Don't put the spokes back on one franc
+  scale.** What it costs is magnitude — CHF 60 of a CHF 50 budget draws the
+  same spoke as CHF 6'000 of a CHF 5'000 one — and the francs are carried by
+  the tooltip and the `sr-only` table instead, which is why neither is
+  optional.
+- **The dial is still refitted per month, and still bends when a month needs
+  it.** `lib/budget-scale.ts` owns that arithmetic; the component only draws
+  through the `toDial` / `toPercent` pair it hands back, in basis points of
+  budget (`BUDGET_RING` = 10'000 = 100%). While the month's peak stays inside
+  `OUTLIER_CAP` × budget the rings are plain linear percentage steps. Past that
+  they go logarithmic, with the knee **solved** so the budget ring keeps the
+  radius the cap would have given it — which is what makes the two modes
+  continuous and stops the dial popping as you page months. A month at 683% of
+  one limit and ~95% of four others is the case: on a linear dial fitted to the
+  outlier, "at your line" and "safely under" are three pixels apart.
+- **The budget ring always lands *on* a gridline, and never on the rim.** Every
+  linear step the fitter can pick (10 / 20 / 25 / 50 points) divides 100, and
+  `MIN_RIM` is 120% so the magnitude stays pinned at one decade; on a
+  compressed dial `REFERENCE_RADIUS × COMPRESSED_RINGS` is exactly 2. That is
+  what stops the dashed circle floating a hair off a ring all the way round, or
+  being drawn over by the outer axis line. `tests/budget-scale.test.ts` pins it
+  across the whole range; if you touch `MIN_RIM`, `COMPRESSED_RINGS` or the
+  step set, that test is the alarm.
+- **The rings are chosen first and the curve fitted through them.** Whole
+  percentage points at every ring (`0 · 36 · 100 · 210 · 400 · 740` for the
+  month above), then piecewise interpolation between them — so a tick never
+  prints `137%`, and the printed figure is the *exact* value of the ring it
+  sits on rather than a tidied-up approximation. `roundish` rounds the rim
+  **up**, so nothing ever falls outside the dial.
+- **Nothing clips.** The dial used to stop at the cap and clamp everything past
+  it onto the rim behind a `+` on the outer tick, which threw away the one
+  figure the reader was looking at and drew 250% and 683% as the same spoke.
+  **Don't reintroduce a clamp** — bending the scale is what replaced it. The
+  `+` went with it: every tick now means what it says.
 - **A compressed month says so, and a linear one does not.** `radarCompressed`
   renders under the chart only when `dial.compressed`. A scale that reads
   differently than it looks has to admit it; a standing caveat under a dial
-  that is in fact linear is its own kind of wrong. A percent-of-budget scale
-  solves the framing outright but was rejected: the axis has to read in francs.
+  that is in fact linear is its own kind of wrong. Note the caveat is about the
+  *spacing* of the rings, not their units — the dial reads in percent in both
+  modes.
 - **The radar's radius is measured, not a percentage.** ECharts resolves
   `radius: "65%"` against `min(width, height) / 2`, but what has to fit outside
   the dial is a *text label*, and text does not scale with the container. One
@@ -305,10 +341,11 @@ Unchanged from the template this app grew out of, and still exactly true.
   smaller type, names broken at their last space, and only the rim tick — six
   axis numbers queue up one short spoke, and the series paints over them. The
   rim tick goes too once the dial is under 60px.
-- **Every category name carries its share of budget underneath it.** A franc
-  scale cannot separate "half the budget" from "twice it" for a small category
-  near the hub, so the shape carries magnitude and the printed percentage
-  carries the verdict. Neither alone is the chart; don't drop one for tidiness.
+- **Every category name carries its share of budget underneath it**, and it is
+  the same figure the spoke is drawn from — `share()` feeds both, so the shape
+  and the number cannot disagree. The shape carries the comparison and the
+  number carries the precision a few pixels of radius cannot (96% against 104%).
+  Don't drop one for tidiness.
 - **The percentage under each axis name is `--positive`/`--danger`, not the
   chart fills.** They are 13px glyphs. `--chart-2` (#a5c400) is 2:1 on white
   and unreadable as text; the fill it labels is fine because a 2.5px stroke
@@ -370,7 +407,67 @@ Unchanged from the template this app grew out of, and still exactly true.
   `min-content` and pushes the input form off the bottom of the screen. The
   shell owns the height through two className seams (`className`,
   `scrollClassName`) — not a `variant` prop, which would bake the page's
-  layout into the shared component.
+  layout into the shared component. `className` is also how the shell *hides*
+  the panel: below `lg` it is `max-lg:hidden` until opened, rather than
+  unmounted, so the input (and the ref the "other" button focuses) stays in
+  the tree.
+- **The dragon is called Batzi, and the assistant *is* him.** The card on
+  `/home` is headed "Ask Batzi" rather than "Money assistant" — a named mascot
+  is what the page has instead of a product name, and the name is a *Batzen*,
+  the old coin he is holding in `coin`. Anything the app says about that
+  character uses the name (`Chat.title`, `Chat.thinking`, `Chat.inputLabel`,
+  `Home.dragonAlt.*`); the landing page's canned exchange still says "the
+  dragon" and is the one place left to bring across. Don't reintroduce
+  "assistant" as a *name* — it is fine as a common noun in prose.
+- **The card's tagline is `lg`-only.** `Chat.subtitle` is a second line under
+  a title that is already an instruction, and on the folded phone panel a line
+  of header costs a chip's worth of transcript. It comes back from `lg`, where
+  there is room for it.
+- **On a phone there is no panel until it is asked for, and the dragon is
+  why.** Below `lg` `HomeChat` renders `ChatLauncher` instead: a wrapped block
+  of question pills capped at `max-h-38` — three rows and a glimpse of the
+  fourth — with an "other" pill under it, and no transcript or input row at
+  all. That is ~250px of card against ~380, and the difference is the mascot's:
+  he is what the page is arranged around and what is saying the nudges, and at
+  the full height he started below the fold. Two shapes were tried and are
+  worth not repeating: wrapping *freely* is seven rows and 312px in German,
+  which is the panel it replaces; one sideways-scrolling row is 112px but fits
+  a single question on a 390px screen and hides the rest behind a gesture
+  nothing announces. The cap plus the bottom fade is the middle — and the cap
+  must not land on a row boundary, or the box reads as the end of the list.
+  Folded is the SSR state, like the nudge deck's, so `/home` arrives with the
+  dragon in frame and stays that way with JS off. Three things hang off it: a
+  **send** opens the panel (`HomeChat` wraps `chat.send`), because asking is
+  the one gesture that means "I want to read the answer" — and nothing closes
+  it again, since collapsing under a reader is the shifting page the fixed
+  height exists to prevent; **"other" is the one thing that focuses the
+  input**, which is the on-demand case `ChatPanel`'s `inputRef` was kept for
+  (an effect on the open flag, because focusing a `display: none` element is a
+  no-op), and it sits *outside* the scroller because with the input folded a
+  question nobody offered has no other way in; and the pills are the
+  **follow-ups** once there are any, since folded is a state a reader comes
+  back to mid-conversation and "what to ask next" is the honest content for it
+  either way.
+- **The chat is drawn in the page's own vocabulary, not its own.** The card is
+  `rounded-lg border border-line bg-surface` — `components/nudge-card.tsx`'s
+  shape, since the two sit one above the other on `/home` — and not the
+  `rounded-xl` shadowed box it was. Every question pill is `CHAT_PILL` from
+  `chat-panel.tsx`, which is `components/app-header.tsx`'s button pill down to
+  the `shadow-2xs` and the `active:scale-95`; the launcher renders the same
+  constant. It carries `max-w-full` and **not** `shrink-0` — these pills wrap
+  inside their box, and a pill that cannot shrink runs a long German question
+  straight out of the card. The follow-up row under the input is the exception,
+  since it scrolls sideways, and adds `shrink-0 whitespace-nowrap` at the call
+  site. Bubbles fill with `--surface-muted` rather than a bordered `--bg`,
+  which is white on white in light mode. `CHAT_PILL_SHAPE` exists for the one
+  pill that wants other colours: append a second `bg-*` to the full constant
+  and which one wins is down to the cascade, not the order you wrote them in.
+  There is no rule under the card's header any more — it separated a title from
+  the one thing that title introduces.
+- **The transcript's auto-scroll skips an empty conversation.** There is
+  nothing to follow before the first turn, and following anyway is visible at
+  the folded size: the page opened on the *last* starter chip with the one
+  above it sliced in half.
 - **The inline panel does not autofocus.** Focusing an input near the top of a
   phone page raises the keyboard on arrival and shoves away what the reader
   came for, so `HomeChat` passes no `inputRef`. The prop survives on
@@ -382,6 +479,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   ground for words. Every string down there carries its own ground — the cards
   on `bg-surface`, and the all-clear line and the "show all" toggle on surface
   pills, for exactly this reason.
+- **`/home`'s column stretches with `flex-1`, never `min-h-full`.** The mascot
+  is placed by `mt-auto` — bottom of the *page*, and the deck unfolds upwards
+  out of him — and that needs free space to claim. `min-height: 100%` there
+  resolved against an ancestor chain whose height is a minimum rather than a
+  definite one, so it collapsed to nothing and the column was merely as tall as
+  its content; it went unnoticed only because the chat used to overflow a phone
+  screen on its own. `main` is a flex column and the page column is its growing
+  child.
 - **That gradient has to be carried under the tab bar by hand.** `<body>`
   reserves the floating bar's height as its *own* `app-shell:pb-30`, and
   padding paints the body's `bg-bg` — invisible on every other page, whose
@@ -474,6 +579,17 @@ Unchanged from the template this app grew out of, and still exactly true.
   stacking order would be behind that too. A folded card carries `inert` —
   clipped to nothing is not the same as gone, and without it the link inside
   keeps its place in the tab order.
+- **A merchant tile is initials with the mark laid over them, and the route
+  decides which one shows.** `MerchantAvatar` is a server component and must
+  stay one, so it cannot react to a failed load — instead the monogram is the
+  ground and the `<img>` is painted on top, and `MERCHANT_MARK_SCRIPT` (one
+  capturing `error` listener, rendered once by the layout) hides a mark that
+  404s. It sets `hidden` rather than removing the element, because a missing
+  element is a hydration mismatch React resolves by rebuilding the tree. The
+  avatar asks for a mark for **every** merchant: whether one exists is not a
+  fact `lib/merchant-brands.ts` holds — a mapped domain can have no favicon, a
+  guess can miss, and an account can name its own domain on `/account` — so the
+  route answers it and a 404 costs the initials nothing.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.
@@ -564,11 +680,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   identical Swiss tickets bought together — same day, merchant and amount —
   are one key, and the dedupe would eat the second; it ships with " (2)"
   appended to its name. Do the same in any future conversion.
-- **Salary lands every month of the covered range.** The 2026 statements only
-  carried May–July paydays, so Jan–Apr and Aug rows were added by hand on the
-  same pattern (CHF 5'617.70 from Employer AG, 22nd–25th, a weekday). Keep
-  the every-month invariant if the range grows — the balance line and the
-  income tiles are read for it.
+- **Salary, rent and Google One land every month of the covered range.** The
+  2026 statements only carried May–July paydays and rents and a Jan–Apr
+  Google One run, so the missing months were added by hand on the same
+  patterns: salary (CHF 5'617.70) and Miete (CHF 3'000) together on the
+  payday, 22nd–25th and a weekday — in the real months the rent leaves the
+  account the day the salary arrives — and Google One (CHF 3) on the 23rd.
+  Keep the every-month invariant if the range grows — the balance line, the
+  income tiles and the recurring-payment rules are read for it.
 - **The opening balance is CHF 20'000** — `OPENING_BALANCE_MINOR` in
   `scripts/lib/statement.ts`, shared by both importers and pinned by
   `tests/demo-data.test.ts`. Change it there and nowhere else.
@@ -604,8 +723,8 @@ Unchanged from the template this app grew out of, and still exactly true.
   with `ERR_REQUIRE_ASYNC_MODULE`. Keep the wrapper.
 - **`naturalKey` — `date|type|source|target|amount|name` — is what makes the
   import idempotent.** A credit-card payment appears in *both* account exports,
-  once per side; without the dedupe those 12 lines count twice. 941 raw lines →
-  929 rows. `transactions.externalId` stores the key, unique per user.
+  once per side; without the dedupe those 12 lines count twice. 950 raw lines →
+  938 rows. `transactions.externalId` stores the key, unique per user.
 - **`MERCHANTS` in `scripts/lib/statement.ts` is the single source of both the
   category and the canonical merchant name.** The exports spell the same
   merchant several ways; grouping on the raw label silently splits the ranking.
@@ -638,6 +757,55 @@ Unchanged from the template this app grew out of, and still exactly true.
 - `tests/seed-rules.test.ts` asserts all of the above against the shipped
   files. If you change the merchant table or swap the exports, that is the test
   that will tell you what broke.
+
+## Uploaded statements
+
+The third way rows enter an account, and the only one a person can reach:
+`/account` → Data → Import your own CSV.
+
+- **The uploader appends; the other two importers replace.** `lib/csv-upload.ts`
+  never deletes, so no `transactions.id` is reissued and it must **not** call
+  `rebindAnomalies` — every stored finding stays bound to the row it describes.
+  (The three callers of that function are still `scripts/seed.ts`,
+  `lib/demo-loader.ts` and `lib/synthetic-generator.ts`, and all three
+  delete-then-insert.) The new rows do change the account's fingerprint, which
+  is how `getAnomalyScanState` already reports the scan as outdated.
+- **Dedupe is the unique `(user_id, external_id)` index**, via
+  `onConflictDoNothing().returning()` — the row count that comes back is what
+  separates "imported" from "already there". Re-uploading an overlapping month
+  is a normal thing to do and reads as a no-op, not an error.
+- **The natural key carries an occurrence suffix** (`…|amount|text#2`) for a
+  line repeated inside *one* file. Two identical charges on one day are real —
+  the shipped Revolut export has a pair, disambiguated by hand with `" (2)"` —
+  and without the suffix the dedupe eats the second one.
+- **`lib/csv-import.ts` is pure and client-safe, and that is load-bearing.**
+  The dialog runs it in the browser to sniff the delimiter, detect the columns
+  and draw the preview — so nothing leaves the device until someone presses
+  import — and the action runs the same module server-side on the same file, so
+  the preview cannot disagree with the ledger. Keep `@/db`, `server-only` and
+  drizzle out of it, the same way `lib/insights.ts` does, and keep it free of
+  `new Date()`: a booking date is a calendar day.
+- **A line that cannot be read is counted, never dropped.** `normalizeRows`
+  returns `skipped` with a line number and a reason, the dialog prints them,
+  and the toast repeats the count. "312 imported" over a file of 400 is a
+  silent lie about someone's money.
+- **Ambiguous dates are read day-first** (`01/02/2026` is 1 February), because
+  every bank shipping into this app writes the day first and a reader has to
+  pick one. Guessing per row would put half a statement in the wrong month.
+- **`classifyFreeText` in `scripts/lib/statement.ts` is the free-text sibling of
+  `classify`**, not a replacement: it strips the bank's ceremony (`EINKAUF ZKB
+  VISA DEBIT …`), tries the slug table, then looks for a canonical `MERCHANTS`
+  name inside what is left, then falls through to `classify`'s keyword rules.
+  Names under four characters (BP, Eni, CRO, UPS) must match the *whole* label
+  — contained, they fire on any label that happens to spell them. `KEYWORDS`
+  stays untouched: it is read by `scripts/seed.ts` too, so an entry added there
+  moves the shipped statements and `tests/seed-rules.test.ts` with them, which
+  is why the salary hint lives in `lib/csv-upload.ts` instead.
+- **`serverActions.bodySizeLimit` in `next.config.ts` exists for this feature.**
+  A Server Action body is capped at 1 MB by default and the uploader posts the
+  file; the app's own cap is `MAX_CSV_BYTES` (2 MB), checked in the browser and
+  again in the action, so the limit someone hits comes with a sentence rather
+  than as a framework 413.
 
 ## Anomaly detection
 
