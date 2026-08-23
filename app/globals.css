@@ -783,6 +783,10 @@
    it reads as a flourish under a title rather than a progress bar. */
 .rainbow-underline {
   height: 2px;
+  /* Owned by the class rather than the call sites: every page sets the gap
+     above with `mt-2`, and the flourish needs more air under it than the
+     subtitle's own `mt-1` gives before it reads as underlining that line. */
+  margin-bottom: 0.5rem;
   border-radius: 999px;
   background-image: linear-gradient(
     90deg,
