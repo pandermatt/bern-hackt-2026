@@ -107,9 +107,23 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
           const share = limit && limit > 0 ? (row.usedMinor / limit) * 100 : 0;
 
           return (
+            /* A declared grid rather than a wrapping flex row. The row
+               carries four things of fixed-ish width and on a phone they
+               cannot share a line, so as flex items the input wrapped on its
+               own and kept its 8.5rem — the one field a person came here to
+               fill sat as a stub against the left edge with a lane of dead
+               space beside it. Wrapping is a fallback, not a layout.
+
+               Below `sm` the grid is two columns — the icon and everything
+               else — and the three text blocks stack down the second one, so
+               the input gets the whole width of the row. From `sm` up all four
+               sit on one declared line and nothing wraps at all. The three
+               placed items carry an explicit `sm:row-start-1`, which is what
+               collapses the phone's stack back into that line; the icon and
+               the name are auto-placed into what is left of it. */
             <li
               key={row.category}
-              className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 transition-colors hover:bg-surface-hover sm:px-5"
+              className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors hover:bg-surface-hover sm:grid-cols-[2rem_minmax(9rem,1fr)_8.5rem_8.5rem] sm:gap-x-4 sm:gap-y-0 sm:px-5"
             >
               {/* The category's colour, as its picture rather than as a
                   swatch — same slot, same `slotsOf` map the radar reads, so
@@ -147,7 +161,10 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                 <CategoryIcon className="size-[18px]" />
               </span>
 
-              <div className="min-w-[9rem] flex-1">
+              {/* `min-w-0`, because a grid item's default `min-width: auto`
+                  is its content and a long suggestion would push the column
+                  wider than the phone. */}
+              <div className="min-w-0">
                 <p className="text-[14px] font-medium text-text">
                   {categoryLabel(row.category)}
                 </p>
@@ -156,7 +173,13 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                 </p>
               </div>
 
-              <div className="w-[8.5rem] shrink-0 text-right">
+              {/* Stacked under the name it belongs to on a phone, and laid
+                  out as a baseline row there rather than as two lines: the two
+                  figures are one statement ("CHF 512.30 · 122% of limit") and
+                  the row is already three lines tall. It wraps rather than
+                  overflowing, because the German over-limit string is half
+                  again as wide as the column. */}
+              <div className="col-start-2 flex min-w-0 flex-wrap items-baseline gap-x-2 sm:col-start-3 sm:row-start-1 sm:block sm:text-right">
                 <p
                   className={`font-mono text-[13px] tabular-nums ${
                     over ? "text-danger" : "text-text"
@@ -164,7 +187,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                 >
                   {formatMoney(row.usedMinor)}
                 </p>
-                <p className="mt-0.5 font-mono text-[11.5px] tabular-nums text-text-subtle">
+                <p className="font-mono text-[11.5px] tabular-nums text-text-subtle sm:mt-0.5">
                   {limit === null
                     ? t("spent")
                     : t(over ? "shareOfLimitOver" : "shareOfLimit", {
@@ -173,7 +196,11 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                 </p>
               </div>
 
-              <label className="shrink-0">
+              {/* The last line of the phone's stack, full width of the
+                  column — aligned under the category rather than under its
+                  icon, so the rows still read as a list. The fourth column
+                  from `sm` up. */}
+              <label className="col-start-2 sm:col-start-4 sm:row-start-1">
                 <span className="sr-only">
                   {t("limitFieldLabel", {
                     category: categoryLabel(row.category),
@@ -190,7 +217,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                     }))
                   }
                   placeholder={t("noLimitPlaceholder")}
-                  className="h-9 w-[8.5rem] rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className="h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 />
               </label>
             </li>
