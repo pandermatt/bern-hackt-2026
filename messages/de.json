@@ -304,7 +304,7 @@
     "targetDateLabel": "Zieldatum",
     "targetDateOptional": "Zieldatum (optional)",
     "potDue": "bis {date}",
-    "potNoDue": "kein Zieldatum",
+    "potNoDue": "ohne Datum",
     "transferTitle": "Geld in {to} verschieben",
     "transferDescription": "{amount} sind in {from} verfügbar.",
     "transferFieldLabel": "Zu verschiebender Betrag (CHF)",

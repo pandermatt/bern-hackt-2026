@@ -304,7 +304,7 @@
     "targetDateLabel": "Target date",
     "targetDateOptional": "Target date (optional)",
     "potDue": "by {date}",
-    "potNoDue": "no target date",
+    "potNoDue": "no date",
     "transferTitle": "Move money into {to}",
     "transferDescription": "{amount} is available in {from}.",
     "transferFieldLabel": "Amount to move (CHF)",
