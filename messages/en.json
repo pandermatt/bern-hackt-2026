@@ -646,6 +646,8 @@
     "profile": "Profile",
     "preferences": "Preferences",
     "data": "Data",
+    "merchants": "Merchants",
+    "merchantsNote": "Applies to every line from that merchant.",
     "colourTheme": "Colour theme",
     "colourThemeNote": "Applies to this browser only.",
     "language": "Language",
@@ -653,6 +655,26 @@
     "dangerZone": "Danger zone",
     "deleteAccount": "Delete account",
     "deleteAccountNote": "Permanently removes your account and every transaction in it."
+  },
+  "MerchantMapping": {
+    "empty": "Every merchant in your statements was recognised — nothing is filed under Other.",
+    "lines": "{count, plural, one {# line} other {# lines}}",
+    "leaveUnfiled": "{category} (unchanged)",
+    "categoryFieldLabel": "Category for {merchant}",
+    "domainFieldLabel": "Logo domain for {merchant}",
+    "domainPlaceholder": "example.ch",
+    "unsavedChanges": "Unsaved changes",
+    "save": "Save merchants",
+    "saved": "Merchants saved.",
+    "showAll": "Show all {count}",
+    "showFewer": "Show fewer"
+  },
+  "MerchantMappingErrors": {
+    "notSignedIn": "Sign in to file a merchant.",
+    "malformed": "That mapping looks malformed.",
+    "unknownCategory": "“{category}” is not a category.",
+    "notADomain": "“{domain}” is not a domain. Try something like uzh.ch.",
+    "saveFailed": "Could not save that mapping. Try again."
   },
   "Profile": {
     "yourName": "Your name",

@@ -33,8 +33,8 @@ never through the UI.
   "tighten" this to NOT NULL** without a deliberate migration plan — and for
   the same reason, do not add a NOT NULL column to `transactions` once it has
   rows.
-- **`budgets`, `savings_goals` and `savings_allocations` are the writable
-  tables.** `transactions` is read-only in the
+- **`budgets`, `savings_goals`, `savings_allocations` and `merchant_overrides`
+  are the writable tables.** `transactions` is read-only in the
   UI; budget limits are not. Its `userId` is **NOT NULL**, unlike
   `transactions.userId` — that column is nullable because it was added to a
   populated table and `drizzle-kit push` deploys without `--force`, whereas
@@ -42,6 +42,19 @@ never through the UI.
   on `(user_id, category)` is what makes saving an upsert rather than a
   read-then-write race. The two savings tables are created empty for the same
   reason and follow the same shape.
+- **`merchant_overrides` is applied on read and never written into
+  `transactions`.** It holds what the account holder decided about a merchant —
+  the category its lines belong to, and the domain its logo comes from — set on
+  `/account` and keyed on the merchant *name*, like `MERCHANT_BRANDS`. The
+  statements stay exactly as they were imported, so a decision can be changed
+  or withdrawn without a re-import and covers lines that arrive later under the
+  same name for free. `applyMerchantOverrides` in `lib/merchant-overrides.ts` is
+  the only implementation of that swap, and **every read that cares about a
+  category has to go through it** — `ownedRows` in `app/actions/transactions.ts`
+  and in `app/actions/budget.ts`, and the row read in `runScan`. Miss one and
+  the donut, the budget and the ledger disagree about the same franc. A row with
+  neither a category nor a domain is deleted rather than stored: no opinion is
+  the absence of a row.
 - **An allocation is keyed by `(goal_id, month)`, not appended as a log.** The
   page's question is "how much of March have I already put away", and with a
   log that answer changes meaning the moment someone revises an allocation.
@@ -114,6 +127,11 @@ Unchanged from the template this app grew out of, and still exactly true.
 
 ## Data access
 
+- **A `"use server"` module may only export async functions.** A plain `const`
+  there fails the build, which is why `UNFILED` sits in
+  `lib/merchant-overrides.ts` and reaches the mapper form as a field of the
+  payload — that module imports `@/db`, so a client component cannot import it
+  either.
 - Every read lives in `app/actions/transactions.ts` behind `"use server"`.
   Client components import from there or from `lib/insights.ts`; they never
   import `@/db`.
@@ -561,6 +579,17 @@ Unchanged from the template this app grew out of, and still exactly true.
   stacking order would be behind that too. A folded card carries `inert` —
   clipped to nothing is not the same as gone, and without it the link inside
   keeps its place in the tab order.
+- **A merchant tile is initials with the mark laid over them, and the route
+  decides which one shows.** `MerchantAvatar` is a server component and must
+  stay one, so it cannot react to a failed load — instead the monogram is the
+  ground and the `<img>` is painted on top, and `MERCHANT_MARK_SCRIPT` (one
+  capturing `error` listener, rendered once by the layout) hides a mark that
+  404s. It sets `hidden` rather than removing the element, because a missing
+  element is a hydration mismatch React resolves by rebuilding the tree. The
+  avatar asks for a mark for **every** merchant: whether one exists is not a
+  fact `lib/merchant-brands.ts` holds — a mapped domain can have no favicon, a
+  guess can miss, and an account can name its own domain on `/account` — so the
+  route answers it and a 404 costs the initials nothing.
 - **Reserve chart height in `app/loading.tsx`.** A canvas sizes itself from its
   container and cannot reserve its own space, so the skeleton has to carry the
   same pixel heights the components do.

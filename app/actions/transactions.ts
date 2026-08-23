@@ -19,6 +19,10 @@ import { db } from "@/db";
 import { anomalies, transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import {
+  applyMerchantOverrides,
+  merchantOverridesFor,
+} from "@/lib/merchant-overrides";
+import {
   getAnomalyKindByTransaction,
   getAnomalyScanState,
   getStoredAnomaliesForPage,
@@ -248,18 +252,28 @@ function buildFilterConditions(userId: number, filters: Filters): SQL[] {
 }
 
 /**
- * Every row this account owns. Scoped by `userId` like every other query in
- * the app — rows with a NULL owner match nobody, by construction.
+ * Every row this account owns, as the account holder has decided they read.
+ * Scoped by `userId` like every other query in the app — rows with a NULL owner
+ * match nobody, by construction.
+ *
+ * The overrides are applied *here*, on the one read the dashboard, the ledger,
+ * the facets, the charts and the assistant all share, rather than at each of
+ * those. A merchant re-filed on `/account` has to be re-filed everywhere at
+ * once or the donut and the ledger would disagree about the same franc.
+ * `app/actions/budget.ts` and the anomaly scan read their own rows and apply
+ * the same function for the same reason.
  */
 async function ownedRows(): Promise<Transaction[] | null> {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  return db
+  const rows = await db
     .select()
     .from(transactions)
     .where(eq(transactions.userId, user.id))
     .orderBy(desc(transactions.bookedOn), asc(transactions.id));
+
+  return applyMerchantOverrides(rows, await merchantOverridesFor(user.id));
 }
 
 /**

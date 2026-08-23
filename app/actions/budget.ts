@@ -8,6 +8,10 @@ import { z } from "zod";
 import { db } from "@/db";
 import { budgets, transactions, type Transaction } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  applyMerchantOverrides,
+  merchantOverridesFor,
+} from "@/lib/merchant-overrides";
 import { currentMonth } from "@/lib/clock";
 import {
   budgetRows,
@@ -38,13 +42,21 @@ const entrySchema = z.object({
     .transform((value) => value.replace(/[’'\s]/g, "").replace(",", ".")),
 });
 
-/** Rows this account owns. Scoped by `userId` like every other query here. */
+/**
+ * Rows this account owns, read as the account holder has decided they read.
+ * Scoped by `userId` like every other query here, and put through the same
+ * overrides as `app/actions/transactions.ts` — a merchant re-filed on
+ * `/account` counts against the category it was moved *to*, or this page would
+ * budget a different set of francs than the dashboard reports.
+ */
 async function ownedRows(userId: number): Promise<Transaction[]> {
-  return db
+  const rows = await db
     .select()
     .from(transactions)
     .where(eq(transactions.userId, userId))
     .orderBy(desc(transactions.bookedOn), asc(transactions.id));
+
+  return applyMerchantOverrides(rows, await merchantOverridesFor(userId));
 }
 
 export async function getBudgetOverview(
