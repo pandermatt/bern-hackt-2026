@@ -14,7 +14,7 @@ import {
 import { initials } from "@/components/merchant-avatar";
 import { Section } from "@/components/section";
 import { categoryIcon } from "@/lib/category-icons";
-import { merchantDomain, merchantSlug } from "@/lib/merchant-brands";
+import { merchantSlug } from "@/lib/merchant-brands";
 import {
   formatMoney,
   slotsOf,
@@ -145,8 +145,9 @@ function escapeHtml(value: string): string {
  * resolve normally — the tooltip lives inside the themed document.
  *
  * The monogram is the tile and the mark is laid over it, exactly as
- * `MerchantAvatar` does it and for the same reason: an icon that 404s — which a
- * guessed domain can — leaves the initials underneath standing in for it.
+ * `MerchantAvatar` does it and for the same reason: whether a merchant has a
+ * mark is the icon route's answer rather than a lookup either of them can make,
+ * and a 404 leaves the initials underneath standing in for it.
  * `data-merchant-mark` is what puts these images under the same window-level
  * listener the rest of the app's marks use, which is the whole reason this copy
  * of the tile needs no error handling of its own. The folded "Other merchants"
@@ -155,9 +156,7 @@ function escapeHtml(value: string): string {
 function merchantTitleHtml(rawName: string, displayName: string): string {
   const tile =
     "width:20px;height:20px;border-radius:4px;flex:none;border:1px solid var(--line);";
-  const icon = merchantDomain(rawName)
-    ? `<img src="/api/merchant-icon/${merchantSlug(rawName)}" alt="" data-merchant-mark="" width="20" height="20" style="position:absolute;inset:0;width:100%;height:100%;border-radius:3px;background:var(--logo-tile);object-fit:contain;padding:2px" />`
-    : "";
+  const icon = `<img src="/api/merchant-icon/${merchantSlug(rawName)}" alt="" data-merchant-mark="" width="20" height="20" style="position:absolute;inset:0;width:100%;height:100%;border-radius:3px;background:var(--logo-tile);object-fit:contain;padding:2px" />`;
   const mark =
     rawName === FOLDED_MERCHANTS
       ? ""

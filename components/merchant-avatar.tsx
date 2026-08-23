@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { merchantDomain, merchantSlug } from "@/lib/merchant-brands";
+import { merchantSlug } from "@/lib/merchant-brands";
 import { cn } from "@/lib/utils";
 
 /**
@@ -68,14 +68,21 @@ const SIZES = {
  * icon/monogram choice stays the pure map lookup it has to be, and the browser
  * settles it by whether the icon arrives.
  *
- * That layering is what makes a *guessed* domain safe to try
- * (`lib/merchant-brands.ts`): a guess that turns out to be nobody's domain
- * costs a request and lands back on the initials, rather than leaving an empty
- * tile in the row. The cost is a monogram visible for as long as the icon takes
- * to arrive, which for anything but a cold cache is no frames at all.
+ * That layering is also why this asks for a mark for **every** merchant rather
+ * than only for the ones `lib/merchant-brands.ts` knows a domain for. Whether a
+ * mark exists is not a fact the map holds — a mapped domain can still have no
+ * favicon, a guess can land on nobody's domain, and since `/account` lets a
+ * reader name a domain for a merchant themselves, the answer is now per account
+ * and cannot be a module lookup at all. The route is the one place that can say,
+ * and it says it with a 404 that costs the initials nothing. What it buys is a
+ * cheap request for a merchant the map has already ruled out; what it saves is
+ * threading one account's overrides through every component that draws a tile.
  *
- * A failed icon does have to be taken out of the way, though, and that is what
+ * A failed icon does have to be taken out of the way, and that is what
  * `data-merchant-mark` and `MERCHANT_MARK_SCRIPT` below are for.
+ *
+ * The exception is a line with no merchant behind it. Those wear a glyph from
+ * `ABSTRACT_GLYPHS`, and rent has no logo to go looking for.
  *
  * A plain `<img>`, not `next/image`: these are 1–15 KB icons already at their
  * final size, served from our own origin. The optimizer would add a
@@ -86,13 +93,21 @@ export function MerchantAvatar({
   name,
   size = 32,
   className,
+  version,
 }: {
   name: string;
   size?: 32 | 20;
   className?: string;
+  /**
+   * Appended to the icon URL when the caller knows the mark may have just
+   * changed — `components/merchant-mapper.tsx` passes the domain the account
+   * holder saved. A mark is cached in the browser for a day, which is right
+   * everywhere except on the page where somebody is editing which domain it
+   * comes from and watching the tile for the answer.
+   */
+  version?: string;
 }) {
   const { box, text, glyph, px } = SIZES[size];
-  const domain = merchantDomain(name);
   const Glyph = ABSTRACT_GLYPHS[name];
 
   return (
@@ -113,10 +128,14 @@ export function MerchantAvatar({
     >
       {Glyph ? <Glyph className={glyph} strokeWidth={2} /> : initials(name)}
 
-      {domain && (
+      {!Glyph && (
         /* eslint-disable-next-line @next/next/no-img-element -- see the note above */
         <img
-          src={`/api/merchant-icon/${merchantSlug(name)}`}
+          src={
+            version
+              ? `/api/merchant-icon/${merchantSlug(name)}?v=${encodeURIComponent(version)}`
+              : `/api/merchant-icon/${merchantSlug(name)}`
+          }
           /* Empty alt, not the merchant name: it sits one element away, so a
              labelled image is a duplicate announcement. It is also what makes
              a failed load collapse to nothing — with a real one the browser

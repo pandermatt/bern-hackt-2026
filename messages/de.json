@@ -646,6 +646,8 @@
     "profile": "Profil",
     "preferences": "Präferenzen",
     "data": "Daten",
+    "merchants": "Händler",
+    "merchantsNote": "Gilt für jede Zeile dieses Händlers.",
     "colourTheme": "Farbschema",
     "colourThemeNote": "Gilt nur für diesen Browser.",
     "language": "Sprache",
@@ -653,6 +655,26 @@
     "dangerZone": "Gefahrenzone",
     "deleteAccount": "Konto löschen",
     "deleteAccountNote": "Entfernt Ihr Konto und alle darin enthaltenen Transaktionen unwiderruflich."
+  },
+  "MerchantMapping": {
+    "empty": "Alle Händler in Ihren Kontoauszügen wurden erkannt — unter Übriges liegt nichts.",
+    "lines": "{count, plural, one {# Zeile} other {# Zeilen}}",
+    "leaveUnfiled": "{category} (unverändert)",
+    "categoryFieldLabel": "Kategorie für {merchant}",
+    "domainFieldLabel": "Logo-Domain für {merchant}",
+    "domainPlaceholder": "beispiel.ch",
+    "unsavedChanges": "Nicht gespeicherte Änderungen",
+    "save": "Händler speichern",
+    "saved": "Händler gespeichert.",
+    "showAll": "Alle {count} anzeigen",
+    "showFewer": "Weniger anzeigen"
+  },
+  "MerchantMappingErrors": {
+    "notSignedIn": "Melden Sie sich an, um einen Händler zuzuordnen.",
+    "malformed": "Diese Zuordnung sieht fehlerhaft aus.",
+    "unknownCategory": "„{category}“ ist keine Kategorie.",
+    "notADomain": "„{domain}“ ist keine Domain. Versuchen Sie es mit uzh.ch.",
+    "saveFailed": "Zuordnung konnte nicht gespeichert werden. Versuchen Sie es erneut."
   },
   "Profile": {
     "yourName": "Ihr Name",
