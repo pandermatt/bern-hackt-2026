@@ -37,7 +37,7 @@ import { formatMoney } from "@/lib/insights";
  * `/home` that offers things looked unlike everything else the app offers.
  */
 export const CHAT_PILL_SHAPE =
-  "shrink-0 cursor-pointer rounded-full border px-3 py-1.5 text-[12.5px] font-medium shadow-2xs transition-all active:scale-95 disabled:pointer-events-none disabled:opacity-40";
+  "max-w-full cursor-pointer rounded-full border px-3 py-1.5 text-[12.5px] font-medium shadow-2xs transition-all active:scale-95 disabled:pointer-events-none disabled:opacity-40";
 
 /** The shape in its default colours. A pill that wants other ones takes the
  * shape and brings its own, rather than appending a second `bg-*` and hoping
@@ -408,7 +408,10 @@ export function ChatPanel({
                 key={followUp}
                 type="button"
                 onClick={() => send(followUp)}
-                className={`${CHAT_PILL} duration-300 animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards`}
+                /* This row scrolls sideways, so its pills keep their width
+                   and their single line — the opposite of the wrapped ones
+                   above, which is why neither belongs in the shared class. */
+                className={`${CHAT_PILL} shrink-0 whitespace-nowrap duration-300 animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards`}
                 style={{ animationDelay: `${index * 90}ms` }}
               >
                 {followUp}

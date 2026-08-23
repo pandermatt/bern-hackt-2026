@@ -89,7 +89,7 @@ export function HomeChat() {
        a shadow, which made the first thing on the page the one thing on it
        drawn in a different design. */
     <div className="overflow-clip rounded-lg border border-line bg-surface">
-      <div className="flex items-center gap-3 border-b border-line px-3.5 py-3">
+      <div className="flex items-center gap-3 px-3.5 py-3">
         <span className="flex size-7 items-center justify-center rounded-md bg-brand">
           <Sparkles className="size-4 text-text" aria-hidden />
         </span>
@@ -216,21 +216,26 @@ function ChatLauncher({
     followUps.length > 0 ? followUps : SUGGESTION_KEYS.map((key) => t(key));
 
   return (
-    <div className="px-3.5 py-3 lg:hidden">
+    /* The padding is the wrapper's, not the scroller's: inside a `max-h` box
+       padding eats the row instead, and the third row is exactly what this is
+       sized to show. */
+    <div className="px-3.5 pb-3 lg:hidden">
       <div
         /* role="group" is what makes the aria-label real: on a role-less div
            the label sits on an implicit "generic" role, where ARIA prohibits
            naming, and assistive tech ignores it. */
         role="group"
         aria-label={followUps.length > 0 ? t("followUpsLabel") : t("askLabel")}
-        /* Three rows and a glimpse of the fourth, the rest by scrolling. Left
-           to wrap freely the four German openers are seven rows and 312px of
-           card — as much as the panel they stand in for, which defeats the
-           whole arrangement. `38` is three rows at these sizes (one of them a
-           wrapped two-liner) plus the top of what follows; that sliver and the
-           fade over it are what say there is more, since a box cut exactly at
-           a row boundary looks like the end of the list. */
-        className="flex max-h-38 flex-wrap gap-2 overflow-y-auto mask-b-from-80%"
+        /* Three rows, and the rest by scrolling. `35` is exactly three at
+           these sizes, one of them a wrapped two-liner in German. The fade
+           runs well up into the third row on purpose: cut cleanly at a row
+           boundary the box reads as the end of the list, and everything under
+           it — the fourth question and the "other" pill — is then a scroll
+           nobody knows to make. Both other shapes tried here were
+           worse: wrapping freely is seven rows and 312px of card in German —
+           as much as the panel it stands in for — and one sideways-scrolling
+           row fits a single question on a 390px screen. */
+        className="flex max-h-35 flex-wrap gap-2 overflow-y-auto mask-b-from-65%"
       >
         {chips.map((chip) => (
           <button
@@ -240,23 +245,25 @@ function ChatLauncher({
             /* A send is refused while one is in flight, so the chips say so
                rather than swallowing the tap. */
             disabled={pending}
-            className={`${CHAT_PILL} max-w-full whitespace-normal`}
+            className={CHAT_PILL}
           >
             {chip}
           </button>
         ))}
+        {/* Last, and inside the scroller with the questions rather than pinned
+            under them: three rows means three rows, and a fourth for this one
+            is the row the card cannot spare. It is not the only way to a typed
+            question either — the chevron opens the same panel, just without
+            putting the cursor in the field. */}
+        <button
+          type="button"
+          onClick={onOther}
+          className={`${CHAT_PILL_SHAPE} inline-flex items-center gap-1.5 border-transparent bg-accent-soft text-accent hover:bg-accent hover:text-white`}
+        >
+          <PenLine className="size-3.5" aria-hidden />
+          {t("other")}
+        </button>
       </div>
-      {/* Outside the scroller on purpose: with the input folded away, a
-          question nobody offered has no other way in, so the way to it must
-          not be something you have to scroll a box to find. */}
-      <button
-        type="button"
-        onClick={onOther}
-        className={`${CHAT_PILL_SHAPE} mt-2 inline-flex items-center gap-1.5 border-transparent bg-accent-soft text-accent hover:bg-accent hover:text-white`}
-      >
-        <PenLine className="size-3.5" aria-hidden />
-        {t("other")}
-      </button>
     </div>
   );
 }

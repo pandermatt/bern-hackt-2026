@@ -417,10 +417,16 @@ Unchanged from the template this app grew out of, and still exactly true.
   `rounded-xl` shadowed box it was. Every question pill is `CHAT_PILL` from
   `chat-panel.tsx`, which is `components/app-header.tsx`'s button pill down to
   the `shadow-2xs` and the `active:scale-95`; the launcher renders the same
-  constant. Bubbles fill with `--surface-muted` rather than a bordered `--bg`,
+  constant. It carries `max-w-full` and **not** `shrink-0` — these pills wrap
+  inside their box, and a pill that cannot shrink runs a long German question
+  straight out of the card. The follow-up row under the input is the exception,
+  since it scrolls sideways, and adds `shrink-0 whitespace-nowrap` at the call
+  site. Bubbles fill with `--surface-muted` rather than a bordered `--bg`,
   which is white on white in light mode. `CHAT_PILL_SHAPE` exists for the one
   pill that wants other colours: append a second `bg-*` to the full constant
   and which one wins is down to the cascade, not the order you wrote them in.
+  There is no rule under the card's header any more — it separated a title from
+  the one thing that title introduces.
 - **The transcript's auto-scroll skips an empty conversation.** There is
   nothing to follow before the first turn, and following anyway is visible at
   the folded size: the page opened on the *last* starter chip with the one
