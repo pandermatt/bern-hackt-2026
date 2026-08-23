@@ -69,6 +69,9 @@
     "loginPending": "Signing in…",
     "loginAltText": "Don't have an account?",
     "loginAltLabel": "Create one",
+    "loginDisabledTitle": "Login currently disabled",
+    "loginDisabledSubtitle": "Signing in is switched off on this deployment.",
+    "loginDisabledBody": "This is a development build, so the sign-in form is closed for now. Your account and your statements are untouched — signing in works again as soon as it is switched back on.",
     "registerTitle": "Create an account",
     "registerSubtitle": "Your statements stay private to your account.",
     "registerSubmit": "Create account",
@@ -81,7 +84,10 @@
     "email": "Email",
     "emailPlaceholder": "you@example.com",
     "password": "Password",
-    "passwordPlaceholder": "At least 8 characters"
+    "passwordPlaceholder": "At least 8 characters",
+    "loginKey": "Access key",
+    "loginKeyPlaceholder": "The key you were given",
+    "loginKeyHint": "Sign-up is limited to people holding this deployment's key."
   },
   "AuthErrors": {
     "invalidEmail": "Enter a valid email address.",
@@ -91,6 +97,8 @@
     "notSignedIn": "You must be signed in to do that.",
     "invalidCredentials": "Incorrect email or password.",
     "emailTaken": "An account with that email already exists.",
+    "loginDisabled": "Login is currently disabled.",
+    "invalidLoginKey": "That access key is not right.",
     "signedOut": "Signed out."
   },
   "Dashboard": {
@@ -952,6 +960,7 @@
     "siteTagline": "See where your money actually goes.",
     "siteDescription": "Private spending insights from your own statements.",
     "login": "Sign in",
+    "loginDisabled": "Login disabled",
     "register": "Create an account",
     "account": "Account settings",
     "onboarding": "Onboarding",

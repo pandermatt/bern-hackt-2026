@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { register } from "@/app/actions/auth";
 import { AuthForm } from "@/components/auth-form";
 import { redirect } from "@/i18n/navigation";
+import { loginKeyRequired } from "@/lib/auth-gate";
 import { getCurrentUser } from "@/lib/auth";
 
 // The `— <site name>` suffix comes from the title template in the root layout.
@@ -25,7 +26,11 @@ export default async function RegisterPage({ params }: PageProps<"/[locale]">) {
 
   return (
     <main className="flex flex-1 items-center justify-center px-5 py-16">
-      <AuthForm mode="register" action={register} />
+      {/* The question, not the key — `loginKeyRequired` reads the env var on
+          the server and hands the form a boolean, so the value itself never
+          reaches the client bundle. What it gates is checked again in
+          `register` regardless of what was rendered. */}
+      <AuthForm mode="register" action={register} loginKeyRequired={loginKeyRequired()} />
     </main>
   );
 }

@@ -109,8 +109,20 @@ Unchanged from the template this app grew out of, and still exactly true.
   guarded by default — the proxy's public list is an allowlist.
 - `login` verifies a dummy hash when the email is unknown, so a wrong email and
   a wrong password take similar time and return the same generic message.
-- Registration is **open** — anyone who can reach the site can create an
-  account.
+- **Signing in is switched off, and signing up may be gated.** Both switches
+  live in `lib/auth-gate.ts`. `LOGIN_DISABLED` is a constant, not an env flag —
+  it is a decision about this branch, so `/login` renders a notice instead of
+  the form and `login` refuses before the lookup, because a `"use server"`
+  export is an endpoint whatever the page renders. `LOGIN_KEY` (env, unset by
+  default) gates registration: set it and the sign-up form asks for a key,
+  checked in `register` **before** the email lookup — `emailTaken` is a
+  different answer than a rejected key, and answering it first would make the
+  open form an oracle for which addresses hold an account. The module is
+  `server-only` and the pages pass the *question* (`loginKeyRequired()`) to the
+  client form as a boolean; `LOGIN_KEY` carries no `NEXT_PUBLIC_` prefix, so a
+  client import would read `undefined` and decide registration is open.
+- Registration is otherwise **open** — with no `LOGIN_KEY` set, anyone who can
+  reach the site can create an account.
 - **`users.name` is nullable, and optional at sign-up**, for the same reason
   `transactions.userId` is: `drizzle-kit push` runs without `--force` in
   production and a NOT NULL column on a populated table fails the deploy.

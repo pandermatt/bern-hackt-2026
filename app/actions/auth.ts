@@ -8,6 +8,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { redirect } from "@/i18n/navigation";
+import { LOGIN_DISABLED, loginKeyAccepted } from "@/lib/auth-gate";
 import { FLASH_PARAM } from "@/lib/flash";
 import {
   createSession,
@@ -39,7 +40,9 @@ type AuthErrorKey =
   | "nameTooLong"
   | "notSignedIn"
   | "invalidCredentials"
-  | "emailTaken";
+  | "emailTaken"
+  | "loginDisabled"
+  | "invalidLoginKey";
 
 /** One key → one localised sentence, in the locale this request came in on. */
 async function errorFor(key: AuthErrorKey | string): Promise<AuthState> {
@@ -54,6 +57,8 @@ async function errorFor(key: AuthErrorKey | string): Promise<AuthState> {
     "notSignedIn",
     "invalidCredentials",
     "emailTaken",
+    "loginDisabled",
+    "invalidLoginKey",
   ];
   return {
     error: t(known.includes(key as AuthErrorKey) ? (key as AuthErrorKey) : "invalidCredentials"),
@@ -84,6 +89,18 @@ export async function register(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
+  /*
+   * The key is checked before the form is even validated. `loginKeyAccepted`
+   * waves everything through when no `LOGIN_KEY` is configured, so this is a
+   * no-op on a deployment that does not set one — and where one *is* set, an
+   * unauthorised sign-up has to be turned away before the email lookup below,
+   * which answers `emailTaken` and would otherwise make this form an oracle
+   * for which addresses hold an account.
+   */
+  if (!loginKeyAccepted(String(formData.get("loginKey") ?? ""))) {
+    return errorFor("invalidLoginKey");
+  }
+
   const parsed = registration.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
@@ -128,6 +145,15 @@ export async function login(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
+  /*
+   * Signing in is switched off — see `LOGIN_DISABLED` in `lib/auth-gate.ts`.
+   * The page renders a notice instead of the form, but every export of a
+   * `"use server"` module is an endpoint the browser can post to directly, so
+   * the switch has to be here as well as in what is rendered. Before the
+   * lookup, so a closed door verifies nothing and reveals nothing.
+   */
+  if (LOGIN_DISABLED) return errorFor("loginDisabled");
+
   const parsed = credentials.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
