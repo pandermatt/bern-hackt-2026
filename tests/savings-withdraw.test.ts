@@ -27,9 +27,12 @@ vi.mock("next-intl/server", async () => {
   };
 });
 
-const { allocateSurplus, getSavingsOverview, withdrawSavings } = await import(
-  "@/app/actions/savings"
-);
+const {
+  allocateSurplus,
+  getSavingsGoalNames,
+  getSavingsOverview,
+  withdrawSavings,
+} = await import("@/app/actions/savings");
 
 /** A month that earned `income` francs and spent CHF 1'000. */
 function month(userId: number, key: string, incomeMinor: number): NewTransaction[] {
@@ -223,5 +226,44 @@ describe("allocateSurplus with a withdrawal on the row", () => {
       [EARLY, 400000, null],
       [LATE, 0, 90000],
     ]);
+  });
+});
+
+describe("getSavingsGoalNames", () => {
+  it("lists this account's pots oldest first, and nobody else's", async () => {
+    const [mine] = await db
+      .insert(users)
+      .values({ email: "mine@example.com", passwordHash: await hashPassword("correct horse") })
+      .returning();
+    const [theirs] = await db
+      .insert(users)
+      .values({ email: "theirs@example.com", passwordHash: await hashPassword("correct horse") })
+      .returning();
+
+    await db.insert(savingsGoals).values([
+      { userId: mine.id, name: "Holiday", targetMinor: 500_000 },
+      { userId: mine.id, name: "Bike", targetMinor: 200_000 },
+      { userId: theirs.id, name: "Not mine", targetMinor: 100_000 },
+    ]);
+
+    signedIn.user = mine;
+    // Oldest first is what makes `/onboarding` name the goal that was just
+    // added rather than an arbitrary one.
+    await expect(getSavingsGoalNames()).resolves.toEqual(["Holiday", "Bike"]);
+  });
+
+  it("is empty for an account with no pots, and for no account at all", async () => {
+    const [user] = await db
+      .insert(users)
+      .values({ email: "empty@example.com", passwordHash: await hashPassword("correct horse") })
+      .returning();
+
+    signedIn.user = user;
+    await expect(getSavingsGoalNames()).resolves.toEqual([]);
+
+    // The empty list is what makes onboarding offer the form, so a signed-out
+    // reader must not be told somebody else's.
+    signedIn.user = null;
+    await expect(getSavingsGoalNames()).resolves.toEqual([]);
   });
 });

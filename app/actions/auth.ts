@@ -107,10 +107,21 @@ export async function register(
     .returning({ id: users.id });
 
   await createSession(created.id);
-  // `/home`, not `/`: the entry page is the front door for a signed-in
-  // account. `/` stays the polymorphic public route — the landing page when
-  // signed out, the full dashboard when signed in.
-  return redirect({ href: "/home", locale: await getLocale() });
+  /*
+   * `/onboarding`, not `/home`, and only from here — signing *in* still lands
+   * on the entry page. A brand-new account holds no statements, and `/home`
+   * has nothing to say to that: the nudge deck ranks an empty account as
+   * "nothing needs your attention today", which is true and useless, and
+   * nothing on that page leads to getting statements in. `/onboarding` is the
+   * two steps that have to happen first, and it ends by sending them on to
+   * `/home` itself.
+   *
+   * No flag on `users` says whether it has been seen. Sign-up happens exactly
+   * once, so the redirect *is* the condition — and a column on that populated
+   * table is a deploy risk (`drizzle-kit push` runs without `--force`) for
+   * something a page that is skippable by design does not need to remember.
+   */
+  return redirect({ href: "/onboarding", locale: await getLocale() });
 }
 
 export async function login(
