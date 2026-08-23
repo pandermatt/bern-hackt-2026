@@ -305,6 +305,16 @@ export const MERCHANT_BRANDS: Record<string, string | null> = {
   MoonPay: "moonpay.com",
   UBox: null,
   "VIA Outlets": null,
+
+  // ── Uploaded statements ───────────────────────────────────────────────────
+  // Merchants that reach the ledger through `lib/csv-upload.ts` rather than the
+  // shipped exports, so they have no `MERCHANTS` entry to sit beside — the name
+  // the free-text classifier settled on is the key, as it is everywhere here.
+  //
+  // A canteen borrows the institution that runs it: the mensa has no mark of
+  // its own, and the university's is the one on the building.
+  "Mensa Cafeteria UZH": "uzh.ch",
+  Sunrise: "sunrise.ch",
 };
 
 /**

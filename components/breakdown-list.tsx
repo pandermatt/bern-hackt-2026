@@ -101,8 +101,18 @@ export function BreakdownList({
                   <span className="relative shrink-0 font-mono text-[13px] tabular-nums text-text">
                     {formatMoney(slice.amount)}
                   </span>
-                  <span className="relative w-[8.5ch] shrink-0 text-right font-mono text-[11.5px] tabular-nums text-text-subtle">
-                    {slice.share.toFixed(1)}% · {slice.count}
+                  {/* The share is the first thing to go on a phone. Below
+                      `sm` the list is one column and the name has the whole
+                      row to run into, so the tail earns its width twice over
+                      — and of the two figures the count is the one nothing
+                      else on the row says: the bar already draws the share.
+                      The separator goes with it; a "·" with one thing left to
+                      separate is just a mark. */}
+                  <span className="relative min-w-[3ch] shrink-0 text-right font-mono text-[11.5px] tabular-nums text-text-subtle sm:w-[8.5ch]">
+                    <span className="hidden sm:inline">
+                      {slice.share.toFixed(1)}% ·{" "}
+                    </span>
+                    {slice.count}
                   </span>
                 </Link>
               </BrandTint>
