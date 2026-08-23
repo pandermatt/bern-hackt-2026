@@ -5,7 +5,12 @@ import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ChatDebug } from "@/components/chat-debug";
-import { ChatPanel, useAssistantChat } from "@/components/chat-panel";
+import {
+  CHAT_PILL,
+  CHAT_PILL_SHAPE,
+  ChatPanel,
+  useAssistantChat,
+} from "@/components/chat-panel";
 import { SUGGESTION_KEYS } from "@/lib/assistant";
 
 /**
@@ -34,11 +39,11 @@ import { SUGGESTION_KEYS } from "@/lib/assistant";
  *   height costs some whitespace at the greeting and buys a page that never
  *   moves under you; the transcript scrolls inside it instead.
  * - **On a phone there is no panel at all until it is asked for.** Below `lg`
- *   the card arrives as one row of chips — what to ask, and an "other" button
- *   for anything else — with the transcript and the input row not rendered at
- *   all. That is roughly 100px of card against 380, and the 280 are the
+ *   the card arrives as a block of chips — what to ask, and an "other" pill for
+ *   anything else — with the transcript and the input row not rendered at all.
+ *   That is around 200px of card against 380, and the difference is the
  *   mascot's: the dragon is what the entry page is arranged around and what is
- *   saying the nudges, and at the old height he started below the fold. Either
+ *   saying the nudges, and at the full height he started below the fold. Any
  *   chip opens the panel, and it stays open. The launcher is the SSR state,
  *   like the nudge deck's folded row, so the page arrives with the dragon in
  *   frame and stays that way with JS off.
@@ -79,20 +84,24 @@ export function HomeChat() {
   };
 
   return (
-    <div className="overflow-clip rounded-xl border border-line bg-surface shadow-sm">
-      <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
+    /* The nudge cards' own shape — `rounded-lg border border-line bg-surface`,
+       from `components/nudge-card.tsx`. This used to be a rounded-xl card with
+       a shadow, which made the first thing on the page the one thing on it
+       drawn in a different design. */
+    <div className="overflow-clip rounded-lg border border-line bg-surface">
+      <div className="flex items-center gap-3 border-b border-line px-3.5 py-3">
         <span className="flex size-7 items-center justify-center rounded-md bg-brand">
           <Sparkles className="size-4 text-text" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[14px] leading-tight font-semibold text-text">
+          <h2 className="text-[13.5px] leading-snug font-semibold text-text">
             {view === "debug" ? t("debugTitle") : t("title")}
           </h2>
           {/* Phone-hidden: the tagline is a second line under a title that is
               already an instruction ("Ask Batzi"), and above a one-row
               launcher a two-line header is most of the card. From `lg` there
               is room and it comes back. */}
-          <p className="hidden text-[12px] text-text-muted lg:block">
+          <p className="hidden text-[12.5px] leading-snug text-text-muted lg:block">
             {view === "debug" ? t("debugSubtitle") : t("subtitle")}
           </p>
         </div>
@@ -177,20 +186,20 @@ export function HomeChat() {
 }
 
 /**
- * The folded phone card: one row of questions, and the way out of it.
+ * The folded phone card: the questions worth asking, and the way past them.
  *
- * A **row**, scrolling sideways, and not the wrapped block the panel's empty
- * state uses — that is the whole saving. Four German openers stack five or six
- * lines deep, which is taller than the panel this replaces. A sideways row is
- * what the panel's own follow-up chips already do; the right-edge fade is what
- * says there is more of it.
+ * A **wrapped block**, so the openers are read rather than swiped for — one
+ * sideways-scrolling row fitted a single question on a 390px screen and hid
+ * the other three behind a gesture nothing announced. Wrapping puts three to
+ * five rows of them on screen at the cost of ~100px, which is the trade this
+ * card is for: the panel it replaces is 380px and starts with none of them
+ * visible at all.
  *
  * The chips are the follow-ups once there are any, and the openers before
- * that. Folded is a state a reader can come back to mid-conversation, and
- * "what to ask next" is the honest content for it either way. The "other"
- * button sits outside the scroller and never slides away with them: with the
- * input folded, a question nobody offered is the one thing that has no other
- * way in.
+ * that: folded is a state a reader comes back to mid-conversation, and "what
+ * to ask next" is the honest content for it either way. "Other" is last, in
+ * the same wrap and the same pill, because it is the same kind of thing — one
+ * more way to start, for the question nobody offered.
  */
 function ChatLauncher({
   chat,
@@ -203,17 +212,25 @@ function ChatLauncher({
 }) {
   const t = useTranslations("Chat");
   const { followUps, pending } = chat;
-  const chips = followUps.length > 0 ? followUps : SUGGESTION_KEYS.map((key) => t(key));
+  const chips =
+    followUps.length > 0 ? followUps : SUGGESTION_KEYS.map((key) => t(key));
 
   return (
-    <div className="flex items-center gap-2 px-4 py-3 lg:hidden">
+    <div className="px-3.5 py-3 lg:hidden">
       <div
         /* role="group" is what makes the aria-label real: on a role-less div
            the label sits on an implicit "generic" role, where ARIA prohibits
            naming, and assistive tech ignores it. */
         role="group"
         aria-label={followUps.length > 0 ? t("followUpsLabel") : t("askLabel")}
-        className="flex min-w-0 flex-1 gap-2 overflow-x-auto mask-r-from-70%"
+        /* Three rows and a glimpse of the fourth, the rest by scrolling. Left
+           to wrap freely the four German openers are seven rows and 312px of
+           card — as much as the panel they stand in for, which defeats the
+           whole arrangement. `38` is three rows at these sizes (one of them a
+           wrapped two-liner) plus the top of what follows; that sliver and the
+           fade over it are what say there is more, since a box cut exactly at
+           a row boundary looks like the end of the list. */
+        className="flex max-h-38 flex-wrap gap-2 overflow-y-auto mask-b-from-80%"
       >
         {chips.map((chip) => (
           <button
@@ -223,16 +240,19 @@ function ChatLauncher({
             /* A send is refused while one is in flight, so the chips say so
                rather than swallowing the tap. */
             disabled={pending}
-            className="shrink-0 cursor-pointer rounded-full border border-line bg-bg px-3 py-1.5 text-[12.5px] whitespace-nowrap text-text transition-colors hover:border-accent hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+            className={`${CHAT_PILL} max-w-full whitespace-normal`}
           >
             {chip}
           </button>
         ))}
       </div>
+      {/* Outside the scroller on purpose: with the input folded away, a
+          question nobody offered has no other way in, so the way to it must
+          not be something you have to scroll a box to find. */}
       <button
         type="button"
         onClick={onOther}
-        className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] text-accent transition-colors hover:bg-accent hover:text-white"
+        className={`${CHAT_PILL_SHAPE} mt-2 inline-flex items-center gap-1.5 border-transparent bg-accent-soft text-accent hover:bg-accent hover:text-white`}
       >
         <PenLine className="size-3.5" aria-hidden />
         {t("other")}

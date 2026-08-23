@@ -29,6 +29,21 @@ import { formatMoney } from "@/lib/insights";
  * component the same way.
  */
 
+/**
+ * The app's own pill, minus its colours: the shape
+ * `components/app-header.tsx` gives its account buttons, down to the hairline
+ * shadow and the press. The chat used to draw its own — a `--bg` fill, which
+ * is white on white in light mode, hovering to the accent — so the one card on
+ * `/home` that offers things looked unlike everything else the app offers.
+ */
+export const CHAT_PILL_SHAPE =
+  "shrink-0 cursor-pointer rounded-full border px-3 py-1.5 text-[12.5px] font-medium shadow-2xs transition-all active:scale-95 disabled:pointer-events-none disabled:opacity-40";
+
+/** The shape in its default colours. A pill that wants other ones takes the
+ * shape and brings its own, rather than appending a second `bg-*` and hoping
+ * the cascade lands the right way round. */
+export const CHAT_PILL = `${CHAT_PILL_SHAPE} border-line bg-surface text-text hover:border-line-strong hover:bg-surface-muted`;
+
 /** Not `ChatMessage` — `lib/assistant.ts` owns that name for the wire shape. */
 export type PanelMessage = {
   role: ChatRole;
@@ -241,7 +256,7 @@ export function ChatPanel({
         /* `overflow-y-auto` lives here rather than in `scrollClassName`: the
            auto-scroll effect writes `scrollTop` on this element, so a caller
            must not be able to take the scrolling away. */
-        className={`space-y-3 overflow-y-auto px-4 py-4 ${scrollClassName}`}
+        className={`space-y-3 overflow-y-auto px-3.5 py-3.5 ${scrollClassName}`}
       >
         {messages.length === 0 && (
           <div className="duration-500 animate-in fade-in">
@@ -252,7 +267,7 @@ export function ChatPanel({
                   key={key}
                   type="button"
                   onClick={() => send(t(key))}
-                  className="cursor-pointer rounded-full border border-line bg-bg px-3 py-1.5 text-[12.5px] text-text transition-colors hover:border-accent hover:text-accent"
+                  className={CHAT_PILL}
                 >
                   {t(key)}
                 </button>
@@ -274,7 +289,11 @@ export function ChatPanel({
                   ? "rounded-br-sm bg-accent text-white"
                   : message.error
                     ? "rounded-bl-sm bg-danger-soft text-danger-hover"
-                    : "rounded-bl-sm border border-line bg-bg text-text"
+                    : /* `--bg` is white in light mode, so this bubble used to
+                         be a white box on a white card held together by its
+                         border. The app's own filled ground reads as a bubble
+                         without one, and darkens correctly in `.dark`. */
+                      "rounded-bl-sm bg-surface-muted text-text"
               }`}
             >
               {message.content}
@@ -349,7 +368,7 @@ export function ChatPanel({
         {pending && (
           <div className="flex justify-start duration-300 animate-in fade-in slide-in-from-bottom-2">
             <div
-              className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-line bg-bg px-4 py-3"
+              className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-surface-muted px-4 py-3"
               role="status"
               aria-label={t("thinking")}
             >
@@ -369,7 +388,7 @@ export function ChatPanel({
       </div>
 
       <form
-        className="border-t border-line px-4 py-3"
+        className="border-t border-line px-3.5 py-3"
         onSubmit={(event) => {
           event.preventDefault();
           send(input);
@@ -389,7 +408,7 @@ export function ChatPanel({
                 key={followUp}
                 type="button"
                 onClick={() => send(followUp)}
-                className="shrink-0 cursor-pointer rounded-full border border-line bg-bg px-3 py-1.5 text-[12px] text-text-muted transition-colors duration-300 animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards hover:border-accent hover:bg-accent-soft hover:text-accent"
+                className={`${CHAT_PILL} duration-300 animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards`}
                 style={{ animationDelay: `${index * 90}ms` }}
               >
                 {followUp}
