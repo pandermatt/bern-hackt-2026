@@ -8,7 +8,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { redirect } from "@/i18n/navigation";
-import { LOGIN_DISABLED, loginKeyAccepted } from "@/lib/auth-gate";
+import { loginKeyAccepted, signupMode } from "@/lib/auth-gate";
 import { FLASH_PARAM } from "@/lib/flash";
 import {
   createSession,
@@ -41,7 +41,7 @@ type AuthErrorKey =
   | "notSignedIn"
   | "invalidCredentials"
   | "emailTaken"
-  | "loginDisabled"
+  | "signupDisabled"
   | "invalidLoginKey";
 
 /** One key → one localised sentence, in the locale this request came in on. */
@@ -57,7 +57,7 @@ async function errorFor(key: AuthErrorKey | string): Promise<AuthState> {
     "notSignedIn",
     "invalidCredentials",
     "emailTaken",
-    "loginDisabled",
+    "signupDisabled",
     "invalidLoginKey",
   ];
   return {
@@ -90,13 +90,19 @@ export async function register(
   formData: FormData,
 ): Promise<AuthState> {
   /*
-   * The key is checked before the form is even validated. `loginKeyAccepted`
-   * waves everything through when no `LOGIN_KEY` is configured, so this is a
-   * no-op on a deployment that does not set one — and where one *is* set, an
-   * unauthorised sign-up has to be turned away before the email lookup below,
-   * which answers `emailTaken` and would otherwise make this form an oracle
-   * for which addresses hold an account.
+   * Admission is settled before the form is even validated — see
+   * `lib/auth-gate.ts`. The page renders a notice instead of the form while
+   * sign-up is closed, but every export of a `"use server"` module is an
+   * endpoint the browser can post to directly, so the switch has to be here as
+   * well as in what is rendered.
+   *
+   * Both checks sit ahead of the email lookup below, which answers
+   * `emailTaken` and would otherwise make this action an oracle for which
+   * addresses hold an account — readable by anyone, key or no key.
    */
+  const mode = signupMode();
+  if (mode === "closed") return errorFor("signupDisabled");
+
   if (!loginKeyAccepted(String(formData.get("loginKey") ?? ""))) {
     return errorFor("invalidLoginKey");
   }
@@ -145,15 +151,6 @@ export async function login(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
-  /*
-   * Signing in is switched off — see `LOGIN_DISABLED` in `lib/auth-gate.ts`.
-   * The page renders a notice instead of the form, but every export of a
-   * `"use server"` module is an endpoint the browser can post to directly, so
-   * the switch has to be here as well as in what is rendered. Before the
-   * lookup, so a closed door verifies nothing and reveals nothing.
-   */
-  if (LOGIN_DISABLED) return errorFor("loginDisabled");
-
   const parsed = credentials.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),

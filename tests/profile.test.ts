@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
@@ -76,9 +76,31 @@ describe("displayName", () => {
 });
 
 describe("register", () => {
+  /* These are about the name field, not about who may sign up. Sign-up is
+   * closed unless `LOGIN_KEY` is set (see `lib/auth-gate.ts`), so the key is
+   * configured and supplied here — the same arrangement `tests/auth-actions`
+   * uses, and one that holds whichever way `SIGNUP_DISABLED` is set. */
+  const KEY = "bern-haeckt";
+
+  beforeEach(() => {
+    process.env.LOGIN_KEY = KEY;
+  });
+
+  afterEach(() => {
+    delete process.env.LOGIN_KEY;
+  });
+
   it("stores the name when one is given", async () => {
     await expect(
-      register(undefined, form({ email: "a@example.com", password: "correct horse", name: " Jeanine " })),
+      register(
+        undefined,
+        form({
+          email: "a@example.com",
+          password: "correct horse",
+          name: " Jeanine ",
+          loginKey: KEY,
+        }),
+      ),
     ).rejects.toThrow("REDIRECT:/en");
 
     const [user] = await db.select().from(users);
@@ -90,7 +112,10 @@ describe("register", () => {
    * cases to handle instead of one. */
   it("accepts an empty name and stores NULL", async () => {
     await expect(
-      register(undefined, form({ email: "a@example.com", password: "correct horse", name: "" })),
+      register(
+        undefined,
+        form({ email: "a@example.com", password: "correct horse", name: "", loginKey: KEY }),
+      ),
     ).rejects.toThrow("REDIRECT:/en");
 
     const [user] = await db.select().from(users);
@@ -100,7 +125,12 @@ describe("register", () => {
   it("rejects a name over 80 characters", async () => {
     const result = await register(
       undefined,
-      form({ email: "a@example.com", password: "correct horse", name: "x".repeat(81) }),
+      form({
+        email: "a@example.com",
+        password: "correct horse",
+        name: "x".repeat(81),
+        loginKey: KEY,
+      }),
     );
 
     expect(result?.error).toBe("That name is too long.");

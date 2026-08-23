@@ -3,26 +3,62 @@ import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
- * Who is allowed through the front door, in one place.
+ * Who may open a new account, in one place. Signing *in* is not gated here —
+ * an account that exists keeps working exactly as it always has, and
+ * `app/actions/auth.ts`'s `login` is untouched.
  *
- * Two independent switches, deliberately not folded into one:
+ * Three states, from two settings that answer different questions:
  *
- *   - `LOGIN_DISABLED` closes signing *in*. It is a constant rather than an
- *     env flag because it is a decision about this branch, not about a host —
- *     flip it to `false` to hand the door back, and the login page goes back
- *     to rendering the form on the same commit.
- *   - `LOGIN_KEY` (env) gates signing *up*. Unset, registration stays open, as
- *     it has always been; set, a sign-up has to carry the same string.
+ *   - `SIGNUP_DISABLED` is the branch's own decision — a constant rather than
+ *     an env flag, so flipping it to `false` re-opens registration on the same
+ *     commit rather than depending on how a host is configured.
+ *   - `LOGIN_KEY` (env) is the way back in while that stands: set it, and
+ *     anyone carrying that string may still create an account. It is the
+ *     exception to the switch above, not a second lock in series — a
+ *     deployment that wants invited sign-ups sets the key and nothing else.
  *
  * `server-only`, like `lib/auth.ts`: `LOGIN_KEY` carries no `NEXT_PUBLIC_`
  * prefix, so a client component importing this would not read the key — it
- * would read `undefined` and silently decide registration is open. Pages pass
- * the *question* (`loginKeyRequired()`) to the form as a boolean; the key
- * itself never leaves the server.
+ * would read `undefined` and silently decide sign-up is closed. Pages pass the
+ * *question* (`signupMode()`) to the form; the key itself never leaves the
+ * server.
  */
 
-/** Sign-in is switched off. Set to `false` to re-open it. */
-export const LOGIN_DISABLED: boolean = true;
+/** Creating an account is switched off. Set to `false` to re-open it. */
+export const SIGNUP_DISABLED: boolean = true;
+
+/**
+ * `"open"` — anyone may register, as it was before any of this existed.
+ * `"keyed"` — the form asks for the deployment's key and checks it.
+ * `"closed"` — `/register` is a notice, and the action refuses.
+ */
+export type SignupMode = "open" | "keyed" | "closed";
+
+export function signupMode(): SignupMode {
+  // A configured key outranks the constant: it *is* the deliberate way to let
+  // people in while sign-up is otherwise off.
+  if (loginKey() !== null) return "keyed";
+  return SIGNUP_DISABLED ? "closed" : "open";
+}
+
+/**
+ * Whether a sign-up carrying `candidate` clears the key check.
+ *
+ * `true` when no key is configured — this decides the `"keyed"` case only, and
+ * `signupMode()` is what separates a closed door from an open one. Callers ask
+ * both, in that order.
+ *
+ * Compared over SHA-256 digests rather than the strings themselves: the
+ * digests are always 32 bytes, which is what lets `timingSafeEqual` run at all
+ * (it throws on a length mismatch, and that throw is itself the leak — it
+ * would tell a prober the length of the key).
+ */
+export function loginKeyAccepted(candidate: string): boolean {
+  const expected = loginKey();
+  if (expected === null) return true;
+
+  return timingSafeEqual(digest(candidate.trim()), digest(expected));
+}
 
 /**
  * The configured key, or `null` when there is none.
@@ -35,29 +71,6 @@ export const LOGIN_DISABLED: boolean = true;
 function loginKey(): string | null {
   const key = process.env.LOGIN_KEY?.trim();
   return key ? key : null;
-}
-
-/** Whether the sign-up form has to ask for a key at all. */
-export function loginKeyRequired(): boolean {
-  return loginKey() !== null;
-}
-
-/**
- * Whether a sign-up carrying `candidate` may proceed.
- *
- * `true` when no key is configured — the gate is opt-in, so a deployment that
- * never sets `LOGIN_KEY` behaves exactly as it did before this existed.
- *
- * Compared over SHA-256 digests rather than the strings themselves: the
- * digests are always 32 bytes, which is what lets `timingSafeEqual` run at all
- * (it throws on a length mismatch, and that throw is itself the leak — it
- * would tell a prober the length of the key).
- */
-export function loginKeyAccepted(candidate: string): boolean {
-  const expected = loginKey();
-  if (expected === null) return true;
-
-  return timingSafeEqual(digest(candidate.trim()), digest(expected));
 }
 
 function digest(value: string): Buffer {

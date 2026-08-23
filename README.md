@@ -64,17 +64,25 @@ skipped — so re-importing an overlapping month is safe.
 
 ## Access
 
-Signing **in** is currently disabled: `/login` renders a "login currently
-disabled" notice instead of the form, and the `login` server action refuses
-before it looks anything up — the form is not the only way to reach an action,
-so the switch has to sit in both. It is `LOGIN_DISABLED` in
+Creating an account is currently disabled: `/register` renders a "sign-up
+currently disabled" notice instead of the form, and the `register` server
+action refuses before it looks anything up — a form is not the only way to
+reach an action, so the switch has to sit in both. It is `SIGNUP_DISABLED` in
 [lib/auth-gate.ts](lib/auth-gate.ts); set it to `false` to hand the door back.
 
-Signing **up** is still open, and creating an account signs you straight in —
-which, while the above stands, is how anyone gets in. Set `LOGIN_KEY` to gate
-it: the sign-up form then asks for an access key and `register` refuses
-anything that does not match, before it says whether the email is taken. Unset
-(the default), registration behaves exactly as it always has.
+**Signing in is untouched** — an account that already exists works exactly as
+before.
+
+`LOGIN_KEY` is the way back in while sign-up is off. Set it and `/register`
+renders the form again with an access-key field; `register` refuses anything
+that does not match, before it says whether the email is taken. Unset, sign-up
+is simply closed.
+
+| `LOGIN_KEY` | `SIGNUP_DISABLED` | `/register` |
+| --- | --- | --- |
+| unset | `true` (today) | the notice |
+| unset | `false` | open to anyone, as it always was |
+| set | either | the form, plus the key field |
 
 ## Scripts
 
