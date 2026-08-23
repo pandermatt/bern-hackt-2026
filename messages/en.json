@@ -708,6 +708,8 @@
     "debugTitle": "Request log",
     "debugSubtitle": "What went over the wire",
     "toggleDebug": "Toggle request log",
+    "expand": "Show more of the chat",
+    "collapse": "Show less of the chat",
     "intro": "I can show you where you could save, check for anything shady, list your subscriptions and help split a month's surplus across your saving goals. Ask away.",
     "suggestion1": "Where could I save money?",
     "suggestion2": "Is something shady going on in my account?",

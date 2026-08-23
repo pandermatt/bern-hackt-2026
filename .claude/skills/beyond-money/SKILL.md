@@ -368,9 +368,33 @@ Unchanged from the template this app grew out of, and still exactly true.
   item between a full-height shell and a scrolling transcript, and it has no
   `overflow` of its own, so without it a long conversation resolves to
   `min-content` and pushes the input form off the bottom of the screen. The
-  shell owns the height through two className seams (`className`,
-  `scrollClassName`) — not a `variant` prop, which would bake the page's
-  layout into the shared component.
+  shell owns the box through three className seams (`className`,
+  `scrollClassName` — height *and* vertical padding — and `introClassName`) —
+  not a `variant` prop, which would bake the page's layout into the shared
+  component.
+- **On a phone the panel ships folded, and the dragon is why.** `HomeChat`
+  holds an `expanded` flag: `h-24` with `py-2` arriving, `38svh` with `py-4`
+  once the reader taps the chevron (`lg:hidden` — from `lg` the page is two
+  columns, the mascot sits beside the chat, and the panel is `60svh` either
+  way). It used to arrive at `30svh`, which with the header and the input row
+  around it was over half a 667px screen and put the mascot — the thing the
+  page is arranged around — below the fold. Folded is the SSR state, like the
+  nudge deck's, so `/home` arrives with the dragon visible and stays that way
+  with JS off. Three things hang off it, all load-bearing: a **send** opens the
+  panel (`HomeChat` wraps `chat.send`), because asking is the one gesture that
+  means "I want to read the answer" — and nothing closes it again, since
+  collapsing under a reader is the shifting page the fixed height exists to
+  prevent; the intro paragraph is hidden while folded (`introClassName`), or
+  five lines of prose are the whole 96px box and the starter chips are below
+  its fold; and the folded box carries `mask-b-from-75%`, because what a window
+  that size cuts through is a chip or a bubble of whatever height the sentence
+  came out at, and no height lands cleanly in both locales. It is still two
+  constants and not a cap — nothing resizes under the reader except the tap
+  they made.
+- **The transcript's auto-scroll skips an empty conversation.** There is
+  nothing to follow before the first turn, and following anyway is visible at
+  the folded size: the page opened on the *last* starter chip with the one
+  above it sliced in half.
 - **The inline panel does not autofocus.** Focusing an input near the top of a
   phone page raises the keyboard on arrival and shoves away what the reader
   came for, so `HomeChat` passes no `inputRef`. The prop survives on

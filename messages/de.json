@@ -708,6 +708,8 @@
     "debugTitle": "Anfrageprotokoll",
     "debugSubtitle": "Was über die Leitung ging",
     "toggleDebug": "Anfrageprotokoll ein-/ausblenden",
+    "expand": "Mehr vom Chat anzeigen",
+    "collapse": "Weniger vom Chat anzeigen",
     "intro": "Ich zeige Ihnen, wo Sie sparen könnten, prüfe Auffälligkeiten, liste Ihre Abos auf und helfe, den Überschuss eines Monats auf Ihre Sparziele zu verteilen. Fragen Sie einfach.",
     "suggestion1": "Wo könnte ich Geld sparen?",
     "suggestion2": "Gibt es verdächtige Aktivitäten auf meinem Konto?",
