@@ -6,12 +6,12 @@ import { SavingsGoalDelete } from "@/components/savings-goal-delete";
 import { SavingsGoalEdit } from "@/components/savings-goal-edit";
 import { goalIcon } from "@/lib/goal-icon";
 import {
-  formatDay,
   formatMoney,
   potFill,
   potPercent,
   type SavingsPot as Pot,
 } from "@/lib/insights";
+import { dayLabel } from "@/lib/month-label";
 
 /**
  * One savings goal, drawn as a pot that fills.
@@ -104,6 +104,10 @@ export function SavingsPot({
 }) {
   // Synchronous server component, so the hook works here — see `SavingsGoals`.
   const t = useTranslations("Savings");
+  const tMonths = useTranslations("Months");
+  // `null` is a goal with no deadline, which is most of them — see the
+  // deadline line below.
+  const due = pot.targetOn ? dayLabel(tMonths, pot.targetOn) : null;
   const fill = potFill(pot.savedMinor, pot.targetMinor);
   // The drawing clamps because a jar has a rim; the label does not, so a pot
   // funded past its target says 133% rather than a flat, less useful 100%.
@@ -389,10 +393,30 @@ export function SavingsPot({
       </p>
 
       {/* The deadline the pots are ordered by, so the order is legible rather
-          than mysterious. */}
+          than mysterious.
+
+          **The preposition is spoken, not printed.** "bis 30. Sep 2026" is
+          81px of text in the 76px a card has at 320px, so it wrapped — and the
+          icon, centred against a two-line block, then pointed at nothing. The
+          calendar glyph already says which kind of date this is to anyone who
+          can see it; the `sr-only` copy keeps the full phrase for anyone who
+          cannot, the same trade the anomaly badges make with their kind word.
+          The date is *not* `whitespace-nowrap`: if a longer language or a
+          narrower card ever runs out of room again, two lines is the graceful
+          end of it and overflowing the card is not.
+
+          `dayLabel`, not `formatDay`: the latter's month table is English by
+          design, and this line printed "24 Dec 2026" on a German page. */}
       <p className="mt-1 mb-2 flex items-center justify-center gap-1 text-[11px] text-text-subtle">
-        <CalendarDays className="size-3" aria-hidden />
-        {pot.targetOn ? t("potDue", { date: formatDay(pot.targetOn) }) : t("potNoDue")}
+        <CalendarDays className="size-3 shrink-0" aria-hidden />
+        {due ? (
+          <>
+            <span className="sr-only">{t("potDue", { date: due })}</span>
+            <span aria-hidden>{due}</span>
+          </>
+        ) : (
+          t("potNoDue")
+        )}
       </p>
 
       {/* The same number the pot draws, as a bar. A cylinder is a poor
