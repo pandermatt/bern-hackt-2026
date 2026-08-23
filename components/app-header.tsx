@@ -19,7 +19,7 @@ import { displayName } from "@/lib/user";
  * where `neutral-200` did.
  */
 const CONTROL =
-  "cursor-pointer rounded-full border border-line bg-surface px-3 py-2 text-[13px] font-semibold text-text transition-all hover:bg-surface-muted hover:border-line-strong shadow-2xs active:scale-95 sm:py-1.5";
+  "cursor-pointer rounded-full border border-line bg-surface px-2.5 py-2 text-[13px] font-semibold text-text transition-all hover:bg-surface-muted hover:border-line-strong shadow-2xs active:scale-95 sm:px-3 sm:py-1.5";
 
 /**
  * Rendered once by the root layout, so every route gets the same chrome.
@@ -30,8 +30,18 @@ export function AppHeader({ user }: { user: User | null }) {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-line bg-surface/90 backdrop-blur-md">
-      <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
-        <div className="flex min-w-0 items-center gap-2 sm:gap-5">
+      {/* Below `sm` every gap in this row is one step tighter, because the
+          contents genuinely do not fit otherwise: the logo, five icon tabs and
+          the two account pills need 382px at the roomy spacing, and a 320px
+          phone has 320. It did not fail as a scrollbar — the group below
+          carries `min-w-0`, so the nav spilled out of it and the pills painted
+          over the last tab, which made Auffälligkeiten unreachable on a small
+          screen. The tighter step buys 68px across the row and everything from
+          320 up fits. The horizontal *padding* is not part of that: it is
+          `px-5` because the pages under it are, and a header whose logo sits
+          4px left of the content below it is a worse bug than a tight gap. */}
+      <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-2 px-5 sm:gap-4 sm:px-8">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-5">
           <Logo href={user ? "/home" : "/"} />
           {/* Only signed-in visitors have anything to navigate between. */}
           {user && <HeaderNav />}
@@ -41,7 +51,7 @@ export function AppHeader({ user }: { user: User | null }) {
           /* Account chrome only. Anomalies used to sit at the head of this
              cluster; it is a page rather than an account control, so it moved
              into `HeaderNav` beside Budget. */
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <Link
               href="/account"
               aria-label={t('accountSettings')}
