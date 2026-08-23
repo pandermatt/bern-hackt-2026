@@ -9,12 +9,17 @@ Built for **BärnHäckt 2026** on the PostFinance challenge.
 
 Next.js 16 · shadcn/ui · Tailwind v4
 
+- [docs/BernHackt_Tech_Jury_Klickt_Gern_uf_Sache.docx](docs/BernHackt_Tech_Jury_Klickt_Gern_uf_Sache.docx)
+- [docs/BernHackt_Tech_Jury_Klickt_Gern_uf_Sache.pdf](docs/BernHackt_Tech_Jury_Klickt_Gern_uf_Sache.pdf)
+- [video_demo.mp4](video_demo.mp4)
+
 ## Deployments
 
 | Branch | URL |
 | --- | --- |
 | `development` | <https://dev.beyond-money.ch/> |
 | `main` | <https://beyond-money.ch/> |
+
 
 ## Setup
 
