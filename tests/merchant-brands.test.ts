@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   MERCHANT_BRANDS,
-  domainForSlug,
+  domainsForSlug,
   merchantDomain,
   merchantSlug,
 } from "@/lib/merchant-brands";
@@ -100,6 +100,7 @@ describe("merchant brand map", () => {
     for (const name of ["Rent", "Krankenkasse", "Taxi", TRANSFER_NAME]) {
       expect(merchantDomain(name), name).toBeNull();
     }
+    // Unmapped, and unguessable too: several words are not a domain.
     expect(merchantDomain("Some Merchant Nobody Mapped")).toBeNull();
   });
 
@@ -114,13 +115,36 @@ describe("merchant brand map", () => {
     }
   });
 
-  it("only resolves slugs that are in the map", () => {
-    // The route's whole SSRF guard: it fetches `domainForSlug(slug)` and 404s
-    // on null, so anything not listed here is unreachable from the outside.
-    expect(domainForSlug("netflix")).toBe("netflix.com");
-    expect(domainForSlug("evil-corp")).toBeNull();
-    expect(domainForSlug("")).toBeNull();
-    // Present in the map, but with no domain — must not resolve either.
-    expect(domainForSlug(merchantSlug("Rent"))).toBeNull();
+  it("serves a mapped slug the domain the map chose for it", () => {
+    expect(domainsForSlug("netflix")).toEqual({
+      domains: ["netflix.com"],
+      guessed: false,
+    });
+
+    // Present in the map with no domain. That is a decision — a verified miss,
+    // or a line with no merchant behind it — and the guess must not overrule
+    // it, here or in `merchantDomain`.
+    for (const name of ["Rent", "Veloshop", "Krankenkasse"]) {
+      expect(domainsForSlug(merchantSlug(name)), name).toEqual({
+        domains: [],
+        guessed: false,
+      });
+    }
+  });
+
+  it("guesses .com then .ch for a merchant nobody mapped", () => {
+    expect(merchantDomain("AliExpress")).toBe("aliexpress.com");
+    expect(domainsForSlug("aliexpress")).toEqual({
+      domains: ["aliexpress.com", "aliexpress.ch"],
+      guessed: true,
+    });
+
+    // The route fetches nothing for an empty list, so this is also what is
+    // left of the old allowlist: a slug it cannot make a domain out of never
+    // reaches an upstream. One word only, and long enough to be a name rather
+    // than an initialism somebody else registered.
+    for (const slug of ["", "evil-corp", "kfc", "xy", "x".repeat(31)]) {
+      expect(domainsForSlug(slug).domains, slug).toEqual([]);
+    }
   });
 });

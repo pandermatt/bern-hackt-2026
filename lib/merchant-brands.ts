@@ -305,6 +305,16 @@ export const MERCHANT_BRANDS: Record<string, string | null> = {
   MoonPay: "moonpay.com",
   UBox: null,
   "VIA Outlets": null,
+
+  // ── Uploaded statements ───────────────────────────────────────────────────
+  // Merchants that reach the ledger through `lib/csv-upload.ts` rather than the
+  // shipped exports, so they have no `MERCHANTS` entry to sit beside — the name
+  // the free-text classifier settled on is the key, as it is everywhere here.
+  //
+  // A canteen borrows the institution that runs it: the mensa has no mark of
+  // its own, and the university's is the one on the building.
+  "Mensa Cafeteria UZH": "uzh.ch",
+  Sunrise: "sunrise.ch",
 };
 
 /**
@@ -350,16 +360,55 @@ export function merchantSlug(name: string): string {
   );
 }
 
-/** `null` when the merchant has no mark — the caller renders a monogram. */
-export function merchantDomain(name: string): string | null {
-  if (name in MERCHANT_BRANDS) return MERCHANT_BRANDS[name];
-  return BY_KEY.get(brandKey(name)) ?? null;
+/**
+ * The guess, for a merchant nobody has mapped: its own name is very often its
+ * domain. AliExpress is the motivating case — one word, unmistakable, and a
+ * table that has to be edited before it can show a mark will never keep up
+ * with what people upload.
+ *
+ * `.com` first because a brand recognisable enough to be guessable usually has
+ * one; `.ch` after it because this is a Swiss ledger and a local shop that
+ * never bought the `.com` still has the mark on its own site. Both are tried —
+ * see `domainsForSlug` — so the order only decides ties.
+ *
+ * **One word only.** A slug with a hyphen in it is two or more words, and
+ * neither `mensa-cafeteria-uzh.com` nor `mensacafeteriauzh.com` is anybody's
+ * domain; a multi-word merchant needs a real entry above. **Four characters
+ * minimum**, because an initialism (BP, ES, CRO) resolves to whoever happened
+ * to register those three letters, and the wrong brand's mark is worse than a
+ * monogram. The ceiling keeps a slug that is really a sentence from reaching
+ * the icon route at all.
+ */
+const GUESS_TLDS = ["com", "ch"];
+const GUESSABLE = /^[a-z0-9]{4,30}$/;
+
+function guessDomains(slug: string): string[] {
+  if (!GUESSABLE.test(slug)) return [];
+  return GUESS_TLDS.map((tld) => `${slug}.${tld}`);
 }
 
 /**
- * Slug → domain, for the route. Built from the same map so a slug the app never
- * renders cannot resolve to a domain — which is what keeps the route from being
- * an open proxy. Entries with no domain are omitted entirely.
+ * `null` when the merchant has no mark — the caller renders a monogram.
+ *
+ * A `null` **in the map** is a decision and beats the guess: those entries were
+ * checked against both icon services, or belong to a line with no merchant
+ * behind it at all. Only a name the map has never heard of is guessed at.
+ */
+export function merchantDomain(name: string): string | null {
+  if (name in MERCHANT_BRANDS) return MERCHANT_BRANDS[name];
+
+  // `?? null` would collapse the two answers this has to tell apart: a mapped
+  // merchant with no mark, and a merchant nobody mapped.
+  const known = BY_KEY.get(brandKey(name));
+  if (known !== undefined) return known;
+
+  return guessDomains(merchantSlug(name))[0] ?? null;
+}
+
+/**
+ * Slug → domain, for the route. Built from the same map, so a mapped merchant
+ * is always served the domain that was chosen for it rather than one derived
+ * from its name. Entries with no domain are omitted entirely.
  */
 const BY_SLUG = new Map<string, string>(
   Object.entries(MERCHANT_BRANDS)
@@ -367,7 +416,33 @@ const BY_SLUG = new Map<string, string>(
     .map(([name, domain]) => [merchantSlug(name), domain]),
 );
 
-/** The allowlist check. `null` means "not a merchant we know" — a 404. */
-export function domainForSlug(slug: string): string | null {
-  return BY_SLUG.get(slug) ?? null;
+/** Mapped as having no mark. The guess must not overrule that decision here
+ * either — `merchantDomain` already refuses to, and the two have to agree. */
+const NO_MARK = new Set(
+  Object.entries(MERCHANT_BRANDS)
+    .filter(([, domain]) => domain === null)
+    .map(([name]) => merchantSlug(name)),
+);
+
+/**
+ * Every domain worth trying for a slug, in order, and whether they came from
+ * the map or from the slug itself.
+ *
+ * An empty list is the route's 404 — an unguessable slug reaches no upstream at
+ * all. The list used to *be* the allowlist and this is where guessing costs
+ * something, so it is worth being exact about what is still true: the route
+ * never fetches a host the URL names. It asks two fixed icon services about a
+ * domain, and a slug can only shape the domain they are asked about. What a
+ * guessable slug does buy an outside caller is a cache entry, which is why
+ * `guessed` is reported rather than inferred — the route keeps those out of
+ * the on-disk cache. See the note there.
+ */
+export function domainsForSlug(slug: string): {
+  domains: string[];
+  guessed: boolean;
+} {
+  const known = BY_SLUG.get(slug);
+  if (known) return { domains: [known], guessed: false };
+  if (NO_MARK.has(slug)) return { domains: [], guessed: false };
+  return { domains: guessDomains(slug), guessed: true };
 }

@@ -721,6 +721,87 @@
   animation: unallocated-pulse 1.8s ease-in-out infinite;
 }
 
+/* The dragon breathing. A slow vertical drift, nothing else — the mascot now
+   appears on three pages rather than one, and anything faster than this reads
+   as a notification demanding to be dealt with rather than a character that
+   happens to be there. Between two visible states, so it is safe under the
+   "never animate the page shell in" rule: with JavaScript off, or before
+   hydration, the dragon is simply sitting still in the right place. */
+@keyframes dragon-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.dragon-bob {
+  animation: dragon-bob 4.5s ease-in-out infinite;
+}
+
+/* The full chart ramp as a moving sweep, for decoration and only decoration.
+
+   Every other use of these ten hues has to survive being told apart — which is
+   the constraint that makes six of them unusable as type and puts an `sr-only`
+   table under every chart. Here nothing is being identified, so the palette
+   gets to be what it also is: the brand's whole colour range at once. Marked
+   `aria-hidden` at every call site for the same reason.
+
+   Doubled to 200% and slid by one half, so the loop closes on itself with no
+   jump — the last stop of the first copy sits exactly where the first stop of
+   the second one starts. */
+@keyframes rainbow-slide {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 200% 50%;
+  }
+}
+
+.rainbow-rule {
+  height: 3px;
+  border-radius: 999px;
+  background-image: linear-gradient(
+    90deg,
+    var(--chart-1),
+    var(--chart-4),
+    var(--chart-8),
+    var(--chart-2),
+    var(--chart-7),
+    var(--chart-5),
+    var(--chart-9),
+    var(--chart-1)
+  );
+  background-size: 200% 100%;
+  animation: rainbow-slide 6s linear infinite;
+}
+
+/* The same sweep as a page-heading underline: wider, thinner, and quieter, so
+   it reads as a flourish under a title rather than a progress bar. */
+.rainbow-underline {
+  height: 2px;
+  border-radius: 999px;
+  background-image: linear-gradient(
+    90deg,
+    var(--chart-1),
+    var(--chart-3),
+    var(--chart-7),
+    var(--chart-2),
+    var(--chart-10),
+    var(--chart-8),
+    var(--chart-4),
+    var(--chart-9),
+    var(--chart-5),
+    var(--chart-1)
+  );
+  background-size: 200% 100%;
+  animation: rainbow-slide 9s linear infinite;
+  opacity: 0.85;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

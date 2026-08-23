@@ -10,7 +10,12 @@ import {
   type ChartTokens,
   type EChartsOption,
 } from "@/components/echart";
-import { budgetScale, type BudgetScale } from "@/lib/budget-scale";
+import {
+  budgetScale,
+  BUDGET_RING,
+  shareOf,
+  type BudgetScale,
+} from "@/lib/budget-scale";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { useCategoryLabel } from "@/lib/use-category-label";
@@ -19,22 +24,28 @@ import { useCategoryLabel } from "@/lib/use-category-label";
  * Budget against actual, as a radar.
  *
  * Two shapes over the same spokes: what was actually spent that month, drawn
- * as a translucent fill, and the limit the account holder set, drawn as a
+ * as a translucent fill, and the budget it was spent against, drawn as a
  * dashed outline with no fill. Where the fill pushes past the outline, that
  * category is over budget — which is the whole reason this is a radar rather
  * than a row of bars.
  *
- * **The rings are francs, on one scale shared by every spoke**, and the dial is
- * refitted to each month. That is what makes the two shapes readable as
- * shapes: a spoke sitting far out is a large amount of money wherever it is on
- * the dial. The cost is that a small category's ring sits close to the hub,
- * where "half the budget" and "twice it" are a few pixels apart — which is why
- * the percentage is printed under every category name. Read the shape for
- * scale and the number for the verdict; neither alone is the whole chart.
+ * **Every spoke is normalised against its own budget**, so the rings are
+ * percentages and the outline is a *circle* at 100%. Categories are budgeted
+ * an order of magnitude apart — CHF 120 of transport beside CHF 1'200 of
+ * groceries — and on one shared franc dial that outline is a ten-pointed star
+ * whose spikes say nothing about how the month went: the reader has to measure
+ * each pair of spokes by eye before the shape means anything. Against a circle
+ * there is one thing to look for, and it reads at a glance.
  *
- * A month with an outlier bends that scale rather than clipping it; the rings
- * stay francs either way. `lib/budget-scale.ts` owns the arithmetic and the
- * argument for it, and hands back the two conversions this file draws through.
+ * What that costs is magnitude: a radius no longer says how much money. The
+ * effective francs spent are printed under each name, coloured by how the
+ * category stands against its budget, and the tooltip and `sr-only` table
+ * carry the limit and the share the shape is drawn from.
+ *
+ * A month with a runaway category bends the scale rather than clipping it; the
+ * rings stay percentages either way. `lib/budget-scale.ts` owns the arithmetic
+ * and the argument for it, and hands back the two conversions this file draws
+ * through.
  */
 
 const HEIGHT = 520;
@@ -51,13 +62,13 @@ const HEIGHT = 520;
 const COMPACT = {
   height: 370,
   nameSize: 11,
-  percentSize: 12,
+  valueSize: 12,
   nameGap: 8,
   tickSize: 9.5,
   /**
    * Only the rim gets a number. Six of them queue up one short spoke, and the
    * series is drawn over the axis, so the middle ones end up with a polygon
-   * through them. The percentages under each name carry the reading anyway.
+   * through them. The amounts under each name carry the reading anyway.
    */
   ticksOnlyRim: true,
 } as const;
@@ -65,7 +76,7 @@ const COMPACT = {
 const ROOMY = {
   height: HEIGHT,
   nameSize: 12.5,
-  percentSize: 13.5,
+  valueSize: 13.5,
   nameGap: 12,
   tickSize: 11,
   ticksOnlyRim: false,
@@ -120,34 +131,41 @@ function textWidth(text: string, size: number, weight: number): number {
 function radiusFor(
   boxWidth: number,
   names: string[],
+  values: string[],
   layout: Layout,
 ): number {
-  const labelWidth = names.reduce((widest, displayed) => {
+  const labelWidth = names.reduce((widest, displayed, i) => {
     const name = Math.max(
       ...nameLines(displayed).map((line) =>
         textWidth(line, layout.nameSize, 400),
       ),
     );
-    // The percentage is bolder and can be the wider of the two on a short name.
-    const share = textWidth("724%", layout.percentSize, 600);
-    return Math.max(widest, name, share);
+    // The amount is bolder and usually the wider of the two, so it is measured
+    // per row rather than guessed from a placeholder.
+    const value = textWidth(values[i], layout.valueSize, 600);
+    return Math.max(widest, name, value);
   }, 0);
 
   const byWidth = boxWidth / 2 - layout.nameGap - labelWidth;
-  // Two lines of name plus the percentage, and the legend along the bottom.
+  // Two lines of name plus the amount, and the legend along the bottom.
   const byHeight =
     layout.height / 2 - layout.nameGap - layout.nameSize * 3.4 - 26;
   return Math.max(44, Math.min(byWidth, byHeight));
 }
 
-/** Spent as a share of the limit — or of the suggestion, when none is set. */
+/**
+ * Spent as basis points of the limit — or of the suggestion, when none is set.
+ *
+ * What the spoke is drawn at, what the tooltip's share is, and what scores the
+ * colour of the amount printed under the category name — one figure, so the
+ * shape and its scoring can never disagree.
+ */
 function share(row: BudgetRow): number {
-  const reference = row.limitMinor ?? row.suggestedMinor;
-  return reference > 0 ? (row.usedMinor / reference) * 100 : 0;
+  return shareOf(row.usedMinor, row.limitMinor ?? row.suggestedMinor);
 }
 
 /**
- * The colour of the percentage under a category name.
+ * The colour of the amount under a category name.
  *
  * An unset category is measured against a *suggestion*, so it is deliberately
  * not scored — calling a number "over" against a limit nobody chose would be
@@ -178,28 +196,31 @@ type ChartText = {
 function buildOption(
   rows: BudgetRow[],
   names: string[],
+  values: string[],
   tokens: ChartTokens,
   layout: Layout,
   radius: number,
   dial: BudgetScale,
   text: ChartText,
 ): EChartsOption {
-  const spent = rows.map(share);
-  const used = rows.map((row) => row.usedMinor);
-  const budget = rows.map((row) => row.limitMinor ?? row.suggestedMinor);
-  const { max, splitNumber, toDial, toMinor } = dial;
+  // Basis points of each category's own budget, and the same figure as a
+  // percentage for everything that prints one.
+  const shares = rows.map(share);
+  const spent = shares.map((bp) => bp / 100);
+  const { max, splitNumber, toDial, toPercent } = dial;
 
   // Looked up by name from the axis-name formatter, which is handed the
   // indicator rather than the row — so this is keyed on the *displayed* name,
   // not on `row.category`, or a translated spoke finds nothing.
   const byName = new Map(
-    rows.map((row, i) => [names[i], { row, pct: spent[i] }]),
+    rows.map((row, i) => [names[i], { row, pct: spent[i], value: values[i] }]),
   );
 
   const indicator = rows.map((row, i) => ({
     name: names[i],
-    // Dial units, not francs — the rings are only evenly spaced in *money* on
-    // an unbent scale, and `toMinor` is what turns a tick back into a figure.
+    // Dial units, not percentages — the rings are only evenly spaced in
+    // *percent* on an unbent scale, and `toPercent` is what turns a tick back
+    // into a figure.
     max,
     // Tick labels on the top spoke only. Repeating 0/50/100/150/200 around
     // all eight is the same five numbers eight times over the drawing.
@@ -273,16 +294,18 @@ function buildOption(
       radius,
       splitNumber,
       axisName: {
-        // Category on top, its share of budget underneath — the reading most
-        // people came for, without having to measure a radius by eye.
+        // Category on top, the effective francs spent underneath — the number
+        // the normalised radius deliberately stopped carrying. The colour
+        // still scores it against the budget, and the share itself lives in
+        // the tooltip and the `sr-only` table.
         formatter: (name?: string) => {
           const entry = name ? byName.get(name) : undefined;
           if (!entry) return name ?? "";
           // One token per line: a `\n` *inside* a rich token is not a line
           // break, so a wrapped name has to be emitted as separate tokens.
           const lines = nameLines(name ?? "").map((line) => `{name|${line}}`);
-          const share = `{${verdict(entry.row, entry.pct)}|${Math.round(entry.pct)}%}`;
-          return [...lines, share].join("\n");
+          const value = `{${verdict(entry.row, entry.pct)}|${entry.value}}`;
+          return [...lines, value].join("\n");
         },
         rich: {
           name: {
@@ -296,30 +319,30 @@ function buildOption(
           over: {
             color: tokens.danger,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
           close: {
             color: tokens.positive,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
           under: {
             color: tokens.accent,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
           idle: {
             color: tokens.textSubtle,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
         },
       },
@@ -335,14 +358,14 @@ function buildOption(
         showMaxLabel: true,
         color: tokens.textMuted,
         fontSize: layout.tickSize,
-        // Francs, not rappen, and grouped the Swiss way. The card's subhead
-        // names the currency, as it does on every other chart in the app. No
-        // `+` on the rim any more: the scale bends to fit the month's largest
-        // figure rather than clamping it, so every ring is the figure it says.
+        // Share of budget, so the ring at 100% is the dashed circle and every
+        // other ring reads against it. No `+` on the rim: the scale bends to
+        // fit the month's largest figure rather than clamping it, so every ring
+        // is the figure it says.
         formatter: (value: number) =>
           layout.ticksOnlyRim && value < max
             ? ""
-            : Math.round(toMinor(value) / 100).toLocaleString("de-CH"),
+            : `${Math.round(toPercent(value))}%`,
         // The rings run under these numbers; a plate of the panel's own colour
         // keeps them readable without moving them off the spoke. That is
         // `--surface-muted`, not `--surface`: the radar sits on the grey
@@ -365,7 +388,7 @@ function buildOption(
         data: [
           {
             name: text.spentSeries,
-            value: used.map(toDial),
+            value: shares.map(toDial),
             // Brand lime as a *series* colour, not as `--flow-in`. Nothing on
             // this chart encodes direction — both shapes are spending — so
             // reusing the money-in hue here claims no meaning it shouldn't.
@@ -375,8 +398,11 @@ function buildOption(
           },
           {
             name: text.budgetSeries,
-            // A threshold, not a quantity: outline only, no `areaStyle`.
-            value: budget.map(toDial),
+            // A threshold, not a quantity: outline only, no `areaStyle`. One
+            // value for every spoke, because normalising is what turns this
+            // from a star into the ring the fill is read against — and it
+            // lands on a gridline by construction, never between two.
+            value: rows.map(() => toDial(BUDGET_RING)),
             lineStyle: {
               width: 2.5,
               color: tokens.accent,
@@ -426,6 +452,14 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
     [rows, categoryLabel],
   );
 
+  // The effective francs each spoke prints under its name — shared by the
+  // sizer and the builder for the same reason `names` is: the radius is
+  // computed from the width of exactly these strings.
+  const values = useMemo(
+    () => rows.map((row) => formatMoney(row.usedMinor)),
+    [rows],
+  );
+
   const text = useMemo<ChartText>(
     () => ({
       spentSeries: t("seriesSpent"),
@@ -438,16 +472,10 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
   );
 
   // Refitted whenever the month changes, which is the whole point of it — a
-  // quiet month draws a dial it fills, and a month with an outlier draws one
-  // that bends rather than clamping the outlier onto the rim.
-  const dial = useMemo(
-    () =>
-      budgetScale(
-        rows.map((row) => row.usedMinor),
-        rows.map((row) => row.limitMinor ?? row.suggestedMinor),
-      ),
-    [rows],
-  );
+  // quiet month draws a dial that stops just past the budget circle, and a
+  // month with a runaway category draws one that bends rather than clamping
+  // the outlier onto the rim.
+  const dial = useMemo(() => budgetScale(rows.map(share)), [rows]);
 
   const option = useMemo(
     () =>
@@ -455,14 +483,15 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
         ? buildOption(
             rows,
             names,
+            values,
             tokens,
             layout,
-            radiusFor(boxWidth, names, layout),
+            radiusFor(boxWidth, names, values, layout),
             dial,
             text,
           )
         : null,
-    [rows, names, tokens, layout, boxWidth, dial, text],
+    [rows, names, values, tokens, layout, boxWidth, dial, text],
   );
 
   if (rows.length === 0) return null;
@@ -476,10 +505,11 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
       />
 
       {/* A bent scale that does not say so is a lie told with a straight
-          face: every ring is still labelled in francs, but they no longer
-          climb in equal steps, and the shape reads differently because of it.
-          Only shown on the months that are actually compressed — a standing
-          caveat on a dial that is linear would be its own kind of wrong. */}
+          face: every ring is still labelled with its percentage, but they no
+          longer climb in equal steps, and the shape reads differently because
+          of it. Only shown on the months that are actually compressed — a
+          standing caveat on a dial that is linear would be its own kind of
+          wrong. */}
       {dial.compressed && (
         <p className="mx-auto -mt-1 max-w-[52ch] text-center text-[12px] leading-snug text-text-muted">
           {t("radarCompressed")}
@@ -509,7 +539,7 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
                     ? t("notSet")
                     : formatMoney(row.limitMinor)}
                 </td>
-                <td>{Math.round(share(row))}%</td>
+                <td>{Math.round(share(row) / 100)}%</td>
                 <td>{formatMoney(row.suggestedMinor)}</td>
               </tr>
             ))}

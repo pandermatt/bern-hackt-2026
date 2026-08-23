@@ -33,6 +33,16 @@ describe("parseCsv", () => {
     expect(parseCsv("a,b,\n")).toEqual([["a", "b", ""]]);
   });
 
+  it("splits on the delimiter it is given", () => {
+    // Uploaded statements are the reason this is a parameter: a ZKB
+    // Kontoauszug is semicolon-separated, and its amounts carry the commas.
+    expect(parseCsv("a;b;c\n", ";")).toEqual([["a", "b", "c"]]);
+    expect(parseCsv('a;"1.234,50";c\n', ";")).toEqual([["a", "1.234,50", "c"]]);
+    expect(parseCsv("a\tb\n", "\t")).toEqual([["a", "b"]]);
+    // The comma is still the default, so every seed-time caller is unchanged.
+    expect(parseCsv("a,b\n")).toEqual([["a", "b"]]);
+  });
+
   it("reads the last record whether or not the file ends in a newline", () => {
     expect(parseCsv("a,b\nc,d")).toEqual([
       ["a", "b"],
@@ -49,6 +59,12 @@ describe("toRecords", () => {
   it("zips the header onto each row, trailing empty field included", () => {
     expect(toRecords("name,amount,description\nRent,1820,\n")).toEqual([
       { name: "Rent", amount: "1820", description: "" },
+    ]);
+  });
+
+  it("zips a semicolon-separated header too", () => {
+    expect(toRecords("Datum;Betrag\n23.01.2026;1.234,50\n", ";")).toEqual([
+      { Datum: "23.01.2026", Betrag: "1.234,50" },
     ]);
   });
 

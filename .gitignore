@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local sqlite database
 /data
+
+# one-off output of scripts/ast-translate.ts
+/extracted_en.json

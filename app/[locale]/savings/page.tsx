@@ -53,6 +53,11 @@ export default async function SavingsPage({
         <h1 className="text-[30px] leading-tight font-semibold tracking-tight text-text sm:text-[36px]">
           {t("pageTitle")}
         </h1>
+        {/* A flourish, not a divider — the brand's whole colour range at
+            once, under the one line on the page that names it. Decorative and
+            `aria-hidden`: nothing here has to be told apart, which is what
+            makes the ramp safe to use as a sweep. See `globals.css`. */}
+        <div className="rainbow-underline mt-2 w-24" aria-hidden />
         <p className="mt-1 text-[13.5px] text-text-muted">
           {month ? t("pageSubtitle") : t("pageSubtitleEmpty")}
         </p>

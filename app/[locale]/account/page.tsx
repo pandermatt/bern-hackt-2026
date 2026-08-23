@@ -2,11 +2,14 @@ import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 
 import { getAnomalyScanState } from "@/app/actions/anomalies";
+import { getMerchantMapping } from "@/app/actions/merchant-overrides";
 import { AnomalyScanControls } from "@/components/anomaly-scan-controls";
+import { CsvUpload } from "@/components/csv-upload";
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
 import { InstallApp } from "@/components/install-app";
 import { LanguageSelector } from "@/components/language-selector";
+import { MerchantMapper } from "@/components/merchant-mapper";
 import { ProfileSettings } from "@/components/profile-settings";
 import { PushBroadcast } from "@/components/push-broadcast";
 import { PushNotifications } from "@/components/push-notifications";
@@ -43,7 +46,13 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/account"
  *   puts the app on this device, and a push subscription belongs to this
  *   browser rather than to the account.
  * - **Data** — the statements in the account and what has been made of them:
- *   the anomaly scan, then the two ways of importing rows.
+ *   the anomaly scan, then the three ways of importing rows.
+ * - **Merchants** — the importer's two shipped answers about a merchant, given
+ *   again per account: which category its lines belong to, and where its logo
+ *   comes from. A fifth group rather than a row inside Data, because it is a
+ *   table of merchants rather than a setting with a control beside it — and
+ *   because it reaches the ledger, the charts and the budget, which nothing
+ *   else on this page does.
  * - **Danger zone** — deleting the account.
  *
  * The `h1` is the dashboard's 30/36px, not the 22px it was: at 22px the page
@@ -61,6 +70,11 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
   // Resolved on the server: the controls poll a run's *progress*, which says
   // nothing about whether the statements have moved on since it finished.
   const { outdated } = await getAnomalyScanState();
+
+  // Null only for a signed-out reader, which the redirect above has already
+  // ruled out; the fallback keeps the group rendering its own empty line
+  // rather than making the page's shape depend on it.
+  const mapping = await getMerchantMapping();
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -116,8 +130,23 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
           <Section id="data" heading={t("data")} panelClassName={SETTINGS_GROUP}>
             <AnomalyScanControls outdated={outdated} />
             <DemoDataControls />
+            {/* Last of the three, and the only one that adds rather than
+                replaces: the two above are demo fixtures, this is somebody's
+                actual statement. */}
+            <CsvUpload />
           </Section>
         </div>
+
+        <Section
+          id="merchants"
+          heading={t("merchants")}
+          meta={t("merchantsNote")}
+          panelClassName={SETTINGS_GROUP}
+        >
+          <MerchantMapper
+            mapping={mapping ?? { merchants: [], categories: [], unfiled: "Other" }}
+          />
+        </Section>
 
         <Section
           id="danger-zone"
