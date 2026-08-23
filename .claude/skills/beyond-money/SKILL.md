@@ -372,6 +372,18 @@ Unchanged from the template this app grew out of, and still exactly true.
   `scrollClassName` — height *and* vertical padding — and `introClassName`) —
   not a `variant` prop, which would bake the page's layout into the shared
   component.
+- **The dragon is called Batzi, and the assistant *is* him.** The card on
+  `/home` is headed "Ask Batzi" rather than "Money assistant" — a named mascot
+  is what the page has instead of a product name, and the name is a *Batzen*,
+  the old coin he is holding in `coin`. Anything the app says about that
+  character uses the name (`Chat.title`, `Chat.thinking`, `Chat.inputLabel`,
+  `Home.dragonAlt.*`); the landing page's canned exchange still says "the
+  dragon" and is the one place left to bring across. Don't reintroduce
+  "assistant" as a *name* — it is fine as a common noun in prose.
+- **The card's tagline is `lg`-only.** `Chat.subtitle` is a second line under
+  a title that is already an instruction, and on the folded phone panel a line
+  of header costs a chip's worth of transcript. It comes back from `lg`, where
+  there is room for it.
 - **On a phone the panel ships folded, and the dragon is why.** `HomeChat`
   holds an `expanded` flag: `h-24` with `py-2` arriving, `38svh` with `py-4`
   once the reader taps the chevron (`lg:hidden` — from `lg` the page is two

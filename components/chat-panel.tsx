@@ -191,9 +191,9 @@ export function ChatPanel({
    * shell is the only thing that knows how much room the transcript has: when
    * `HomeChat` runs its phone-sized panel collapsed, five lines of prose are
    * the whole box and the starter chips — the thing a first-time reader is
-   * meant to tap — sit below the fold of a 96px scroller. The header's
-   * subtitle already says what the assistant is for, so hiding it there costs
-   * nothing and buys the chips.
+   * meant to tap — sit below the fold of a 96px scroller. The card's title is
+   * an instruction there ("Ask Batzi") and the chips are examples of it, so
+   * hiding the prose costs nothing and buys the chips.
    */
   introClassName = "",
   /**

@@ -113,10 +113,10 @@
     "freeMoneyTitle": "{amount} still unassigned",
     "freeMoneyBody": "{month} came out ahead. Put it in a savings pot.",
     "dragonAlt": {
-      "happy": "A cheerful dragon",
-      "thinking": "A dragon thinking something over",
-      "coin": "A dragon holding a gold coin",
-      "celebrate": "A dragon celebrating"
+      "happy": "Batzi, a cheerful dragon",
+      "thinking": "Batzi, a dragon thinking something over",
+      "coin": "Batzi, a dragon holding a gold coin",
+      "celebrate": "Batzi, a dragon celebrating"
     }
   },
   "Summary": {
@@ -703,7 +703,7 @@
     "confirm": "Delete account"
   },
   "Chat": {
-    "title": "Money assistant",
+    "title": "Ask Batzi",
     "subtitle": "Ask anything about your year",
     "debugTitle": "Request log",
     "debugSubtitle": "What went over the wire",
@@ -715,10 +715,10 @@
     "suggestion2": "Is something shady going on in my account?",
     "suggestion3": "What subscriptions am I paying for?",
     "suggestion4": "How should I split last month's surplus across my saving goals?",
-    "thinking": "The assistant is thinking",
+    "thinking": "Batzi is thinking",
     "followUpsLabel": "Suggested follow-up questions",
     "inputPlaceholder": "Ask about your finances…",
-    "inputLabel": "Message the assistant",
+    "inputLabel": "Message Batzi",
     "send": "Send message",
     "disclaimer": "Answers come from a model reading your own figures. Check anything that matters.",
     "failed": "Something went wrong — try asking again.",

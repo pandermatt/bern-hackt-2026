@@ -80,7 +80,11 @@ export function HomeChat() {
           <h2 className="text-[14px] leading-tight font-semibold text-text">
             {view === "debug" ? t("debugTitle") : t("title")}
           </h2>
-          <p className="text-[12px] text-text-muted">
+          {/* Phone-hidden: the tagline is a second line under a title that
+              is already an instruction ("Ask Batzi"), and on the folded phone
+              panel a whole line of header is a chip's worth of transcript.
+              From `lg` there is room and it comes back. */}
+          <p className="hidden text-[12px] text-text-muted lg:block">
             {view === "debug" ? t("debugSubtitle") : t("subtitle")}
           </p>
         </div>
@@ -142,9 +146,10 @@ export function HomeChat() {
             scrollClassName={`${bodyHeight} ${
               expanded ? "py-4" : "py-2 mask-b-from-75% lg:py-4 lg:mask-none"
             }`}
-            /* Folded, the box is 96px: the intro paragraph alone fills it and
-               pushes the starter chips out of sight. The header's subtitle is
-               already saying what the assistant is for. */
+            /* Folded, the box is 96px: the intro paragraph alone fills it
+               and pushes the starter chips out of sight. The header says what
+               to do — it is "Ask Batzi" — and the chips are four examples of
+               doing it, so the prose is the one part that can go. */
             introClassName={expanded ? "" : "max-lg:hidden"}
           />
         )}
