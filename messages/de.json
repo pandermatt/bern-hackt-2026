@@ -113,10 +113,10 @@
     "freeMoneyTitle": "{amount} noch nicht zugewiesen",
     "freeMoneyBody": "{month} schloss mit Überschuss ab. Legen Sie es in einen Sparziel-Topf.",
     "dragonAlt": {
-      "happy": "Ein fröhlicher Drache",
-      "thinking": "Ein nachdenklicher Drache",
-      "coin": "Ein Drache mit einer Goldmünze",
-      "celebrate": "Ein feiernder Drache"
+      "happy": "Batzi, ein fröhlicher Drache",
+      "thinking": "Batzi, ein nachdenklicher Drache",
+      "coin": "Batzi, ein Drache mit einer Goldmünze",
+      "celebrate": "Batzi, ein feiernder Drache"
     }
   },
   "Summary": {
@@ -703,20 +703,24 @@
     "confirm": "Konto löschen"
   },
   "Chat": {
-    "title": "Finanzassistent",
+    "title": "Fragen Sie Batzi",
     "subtitle": "Fragen Sie alles zu Ihrem Jahr",
     "debugTitle": "Anfrageprotokoll",
     "debugSubtitle": "Was über die Leitung ging",
     "toggleDebug": "Anfrageprotokoll ein-/ausblenden",
+    "expand": "Mehr vom Chat anzeigen",
+    "collapse": "Weniger vom Chat anzeigen",
     "intro": "Ich zeige Ihnen, wo Sie sparen könnten, prüfe Auffälligkeiten, liste Ihre Abos auf und helfe, den Überschuss eines Monats auf Ihre Sparziele zu verteilen. Fragen Sie einfach.",
     "suggestion1": "Wo könnte ich Geld sparen?",
     "suggestion2": "Gibt es verdächtige Aktivitäten auf meinem Konto?",
     "suggestion3": "Welche Abos bezahle ich?",
     "suggestion4": "Wie soll ich den Überschuss vom letzten Monat auf meine Sparziele verteilen?",
-    "thinking": "Der Assistent denkt nach",
+    "other": "Anderes",
+    "askLabel": "Fragen, die Sie stellen können",
+    "thinking": "Batzi denkt nach",
     "followUpsLabel": "Vorgeschlagene Anschlussfragen",
     "inputPlaceholder": "Fragen Sie zu Ihren Finanzen…",
-    "inputLabel": "Nachricht an den Assistenten",
+    "inputLabel": "Nachricht an Batzi",
     "send": "Nachricht senden",
     "disclaimer": "Die Antworten stammen von einem Modell, das Ihre eigenen Zahlen liest. Prüfen Sie alles, worauf es ankommt.",
     "failed": "Etwas ist schiefgelaufen — fragen Sie es bitte noch einmal.",

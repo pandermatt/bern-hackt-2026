@@ -389,7 +389,67 @@ Unchanged from the template this app grew out of, and still exactly true.
   `min-content` and pushes the input form off the bottom of the screen. The
   shell owns the height through two className seams (`className`,
   `scrollClassName`) — not a `variant` prop, which would bake the page's
-  layout into the shared component.
+  layout into the shared component. `className` is also how the shell *hides*
+  the panel: below `lg` it is `max-lg:hidden` until opened, rather than
+  unmounted, so the input (and the ref the "other" button focuses) stays in
+  the tree.
+- **The dragon is called Batzi, and the assistant *is* him.** The card on
+  `/home` is headed "Ask Batzi" rather than "Money assistant" — a named mascot
+  is what the page has instead of a product name, and the name is a *Batzen*,
+  the old coin he is holding in `coin`. Anything the app says about that
+  character uses the name (`Chat.title`, `Chat.thinking`, `Chat.inputLabel`,
+  `Home.dragonAlt.*`); the landing page's canned exchange still says "the
+  dragon" and is the one place left to bring across. Don't reintroduce
+  "assistant" as a *name* — it is fine as a common noun in prose.
+- **The card's tagline is `lg`-only.** `Chat.subtitle` is a second line under
+  a title that is already an instruction, and on the folded phone panel a line
+  of header costs a chip's worth of transcript. It comes back from `lg`, where
+  there is room for it.
+- **On a phone there is no panel until it is asked for, and the dragon is
+  why.** Below `lg` `HomeChat` renders `ChatLauncher` instead: a wrapped block
+  of question pills capped at `max-h-38` — three rows and a glimpse of the
+  fourth — with an "other" pill under it, and no transcript or input row at
+  all. That is ~250px of card against ~380, and the difference is the mascot's:
+  he is what the page is arranged around and what is saying the nudges, and at
+  the full height he started below the fold. Two shapes were tried and are
+  worth not repeating: wrapping *freely* is seven rows and 312px in German,
+  which is the panel it replaces; one sideways-scrolling row is 112px but fits
+  a single question on a 390px screen and hides the rest behind a gesture
+  nothing announces. The cap plus the bottom fade is the middle — and the cap
+  must not land on a row boundary, or the box reads as the end of the list.
+  Folded is the SSR state, like the nudge deck's, so `/home` arrives with the
+  dragon in frame and stays that way with JS off. Three things hang off it: a
+  **send** opens the panel (`HomeChat` wraps `chat.send`), because asking is
+  the one gesture that means "I want to read the answer" — and nothing closes
+  it again, since collapsing under a reader is the shifting page the fixed
+  height exists to prevent; **"other" is the one thing that focuses the
+  input**, which is the on-demand case `ChatPanel`'s `inputRef` was kept for
+  (an effect on the open flag, because focusing a `display: none` element is a
+  no-op), and it sits *outside* the scroller because with the input folded a
+  question nobody offered has no other way in; and the pills are the
+  **follow-ups** once there are any, since folded is a state a reader comes
+  back to mid-conversation and "what to ask next" is the honest content for it
+  either way.
+- **The chat is drawn in the page's own vocabulary, not its own.** The card is
+  `rounded-lg border border-line bg-surface` — `components/nudge-card.tsx`'s
+  shape, since the two sit one above the other on `/home` — and not the
+  `rounded-xl` shadowed box it was. Every question pill is `CHAT_PILL` from
+  `chat-panel.tsx`, which is `components/app-header.tsx`'s button pill down to
+  the `shadow-2xs` and the `active:scale-95`; the launcher renders the same
+  constant. It carries `max-w-full` and **not** `shrink-0` — these pills wrap
+  inside their box, and a pill that cannot shrink runs a long German question
+  straight out of the card. The follow-up row under the input is the exception,
+  since it scrolls sideways, and adds `shrink-0 whitespace-nowrap` at the call
+  site. Bubbles fill with `--surface-muted` rather than a bordered `--bg`,
+  which is white on white in light mode. `CHAT_PILL_SHAPE` exists for the one
+  pill that wants other colours: append a second `bg-*` to the full constant
+  and which one wins is down to the cascade, not the order you wrote them in.
+  There is no rule under the card's header any more — it separated a title from
+  the one thing that title introduces.
+- **The transcript's auto-scroll skips an empty conversation.** There is
+  nothing to follow before the first turn, and following anyway is visible at
+  the folded size: the page opened on the *last* starter chip with the one
+  above it sliced in half.
 - **The inline panel does not autofocus.** Focusing an input near the top of a
   phone page raises the keyboard on arrival and shoves away what the reader
   came for, so `HomeChat` passes no `inputRef`. The prop survives on
@@ -401,6 +461,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   ground for words. Every string down there carries its own ground — the cards
   on `bg-surface`, and the all-clear line and the "show all" toggle on surface
   pills, for exactly this reason.
+- **`/home`'s column stretches with `flex-1`, never `min-h-full`.** The mascot
+  is placed by `mt-auto` — bottom of the *page*, and the deck unfolds upwards
+  out of him — and that needs free space to claim. `min-height: 100%` there
+  resolved against an ancestor chain whose height is a minimum rather than a
+  definite one, so it collapsed to nothing and the column was merely as tall as
+  its content; it went unnoticed only because the chat used to overflow a phone
+  screen on its own. `main` is a flex column and the page column is its growing
+  child.
 - **That gradient has to be carried under the tab bar by hand.** `<body>`
   reserves the floating bar's height as its *own* `app-shell:pb-30`, and
   padding paints the body's `bg-bg` — invisible on every other page, whose
