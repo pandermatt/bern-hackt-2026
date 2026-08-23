@@ -11,6 +11,7 @@ import {
   ChatPanel,
   useAssistantChat,
 } from "@/components/chat-panel";
+import { onAskBatzi } from "@/lib/ask-batzi";
 import { SUGGESTION_KEYS } from "@/lib/assistant";
 
 /**
@@ -82,6 +83,28 @@ export function HomeChat() {
     setOpen(true);
     chat.send(text);
   };
+
+  /* The free-money nudge, at the other end of the page and of the tree —
+     `lib/ask-batzi.ts` explains why this is an event and not a context. The
+     question goes straight through `send`, so it opens the panel and lands as
+     the reader's own turn: clicking a card that *is* a question is asking it,
+     and a paste-then-confirm was tried and demoted to ceremony. The debug view
+     yields for the same reason a send opens the panel — asking plainly means
+     "I want to read the answer". `send` closes over the conversation and is
+     remade every render, so the subscription reads it through a ref kept
+     current by its own effect; the listener itself is attached once. */
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  });
+  useEffect(
+    () =>
+      onAskBatzi((question) => {
+        setView("chat");
+        sendRef.current(question);
+      }),
+    [],
+  );
 
   return (
     /* The nudge cards' own shape — `rounded-lg border border-line bg-surface`,
