@@ -642,6 +642,55 @@ Unchanged from the template this app grew out of, and still exactly true.
   files. If you change the merchant table or swap the exports, that is the test
   that will tell you what broke.
 
+## Uploaded statements
+
+The third way rows enter an account, and the only one a person can reach:
+`/account` → Data → Import your own CSV.
+
+- **The uploader appends; the other two importers replace.** `lib/csv-upload.ts`
+  never deletes, so no `transactions.id` is reissued and it must **not** call
+  `rebindAnomalies` — every stored finding stays bound to the row it describes.
+  (The three callers of that function are still `scripts/seed.ts`,
+  `lib/demo-loader.ts` and `lib/synthetic-generator.ts`, and all three
+  delete-then-insert.) The new rows do change the account's fingerprint, which
+  is how `getAnomalyScanState` already reports the scan as outdated.
+- **Dedupe is the unique `(user_id, external_id)` index**, via
+  `onConflictDoNothing().returning()` — the row count that comes back is what
+  separates "imported" from "already there". Re-uploading an overlapping month
+  is a normal thing to do and reads as a no-op, not an error.
+- **The natural key carries an occurrence suffix** (`…|amount|text#2`) for a
+  line repeated inside *one* file. Two identical charges on one day are real —
+  the shipped Revolut export has a pair, disambiguated by hand with `" (2)"` —
+  and without the suffix the dedupe eats the second one.
+- **`lib/csv-import.ts` is pure and client-safe, and that is load-bearing.**
+  The dialog runs it in the browser to sniff the delimiter, detect the columns
+  and draw the preview — so nothing leaves the device until someone presses
+  import — and the action runs the same module server-side on the same file, so
+  the preview cannot disagree with the ledger. Keep `@/db`, `server-only` and
+  drizzle out of it, the same way `lib/insights.ts` does, and keep it free of
+  `new Date()`: a booking date is a calendar day.
+- **A line that cannot be read is counted, never dropped.** `normalizeRows`
+  returns `skipped` with a line number and a reason, the dialog prints them,
+  and the toast repeats the count. "312 imported" over a file of 400 is a
+  silent lie about someone's money.
+- **Ambiguous dates are read day-first** (`01/02/2026` is 1 February), because
+  every bank shipping into this app writes the day first and a reader has to
+  pick one. Guessing per row would put half a statement in the wrong month.
+- **`classifyFreeText` in `scripts/lib/statement.ts` is the free-text sibling of
+  `classify`**, not a replacement: it strips the bank's ceremony (`EINKAUF ZKB
+  VISA DEBIT …`), tries the slug table, then looks for a canonical `MERCHANTS`
+  name inside what is left, then falls through to `classify`'s keyword rules.
+  Names under four characters (BP, Eni, CRO, UPS) must match the *whole* label
+  — contained, they fire on any label that happens to spell them. `KEYWORDS`
+  stays untouched: it is read by `scripts/seed.ts` too, so an entry added there
+  moves the shipped statements and `tests/seed-rules.test.ts` with them, which
+  is why the salary hint lives in `lib/csv-upload.ts` instead.
+- **`serverActions.bodySizeLimit` in `next.config.ts` exists for this feature.**
+  A Server Action body is capped at 1 MB by default and the uploader posts the
+  file; the app's own cap is `MAX_CSV_BYTES` (2 MB), checked in the browser and
+  again in the action, so the limit someone hits comes with a sentence rather
+  than as a framework 413.
+
 ## Anomaly detection
 
 - **The engine never runs during a render.** It used to, over the account's

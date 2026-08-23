@@ -43,6 +43,18 @@ npm run seed
 | Email | `jeanine@example.com` — override with `SEED_EMAIL` |
 | Password | `beyond-money-demo` — override with `SEED_PASSWORD` |
 
+### Importing your own statements
+
+Any account can upload its own CSV from **Account settings → Data → Import your
+own CSV**. The file is read in the browser: the delimiter (comma, semicolon,
+tab or pipe) and the date, amount and description columns are detected, shown
+as a preview, and every one of them can be corrected before anything is sent.
+
+Swiss, German and English number and date formats are all understood
+(`1'234.50`, `1.234,50`, `1,234.50`; `23.01.2026`, `2026-01-23`), as are
+statements that split money in and out into two columns. Uploaded rows are
+**added** to the account rather than replacing it, and a line already there is
+skipped — so re-importing an overlapping month is safe.
 
 ## Scripts
 

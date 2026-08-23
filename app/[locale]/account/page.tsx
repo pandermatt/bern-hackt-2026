@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { getAnomalyScanState } from "@/app/actions/anomalies";
 import { AnomalyScanControls } from "@/components/anomaly-scan-controls";
+import { CsvUpload } from "@/components/csv-upload";
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
 import { InstallApp } from "@/components/install-app";
@@ -43,7 +44,7 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/account"
  *   puts the app on this device, and a push subscription belongs to this
  *   browser rather than to the account.
  * - **Data** — the statements in the account and what has been made of them:
- *   the anomaly scan, then the two ways of importing rows.
+ *   the anomaly scan, then the three ways of importing rows.
  * - **Danger zone** — deleting the account.
  *
  * The `h1` is the dashboard's 30/36px, not the 22px it was: at 22px the page
@@ -116,6 +117,10 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
           <Section id="data" heading={t("data")} panelClassName={SETTINGS_GROUP}>
             <AnomalyScanControls outdated={outdated} />
             <DemoDataControls />
+            {/* Last of the three, and the only one that adds rather than
+                replaces: the two above are demo fixtures, this is somebody's
+                actual statement. */}
+            <CsvUpload />
           </Section>
         </div>
 
