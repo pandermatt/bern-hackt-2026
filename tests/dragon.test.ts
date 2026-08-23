@@ -150,6 +150,14 @@ describe("resolved findings stop asking for attention", () => {
 });
 
 describe("which dragon shows up", () => {
+  const base = {
+    actionCount: 0,
+    contextCount: 0,
+    resolvedGroupCount: 0,
+    hasCompletedScan: true,
+    running: false,
+    outdated: false,
+  };
   const budget: BudgetVerdict[] = ["unplanned", "over", "tight", "clear"];
   const anomaly: AnomalyVerdict[] = [
     "unscanned",
@@ -164,6 +172,13 @@ describe("which dragon shows up", () => {
   it("only ever picks a mood there is a drawing for", () => {
     for (const v of budget) expect(DRAGON_SRC[dragonForBudget(v)]).toBeTruthy();
     for (const v of anomaly) expect(DRAGON_SRC[dragonForAnomalies(v)]).toBeTruthy();
+  });
+
+  it("has nothing to add when the scan is stale", () => {
+    // The page renders no dragon at all for `outdated` — the banner beneath it
+    // already says so, with a warning icon and the button that fixes it. The
+    // verdict still exists, because it is what tells the page to stay quiet.
+    expect(anomalyVerdict({ ...base, outdated: true })).toBe("outdated");
   });
 
   it("does not smile about a problem", () => {

@@ -150,22 +150,28 @@ export default async function AnomaliesPage({
     outdated: overview.outdated,
   });
 
+  /* `null` for an outdated scan, and that is the whole of the feature: the
+     banner below already says the statements have moved, says it with a
+     warning icon, and carries the button that fixes it. A mascot repeating
+     that sentence directly above it is the same claim twice, and the weaker of
+     the two — it has nowhere to click. Every other state has no banner, so the
+     dragon is the only thing saying anything. */
   const dragonLine =
-    verdict === "action"
-      ? t("dragonAction", { count: openAction.length })
-      : t(
-          verdict === "running"
-            ? "dragonRunning"
-            : verdict === "unscanned"
-              ? "dragonUnscanned"
-              : verdict === "outdated"
-                ? "dragonOutdated"
+    verdict === "outdated"
+      ? null
+      : verdict === "action"
+        ? t("dragonAction", { count: openAction.length })
+        : t(
+            verdict === "running"
+              ? "dragonRunning"
+              : verdict === "unscanned"
+                ? "dragonUnscanned"
                 : verdict === "resolved"
                   ? "dragonResolved"
                   : verdict === "context"
                     ? "dragonContext"
                     : "dragonClear",
-        );
+          );
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -184,10 +190,13 @@ export default async function AnomaliesPage({
 
         {/* Under the heading rather than among the findings: it is a read on
             the whole page, and a mascot inside the list would look like one
-            more finding. */}
-        <div className="mt-4">
-          <DragonBuddy mood={dragonForAnomalies(verdict)} line={dragonLine} />
-        </div>
+            more finding. Absent entirely when there is nothing for it to add —
+            see `dragonLine`. */}
+        {dragonLine && (
+          <div className="mt-4">
+            <DragonBuddy mood={dragonForAnomalies(verdict)} line={dragonLine} />
+          </div>
+        )}
 
         {/* Always, whether or not anything has been ticked off yet — it is the
             switch that governs what this page and every rule page under it
