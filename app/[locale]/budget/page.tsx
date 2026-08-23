@@ -1,15 +1,10 @@
 import { getTranslations } from "next-intl/server";
-import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { getBudgetOverview } from "@/app/actions/budget";
-import { BudgetEditor } from "@/components/budget-editor";
-import { BudgetMonthPicker } from "@/components/budget-month-picker";
-import { BudgetRadar } from "@/components/budget-radar";
-import { Section } from "@/components/section";
+import { BudgetBoard } from "@/components/budget-board";
 import { Link, redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { formatMoney } from "@/lib/insights";
 import { monthLabel } from "@/lib/month-label";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +40,6 @@ export default async function BudgetPage({
 
   const { months, month, rows } = overview;
   const monthName = month ? monthLabel(tMonths, month) : null;
-
-  const totalUsed = rows.reduce((sum, row) => sum + row.usedMinor, 0);
-  const totalLimit = rows.reduce((sum, row) => sum + (row.limitMinor ?? 0), 0);
-  const budgeted = rows.filter((row) => row.limitMinor !== null).length;
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -86,47 +77,12 @@ export default async function BudgetPage({
           </p>
         </div>
       ) : (
-        /* No `space-y` — every Section brings its own `pt-6`, the rhythm the
-           dashboard, the ledger and the anomalies page already run on. */
-        <div>
-          <Section
-            id="radar"
-            heading={t("radarHeading")}
-            meta={
-              /* `month` is non-null whenever there are rows — `budgetRows`
-                 returns [] without one — but that is not something the type
-                 carries, and "no month" has nothing to say about a month
-                 anyway. Tested through `monthName` rather than `month` so the
-                 narrowing reaches the value actually interpolated below; the
-                 two are null together by construction. */
-              budgeted === 0 || !monthName
-                ? t("radarNoLimits")
-                : t("radarMeta", {
-                    spent: formatMoney(totalUsed),
-                    limit: formatMoney(totalLimit),
-                    month: monthName,
-                  })
-            }
-            panelClassName="p-4 sm:p-5"
-          >
-            {/* The month lives with the chart it refits, not up beside the
-                page title — the radar's rim is refitted to whichever month is
-                picked, and every figure in the panel follows it. */}
-            {month && months.length > 1 && (
-              <div className="mb-3 flex justify-end">
-                <Suspense fallback={null}>
-                  <BudgetMonthPicker months={months} month={month} />
-                </Suspense>
-              </div>
-            )}
-
-            <BudgetRadar rows={rows} />
-          </Section>
-
-          {/* Keyed on the month: the editor holds the typed-but-unsaved
-              values in state, and switching months has to start it over. */}
-          <BudgetEditor key={month} rows={rows} />
-        </div>
+        <BudgetBoard
+          rows={rows}
+          months={months}
+          month={month}
+          monthName={monthName}
+        />
       )}
     </main>
   );

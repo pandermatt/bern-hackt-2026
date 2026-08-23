@@ -75,7 +75,18 @@ export async function getBudgetOverview(
   };
 }
 
-export type SaveBudgetsResult = { ok: true } | { ok: false; error: string };
+/**
+ * A limit as it now stands in the database, `null` for a category whose row was
+ * deleted. The client redraws the radar from these rather than from what it
+ * typed: the parse that decides what a field *means* lives in the action, so
+ * echoing the stored figures back is what keeps the chart drawn from the same
+ * numbers the database holds instead of from a second parse that could differ.
+ */
+export type SavedLimit = { category: string; limitMinor: number | null };
+
+export type SaveBudgetsResult =
+  | { ok: true; limits: SavedLimit[] }
+  | { ok: false; error: string };
 
 /**
  * Errors are phrased here, not in the component.
@@ -97,6 +108,13 @@ async function budgetError(
  * One transaction, so a half-saved budget is not a state the page can land in.
  * The `{ ok }` envelope is the mutation contract — the client raises a toast
  * off it; reads on this page return their data directly.
+ *
+ * A successful save carries the limits it wrote back with it. The radar is
+ * drawn from those limits, and it used to sit on the old ones until the
+ * refreshed server render arrived — a second round trip after this one, and
+ * long enough on a slow connection to show the chart and the inputs disagreeing
+ * about the budget. This is not a read dressed up as a mutation: it is the
+ * *result* of the write, which only the write knows.
  */
 export async function saveBudgets(
   entries: { category: string; amount: string }[],
@@ -161,5 +179,14 @@ export async function saveBudgets(
   }
 
   revalidatePath("/[locale]/budget", "page");
-  return { ok: true };
+  // The two halves of the write, back as one list of what each category now
+  // holds — a cleared field is a `null` limit here rather than a missing entry,
+  // so the caller can tell "no limit" from "not in this save".
+  return {
+    ok: true,
+    limits: [
+      ...clears.map((category) => ({ category, limitMinor: null })),
+      ...upserts,
+    ],
+  };
 }

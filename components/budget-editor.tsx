@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type CSSProperties } from "react";
 import { toast } from "sonner";
 
-import { saveBudgets } from "@/app/actions/budget";
+import { saveBudgets, type SavedLimit } from "@/app/actions/budget";
 import { Section } from "@/components/section";
 import { categoryLucideIcon } from "@/lib/category-icons";
 import { formatMoney, type BudgetRow } from "@/lib/insights";
@@ -41,7 +41,20 @@ function toMinor(field: string): number | null {
   return Number.isFinite(value) && value >= 0 ? Math.round(value * 100) : NaN;
 }
 
-export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
+export function BudgetEditor({
+  rows,
+  onSaved,
+}: {
+  rows: BudgetRow[];
+  /**
+   * The limits the action confirmed, the moment it confirms them. The radar
+   * above is drawn from exactly these figures, and waiting for the refreshed
+   * server render to reach it left the two halves of the page showing
+   * different budgets for as long as the round trip took. See
+   * `components/budget-board.tsx`, which is what holds them.
+   */
+  onSaved?: (limits: SavedLimit[]) => void;
+}) {
   const t = useTranslations("Budget");
   // Category names are data, stored in English; they are translated where they
   // are shown and nowhere else, so `row.category` stays the key everything
@@ -82,6 +95,10 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
         })),
       );
       if (result.ok) {
+        // Before the refresh, not after it: the chart is redrawn from the
+        // figures the action just confirmed, and the refresh then brings the
+        // rest of the page's server-rendered numbers along behind it.
+        onSaved?.(result.limits);
         toast.success(t("saved"));
         router.refresh();
       } else {
