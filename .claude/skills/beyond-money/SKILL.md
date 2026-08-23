@@ -341,12 +341,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   smaller type, names broken at their last space, and only the rim tick — six
   axis numbers queue up one short spoke, and the series paints over them. The
   rim tick goes too once the dial is under 60px.
-- **Every category name carries its share of budget underneath it**, and it is
-  the same figure the spoke is drawn from — `share()` feeds both, so the shape
-  and the number cannot disagree. The shape carries the comparison and the
-  number carries the precision a few pixels of radius cannot (96% against 104%).
-  Don't drop one for tidiness.
-- **The percentage under each axis name is `--positive`/`--danger`, not the
+- **Every category name carries the effective francs spent underneath it** —
+  the magnitude the normalised radius deliberately stopped showing. The colour
+  of that amount is still scored by `share()`, the same figure the spoke is
+  drawn from, so the shape and its scoring cannot disagree; the share as a
+  number lives in the tooltip and the `sr-only` table. The strings are measured
+  per row in `radiusFor`, so the dial sizes itself against what it actually
+  prints. Don't drop the amount for tidiness.
+- **The amount under each axis name is `--positive`/`--danger`, not the
   chart fills.** They are 13px glyphs. `--chart-2` (#a5c400) is 2:1 on white
   and unreadable as text; the fill it labels is fine because a 2.5px stroke
   with a translucent area is not text.

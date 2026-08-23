@@ -38,8 +38,9 @@ import { useCategoryLabel } from "@/lib/use-category-label";
  * there is one thing to look for, and it reads at a glance.
  *
  * What that costs is magnitude: a radius no longer says how much money. The
- * francs are in the tooltip and in the `sr-only` table, and the percentage
- * under each name is the exact figure the shape is drawn from.
+ * effective francs spent are printed under each name, coloured by how the
+ * category stands against its budget, and the tooltip and `sr-only` table
+ * carry the limit and the share the shape is drawn from.
  *
  * A month with a runaway category bends the scale rather than clipping it; the
  * rings stay percentages either way. `lib/budget-scale.ts` owns the arithmetic
@@ -61,13 +62,13 @@ const HEIGHT = 520;
 const COMPACT = {
   height: 370,
   nameSize: 11,
-  percentSize: 12,
+  valueSize: 12,
   nameGap: 8,
   tickSize: 9.5,
   /**
    * Only the rim gets a number. Six of them queue up one short spoke, and the
    * series is drawn over the axis, so the middle ones end up with a polygon
-   * through them. The percentages under each name carry the reading anyway.
+   * through them. The amounts under each name carry the reading anyway.
    */
   ticksOnlyRim: true,
 } as const;
@@ -75,7 +76,7 @@ const COMPACT = {
 const ROOMY = {
   height: HEIGHT,
   nameSize: 12.5,
-  percentSize: 13.5,
+  valueSize: 13.5,
   nameGap: 12,
   tickSize: 11,
   ticksOnlyRim: false,
@@ -130,21 +131,23 @@ function textWidth(text: string, size: number, weight: number): number {
 function radiusFor(
   boxWidth: number,
   names: string[],
+  values: string[],
   layout: Layout,
 ): number {
-  const labelWidth = names.reduce((widest, displayed) => {
+  const labelWidth = names.reduce((widest, displayed, i) => {
     const name = Math.max(
       ...nameLines(displayed).map((line) =>
         textWidth(line, layout.nameSize, 400),
       ),
     );
-    // The percentage is bolder and can be the wider of the two on a short name.
-    const share = textWidth("724%", layout.percentSize, 600);
-    return Math.max(widest, name, share);
+    // The amount is bolder and usually the wider of the two, so it is measured
+    // per row rather than guessed from a placeholder.
+    const value = textWidth(values[i], layout.valueSize, 600);
+    return Math.max(widest, name, value);
   }, 0);
 
   const byWidth = boxWidth / 2 - layout.nameGap - labelWidth;
-  // Two lines of name plus the percentage, and the legend along the bottom.
+  // Two lines of name plus the amount, and the legend along the bottom.
   const byHeight =
     layout.height / 2 - layout.nameGap - layout.nameSize * 3.4 - 26;
   return Math.max(44, Math.min(byWidth, byHeight));
@@ -153,16 +156,16 @@ function radiusFor(
 /**
  * Spent as basis points of the limit — or of the suggestion, when none is set.
  *
- * The same figure twice over: it is what the spoke is drawn at *and*, divided
- * by 100, the percentage printed under the category name, so the shape and the
- * number can never disagree.
+ * What the spoke is drawn at, what the tooltip's share is, and what scores the
+ * colour of the amount printed under the category name — one figure, so the
+ * shape and its scoring can never disagree.
  */
 function share(row: BudgetRow): number {
   return shareOf(row.usedMinor, row.limitMinor ?? row.suggestedMinor);
 }
 
 /**
- * The colour of the percentage under a category name.
+ * The colour of the amount under a category name.
  *
  * An unset category is measured against a *suggestion*, so it is deliberately
  * not scored — calling a number "over" against a limit nobody chose would be
@@ -193,6 +196,7 @@ type ChartText = {
 function buildOption(
   rows: BudgetRow[],
   names: string[],
+  values: string[],
   tokens: ChartTokens,
   layout: Layout,
   radius: number,
@@ -209,7 +213,7 @@ function buildOption(
   // indicator rather than the row — so this is keyed on the *displayed* name,
   // not on `row.category`, or a translated spoke finds nothing.
   const byName = new Map(
-    rows.map((row, i) => [names[i], { row, pct: spent[i] }]),
+    rows.map((row, i) => [names[i], { row, pct: spent[i], value: values[i] }]),
   );
 
   const indicator = rows.map((row, i) => ({
@@ -290,16 +294,18 @@ function buildOption(
       radius,
       splitNumber,
       axisName: {
-        // Category on top, its share of budget underneath — the reading most
-        // people came for, without having to measure a radius by eye.
+        // Category on top, the effective francs spent underneath — the number
+        // the normalised radius deliberately stopped carrying. The colour
+        // still scores it against the budget, and the share itself lives in
+        // the tooltip and the `sr-only` table.
         formatter: (name?: string) => {
           const entry = name ? byName.get(name) : undefined;
           if (!entry) return name ?? "";
           // One token per line: a `\n` *inside* a rich token is not a line
           // break, so a wrapped name has to be emitted as separate tokens.
           const lines = nameLines(name ?? "").map((line) => `{name|${line}}`);
-          const share = `{${verdict(entry.row, entry.pct)}|${Math.round(entry.pct)}%}`;
-          return [...lines, share].join("\n");
+          const value = `{${verdict(entry.row, entry.pct)}|${entry.value}}`;
+          return [...lines, value].join("\n");
         },
         rich: {
           name: {
@@ -313,30 +319,30 @@ function buildOption(
           over: {
             color: tokens.danger,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
           close: {
             color: tokens.positive,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
           under: {
             color: tokens.accent,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
           idle: {
             color: tokens.textSubtle,
             fontFamily: NAME_FONT,
-            fontSize: layout.percentSize,
+            fontSize: layout.valueSize,
             fontWeight: 600,
-            lineHeight: layout.percentSize + 5,
+            lineHeight: layout.valueSize + 5,
           },
         },
       },
@@ -446,6 +452,14 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
     [rows, categoryLabel],
   );
 
+  // The effective francs each spoke prints under its name — shared by the
+  // sizer and the builder for the same reason `names` is: the radius is
+  // computed from the width of exactly these strings.
+  const values = useMemo(
+    () => rows.map((row) => formatMoney(row.usedMinor)),
+    [rows],
+  );
+
   const text = useMemo<ChartText>(
     () => ({
       spentSeries: t("seriesSpent"),
@@ -469,14 +483,15 @@ export function BudgetRadar({ rows }: { rows: BudgetRow[] }) {
         ? buildOption(
             rows,
             names,
+            values,
             tokens,
             layout,
-            radiusFor(boxWidth, names, layout),
+            radiusFor(boxWidth, names, values, layout),
             dial,
             text,
           )
         : null,
-    [rows, names, tokens, layout, boxWidth, dial, text],
+    [rows, names, values, tokens, layout, boxWidth, dial, text],
   );
 
   if (rows.length === 0) return null;
