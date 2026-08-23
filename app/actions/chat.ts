@@ -56,6 +56,7 @@ import {
   listAssistantLog,
   pushAssistantLog,
   truncateSnapshot,
+  type AssistantConfigView,
   type AssistantLogEntry,
   type AssistantLogView,
 } from "@/lib/assistant-log";
@@ -64,6 +65,20 @@ import { monthHasEnded } from "@/lib/clock";
 
 const APERTUS_URL =
   process.env.APERTUS_URL ?? "https://llm.stoney-cloud.com/v1/chat/completions";
+
+/** The model and the cap, read fresh on every call rather than frozen at
+ * module load: an edited `.env.local` lands on the next request in dev, and
+ * the debug panel's header has to name what the *next* request would use, not
+ * what the server booted with. */
+function assistantModel(): string {
+  return process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
+}
+
+/** Unset (or unparseable, or 0) means "no cap": the request then carries no
+ * max_tokens at all and the endpoint's own default applies. */
+function assistantMaxTokens(): number | undefined {
+  return Number.parseInt(process.env.MAX_TOKENS ?? "", 10) || undefined;
+}
 
 /** API requests per turn. Tools are offered on all but the last, which forces
  * an answer so a fetch-happy model cannot loop forever. Five, not four: a
@@ -137,11 +152,8 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   }
 
   const turnStarted = Date.now();
-  const model = process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
-  // Unset (or unparseable, or 0) means "no cap": the request then carries no
-  // max_tokens at all and the endpoint's own default applies.
-  const maxTokens =
-    Number.parseInt(process.env.MAX_TOKENS ?? "", 10) || undefined;
+  const model = assistantModel();
+  const maxTokens = assistantMaxTokens();
 
   const history = normalizeHistory(rawHistory);
   const question = history
@@ -943,6 +955,20 @@ async function paraphrase({
     usage,
   });
   return cleaned;
+}
+
+/** Where the calls go and under what caps — the header of the debug panel,
+ * which otherwise says nothing at all until a turn has been logged. The API
+ * key is deliberately not part of it, the same way the request snapshots
+ * never carry the Authorization header. */
+export async function getAssistantConfig(): Promise<AssistantConfigView | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  return {
+    url: APERTUS_URL,
+    model: assistantModel(),
+    maxTokens: assistantMaxTokens(),
+  };
 }
 
 /** The current user's recent assistant calls, newest first. */

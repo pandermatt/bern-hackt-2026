@@ -847,6 +847,10 @@
   },
   "ChatDebug": {
     "intro": "Requests to the model endpoint, newest first.",
+    "endpoint": "Endpoint",
+    "modelLabel": "Model",
+    "tokenCap": "Token cap",
+    "noCap": "no cap",
     "refresh": "Refresh log",
     "clear": "Clear log",
     "empty": "No requests logged yet. Ask the assistant something.",

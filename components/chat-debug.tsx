@@ -4,9 +4,13 @@ import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 
-import { clearAssistantLogAction, getAssistantLog } from "@/app/actions/chat";
+import {
+  clearAssistantLogAction,
+  getAssistantConfig,
+  getAssistantLog,
+} from "@/app/actions/chat";
 // Type-only import — the module itself is `server-only`, but types are erased.
-import type { AssistantLogView } from "@/lib/assistant-log";
+import type { AssistantConfigView, AssistantLogView } from "@/lib/assistant-log";
 
 /**
  * The sidebar's debug menu: every call the assistant made to the model
@@ -17,11 +21,20 @@ import type { AssistantLogView } from "@/lib/assistant-log";
 export function ChatDebug() {
   const t = useTranslations("ChatDebug");
   const [entries, setEntries] = useState<AssistantLogView[] | null>(null);
+  const [config, setConfig] = useState<AssistantConfigView | null>(null);
   const [pending, startTransition] = useTransition();
 
   const refresh = useCallback(() => {
     startTransition(async () => {
-      setEntries(await getAssistantLog());
+      // Both in one transition: the endpoint is read from the environment on
+      // every call, so a `.env.local` edit shows up on the same refresh that
+      // brings the turns it changed.
+      const [log, settings] = await Promise.all([
+        getAssistantLog(),
+        getAssistantConfig(),
+      ]);
+      setEntries(log);
+      setConfig(settings);
     });
   }, [startTransition]);
 
@@ -66,6 +79,40 @@ export function ChatDebug() {
           </button>
         </div>
       </div>
+
+      {/* What the log cannot say on its own: where the turns go, and under
+          which model and cap. Read from the server rather than a logged entry,
+          so an empty log still answers "is this thing even pointed anywhere". */}
+      {config && (
+        <dl className="mt-3 space-y-1 rounded-lg border border-line bg-bg px-3 py-2 text-[11px]">
+          <div className="flex items-baseline gap-3">
+            <dt className="shrink-0 text-text-subtle">{t("endpoint")}</dt>
+            <dd
+              className="ml-auto truncate font-mono text-text-muted"
+              title={config.url}
+            >
+              {config.url}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <dt className="shrink-0 text-text-subtle">{t("modelLabel")}</dt>
+            <dd
+              className="ml-auto truncate font-mono text-text-muted"
+              title={config.model}
+            >
+              {config.model}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <dt className="shrink-0 text-text-subtle">{t("tokenCap")}</dt>
+            <dd className="ml-auto font-mono tabular-nums text-text-muted">
+              {config.maxTokens === undefined
+                ? t("noCap")
+                : `${config.maxTokens} ${t("tokens")}`}
+            </dd>
+          </div>
+        </dl>
+      )}
 
       {entries !== null && entries.length === 0 && (
         <p className="mt-4 text-[13px] text-text-muted">

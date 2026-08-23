@@ -43,6 +43,17 @@ export type AssistantLogEntry = {
 /** What the debug menu receives — everything except the owner scoping. */
 export type AssistantLogView = Omit<AssistantLogEntry, "userId">;
 
+/** The header above that list: which endpoint the turns go to, under which
+ * model and cap. Not part of an entry — it is the configuration the *next*
+ * request would use, and the panel has to say something before the first turn
+ * has been logged. Never carries the API key. */
+export type AssistantConfigView = {
+  url: string;
+  model: string;
+  /** Absent when MAX_TOKENS is unset — requests then carry no cap. */
+  maxTokens?: number;
+};
+
 const CAPACITY = 50;
 /** Payload snapshots are for eyeballing, not archiving. */
 export const SNAPSHOT_LIMIT = 6000;

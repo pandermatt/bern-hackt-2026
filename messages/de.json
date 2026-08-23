@@ -847,6 +847,10 @@
   },
   "ChatDebug": {
     "intro": "Anfragen an den Modell-Endpunkt, neueste zuerst.",
+    "endpoint": "Endpunkt",
+    "modelLabel": "Modell",
+    "tokenCap": "Token-Limit",
+    "noCap": "kein Limit",
     "refresh": "Protokoll aktualisieren",
     "clear": "Protokoll leeren",
     "empty": "Noch keine Anfragen protokolliert. Fragen Sie den Assistenten etwas.",
