@@ -3,6 +3,7 @@
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   gte,
@@ -484,4 +485,30 @@ export async function listTransactions(raw: unknown): Promise<Transaction[]> {
     .from(transactions)
     .where(and(...conditions))
     .orderBy(desc(transactions.bookedOn), asc(transactions.id));
+}
+
+/**
+ * How many statement lines this account holds, and nothing else.
+ *
+ * `/onboarding` asks one question — is there anything here yet — to decide
+ * whether offering an AI analysis makes any sense. `getDashboard` can answer it,
+ * but only by loading every row of the account and computing the facets, the
+ * series and the stack to get there; this is the one place in the app that wants
+ * the number on its own.
+ *
+ * A read, so it returns the number rather than the `{ ok }` envelope — that
+ * shape exists so a client can toast a failed *mutation*, and this mutates
+ * nothing. Signed out is `0` rather than an error, for the same reason
+ * `listTransactions` returns an empty array: a page with no reader has no rows.
+ */
+export async function getTransactionCount(): Promise<number> {
+  const user = await getCurrentUser();
+  if (!user) return 0;
+
+  const [row] = await db
+    .select({ total: count() })
+    .from(transactions)
+    .where(eq(transactions.userId, user.id));
+
+  return row?.total ?? 0;
 }

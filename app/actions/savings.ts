@@ -840,3 +840,29 @@ export async function transferSavings(
   revalidatePath("/[locale]/budget", "page");
   return { ok: true };
 }
+
+/**
+ * The names of this account's pots, oldest first, and nothing else.
+ *
+ * `/onboarding` asks one question of the savings table — has a goal been named
+ * yet, and what is it called — so that it can offer the form once and then
+ * stop. `getSavingsOverview` answers it too, but only by loading every
+ * transaction and every allocation to work out the pool the pots are claims
+ * against, none of which a first-run page has any use for.
+ *
+ * A read, so it returns the names rather than the `{ ok }` envelope — that
+ * shape is for the mutations above, which a client toasts off. Signed out is
+ * an empty list, like `listTransactions`: a page with no reader has no pots.
+ */
+export async function getSavingsGoalNames(): Promise<string[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const rows = await db
+    .select({ name: savingsGoals.name })
+    .from(savingsGoals)
+    .where(eq(savingsGoals.userId, user.id))
+    .orderBy(asc(savingsGoals.id));
+
+  return rows.map((row) => row.name);
+}

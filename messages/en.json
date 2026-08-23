@@ -591,6 +591,24 @@
       "description": "{amount} is an extreme charge for this account — {share}% of a typical month's income."
     }
   },
+  "Onboarding": {
+    "title": "Welcome to Beyond Money",
+    "intro": "Three quick things: bring your statements in, let the AI go through them, and name something you're saving for. All of it lives on the settings pages afterwards, so nothing here is final.",
+    "importHeading": "Your statements",
+    "stepMeta": "Step {step} of 3",
+    "demoNote": "If you don't want to upload a CSV, you can use the demo data instead \u2014 a year of real-shaped Swiss bank statements to look around with.",
+    "demoCta": "Use demo data",
+    "demoLoading": "Loading\u2026",
+    "demoError": "Could not load the demo data.",
+    "analyseHeading": "Find the odd ones out",
+    "analyseEmpty": "Bring some statements in above, and the analysis can run over them here.",
+    "analyseDone": "Analysis complete \u2014 the findings are waiting on your dashboard.",
+    "savingsHeading": "What are you saving for?",
+    "savingsNote": "Name one thing and what it costs \u2014 a holiday, a deposit, a new bike. One is plenty to start with, and skipping this changes nothing you can't add later.",
+    "savingsDone": "Saving for {name}. More pots live under Savings.",
+    "done": "Done",
+    "doneNote": "You can change any of this later under Settings."
+  },
   "DemoData": {
     "viewDashboard": "View dashboard",
     "syntheticTitle": "Synthetic Transactions",
@@ -893,6 +911,7 @@
     "login": "Sign in",
     "register": "Create an account",
     "account": "Account settings",
+    "onboarding": "Onboarding",
     "offline": "Offline",
     "anomalies": "Anomalies",
     "budget": "Budget",
