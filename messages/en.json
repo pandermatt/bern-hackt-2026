@@ -87,7 +87,9 @@
     "passwordPlaceholder": "At least 8 characters",
     "loginKey": "Access key",
     "loginKeyPlaceholder": "The key you were given",
-    "loginKeyHint": "Sign-up is limited to people holding this deployment's key."
+    "loginKeyHint": "Sign-up is limited to people holding this deployment's key.",
+    "signupContact": "Need a key? Write to <mail>{email}</mail> and ask for one.",
+    "prototypeNotice": "Prototype from <bernhackt>BärnHäckt 2026</bernhackt>. This is a hackathon project, not a finished product — please don't run it in production or point it at real banking data."
   },
   "AuthErrors": {
     "invalidEmail": "Enter a valid email address.",

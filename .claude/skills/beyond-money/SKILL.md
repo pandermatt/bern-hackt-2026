@@ -127,10 +127,25 @@ Unchanged from the template this app grew out of, and still exactly true.
   import would read `undefined` and quietly decide sign-up is closed; what
   `AuthForm` is told is the boolean `loginKeyRequired`.
 - **`components/auth-card.tsx` is the shell both auth pages are drawn in** —
-  card, title, subtitle, and the "or do the other thing" link. Presentational
-  and free of `server-only`, so the sign-up notice (a server component) and
-  `AuthForm` (a client one) share one drawing rather than two that drift. It
-  is one of the few places `.card` survives, along with the error pages.
+  the prototype banner, then the card with title, subtitle and body, then the
+  "or do the other thing" link. Presentational and free of `server-only`, so
+  the sign-up notice (a server component) and `AuthForm` (a client one) share
+  one drawing rather than two that drift. It is one of the few places `.card`
+  survives, along with the error pages.
+- **The prototype banner hangs off that shell, not off the pages.** One line in
+  `AuthCard` is what puts it on `/login` and `/register` in every state, so a
+  new auth page gets it for free and there is one line to delete when the label
+  stops being true. `PrototypeNotice` and `SignupContact` carry no
+  `"use client"` on purpose — `useTranslations` is next-intl's shared API, and
+  that is what lets the client `AuthForm` and the server-rendered notice render
+  the same box. Both compose with `t.rich`: a tag in a catalog with no handler
+  at the call site **throws**, so `tests/auth-copy.test.ts` pins the tags in
+  every locale.
+- **The contact address lives in `site.contactEmail`, not in the catalogs.**
+  `signupContact` takes it as a `{email}` value inside its `<mail>` tag, so the
+  address is written once; the same test asserts no locale spells it out.
+  Sign-up being closed makes it load-bearing — without an address to ask at,
+  `/register` is a dead end.
 - **`users.name` is nullable, and optional at sign-up**, for the same reason
   `transactions.userId` is: `drizzle-kit push` runs without `--force` in
   production and a NOT NULL column on a populated table fails the deploy.

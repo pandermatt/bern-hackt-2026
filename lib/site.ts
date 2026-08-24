@@ -15,6 +15,18 @@ export const site = {
   description: "Private spending insights from your own statements.",
   /** Set NEXT_PUBLIC_SITE_URL on the host so OG tags resolve absolutely. */
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  /**
+   * Where a visitor writes to ask for a sign-up key. Sign-up is closed unless
+   * `LOGIN_KEY` is configured (see `lib/auth-gate.ts`), so without an address
+   * to ask at, the notice on /register is a dead end.
+   */
+  contactEmail: "hi@beyond-money.ch",
+  /**
+   * The event this was built at, credited on the auth pages. The href lives
+   * here and the sentence around it lives in the message catalogs, like every
+   * other link in the app.
+   */
+  hackathon: { name: "BärnHäckt 2026", url: "https://www.bernhackt.ch/" },
 } as const;
 
 export const SESSION_COOKIE = `${site.slug}_session`;

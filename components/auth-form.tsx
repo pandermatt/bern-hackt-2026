@@ -5,6 +5,7 @@ import { useActionState } from "react";
 
 import type { AuthState } from "@/app/actions/auth";
 import { AuthCard } from "@/components/auth-card";
+import { SignupContact } from "@/components/signup-contact";
 
 type Mode = "login" | "register";
 
@@ -144,6 +145,9 @@ export function AuthForm({
             <p id="loginKeyHint" className="text-[12px] text-text-subtle">
               {t("loginKeyHint")}
             </p>
+            {/* Inside the `asksForKey` block on purpose: where to ask for a key
+                is only worth saying on a form that is asking for one. */}
+            <SignupContact />
           </div>
         )}
 

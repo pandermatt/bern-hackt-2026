@@ -76,7 +76,9 @@ before.
 `LOGIN_KEY` is the way back in while sign-up is off. Set it and `/register`
 renders the form again with an access-key field; `register` refuses anything
 that does not match, before it says whether the email is taken. Unset, sign-up
-is simply closed.
+is simply closed. Both `/register` states point a visitor at
+<hi@beyond-money.ch> to ask for a key — the address is `site.contactEmail` in
+[lib/site.ts](lib/site.ts).
 
 | `LOGIN_KEY` | `SIGNUP_DISABLED` | `/register` |
 | --- | --- | --- |

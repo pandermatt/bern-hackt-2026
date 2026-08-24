@@ -87,7 +87,9 @@
     "passwordPlaceholder": "Mindestens 8 Zeichen",
     "loginKey": "Zugangsschlüssel",
     "loginKeyPlaceholder": "Der Schlüssel, den Sie erhalten haben",
-    "loginKeyHint": "Ein Konto kann nur erstellen, wer den Schlüssel dieser Instanz hat."
+    "loginKeyHint": "Ein Konto kann nur erstellen, wer den Schlüssel dieser Instanz hat.",
+    "signupContact": "Sie brauchen einen Schlüssel? Schreiben Sie an <mail>{email}</mail> und fragen Sie danach.",
+    "prototypeNotice": "Prototyp vom <bernhackt>BärnHäckt 2026</bernhackt>. Dies ist ein Hackathon-Projekt und kein fertiges Produkt — bitte nicht produktiv einsetzen und nicht mit echten Bankdaten verwenden."
   },
   "AuthErrors": {
     "invalidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",

@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { register } from "@/app/actions/auth";
 import { AuthCard } from "@/components/auth-card";
 import { AuthForm } from "@/components/auth-form";
+import { SignupContact } from "@/components/signup-contact";
 import { redirect } from "@/i18n/navigation";
 import { signupMode } from "@/lib/auth-gate";
 import { getCurrentUser } from "@/lib/auth";
@@ -80,6 +81,13 @@ async function SignupDisabledNotice() {
       >
         {t("signupDisabledBody")}
       </p>
+
+      {/* The notice would otherwise be a dead end: a key is the only way in
+          while sign-up is closed, and nothing else on the page says where one
+          comes from. */}
+      <div className="mt-3">
+        <SignupContact />
+      </div>
     </AuthCard>
   );
 }

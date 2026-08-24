@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { PrototypeNotice } from "@/components/prototype-notice";
 import { Link } from "@/i18n/navigation";
 
 /**
@@ -8,10 +9,15 @@ import { Link } from "@/i18n/navigation";
  * thing" link underneath it.
  *
  * Presentational and free of `server-only`, so the two things that need it can
- * both have it — `AuthForm` is a client component and the sign-in notice on
- * `/login` is a server one — rather than each drawing its own card and drifting.
- * (Same trade `components/section.tsx` makes for the signed-in pages; `.card`
- * is deliberately left on the auth forms and the error pages.)
+ * both have it — `AuthForm` is a client component and the sign-up notice on
+ * `/register` is a server one — rather than each drawing its own card and
+ * drifting. (Same trade `components/section.tsx` makes for the signed-in pages;
+ * `.card` is deliberately left on the auth forms and the error pages.)
+ *
+ * It also carries `PrototypeNotice`, which is what puts that banner on both
+ * auth pages in every state — the sign-in form, the sign-up form with or
+ * without its key field, and the closed-sign-up notice — from one line rather
+ * than four call sites and a prop threaded through a client boundary.
  */
 export function AuthCard({
   title,
@@ -26,6 +32,8 @@ export function AuthCard({
 }) {
   return (
     <div className="w-full max-w-[26rem]">
+      <PrototypeNotice />
+
       <div className="card p-7">
         <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-text">
           {title}
