@@ -8,6 +8,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { redirect } from "@/i18n/navigation";
+import { loginKeyAccepted, signupMode } from "@/lib/auth-gate";
 import { FLASH_PARAM } from "@/lib/flash";
 import {
   createSession,
@@ -39,7 +40,9 @@ type AuthErrorKey =
   | "nameTooLong"
   | "notSignedIn"
   | "invalidCredentials"
-  | "emailTaken";
+  | "emailTaken"
+  | "signupDisabled"
+  | "invalidLoginKey";
 
 /** One key → one localised sentence, in the locale this request came in on. */
 async function errorFor(key: AuthErrorKey | string): Promise<AuthState> {
@@ -54,6 +57,8 @@ async function errorFor(key: AuthErrorKey | string): Promise<AuthState> {
     "notSignedIn",
     "invalidCredentials",
     "emailTaken",
+    "signupDisabled",
+    "invalidLoginKey",
   ];
   return {
     error: t(known.includes(key as AuthErrorKey) ? (key as AuthErrorKey) : "invalidCredentials"),
@@ -84,6 +89,24 @@ export async function register(
   _prev: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
+  /*
+   * Admission is settled before the form is even validated — see
+   * `lib/auth-gate.ts`. The page renders a notice instead of the form while
+   * sign-up is closed, but every export of a `"use server"` module is an
+   * endpoint the browser can post to directly, so the switch has to be here as
+   * well as in what is rendered.
+   *
+   * Both checks sit ahead of the email lookup below, which answers
+   * `emailTaken` and would otherwise make this action an oracle for which
+   * addresses hold an account — readable by anyone, key or no key.
+   */
+  const mode = signupMode();
+  if (mode === "closed") return errorFor("signupDisabled");
+
+  if (!loginKeyAccepted(String(formData.get("loginKey") ?? ""))) {
+    return errorFor("invalidLoginKey");
+  }
+
   const parsed = registration.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),

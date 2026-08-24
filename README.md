@@ -62,6 +62,28 @@ statements that split money in and out into two columns. Uploaded rows are
 **added** to the account rather than replacing it, and a line already there is
 skipped — so re-importing an overlapping month is safe.
 
+## Access
+
+Creating an account is currently disabled: `/register` renders a "sign-up
+currently disabled" notice instead of the form, and the `register` server
+action refuses before it looks anything up — a form is not the only way to
+reach an action, so the switch has to sit in both. It is `SIGNUP_DISABLED` in
+[lib/auth-gate.ts](lib/auth-gate.ts); set it to `false` to hand the door back.
+
+**Signing in is untouched** — an account that already exists works exactly as
+before.
+
+`LOGIN_KEY` is the way back in while sign-up is off. Set it and `/register`
+renders the form again with an access-key field; `register` refuses anything
+that does not match, before it says whether the email is taken. Unset, sign-up
+is simply closed.
+
+| `LOGIN_KEY` | `SIGNUP_DISABLED` | `/register` |
+| --- | --- | --- |
+| unset | `true` (today) | the notice |
+| unset | `false` | open to anyone, as it always was |
+| set | either | the form, plus the key field |
+
 ## Scripts
 
 | Script | Does |

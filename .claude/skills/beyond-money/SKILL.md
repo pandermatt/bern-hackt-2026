@@ -109,8 +109,28 @@ Unchanged from the template this app grew out of, and still exactly true.
   guarded by default — the proxy's public list is an allowlist.
 - `login` verifies a dummy hash when the email is unknown, so a wrong email and
   a wrong password take similar time and return the same generic message.
-- Registration is **open** — anyone who can reach the site can create an
-  account.
+- **Signing up is switched off; signing in is not.** Both settings live in
+  `lib/auth-gate.ts`, and `signupMode()` is the one thing that reads them:
+  `SIGNUP_DISABLED` is a constant rather than an env flag — it is a decision
+  about this branch — and `LOGIN_KEY` (env) is the exception to it rather than
+  a second lock in series, so a configured key opens sign-up whatever the
+  constant says. Closed, `/register` renders a notice and `register` refuses;
+  keyed, the form grows a key field. `login` is untouched in every mode: the
+  key gates opening an account, never using one.
+- **Both sign-up checks sit ahead of the email lookup**, which answers
+  `emailTaken` and would otherwise make the action an oracle for which
+  addresses hold an account — readable by anyone, key or no key. The key
+  itself is compared over SHA-256 digests, because `timingSafeEqual` throws on
+  a length mismatch and that throw would leak the key's length.
+- **The pages pass the question, never the key.** `signupMode()` is
+  `server-only` and `LOGIN_KEY` carries no `NEXT_PUBLIC_` prefix, so a client
+  import would read `undefined` and quietly decide sign-up is closed; what
+  `AuthForm` is told is the boolean `loginKeyRequired`.
+- **`components/auth-card.tsx` is the shell both auth pages are drawn in** —
+  card, title, subtitle, and the "or do the other thing" link. Presentational
+  and free of `server-only`, so the sign-up notice (a server component) and
+  `AuthForm` (a client one) share one drawing rather than two that drift. It
+  is one of the few places `.card` survives, along with the error pages.
 - **`users.name` is nullable, and optional at sign-up**, for the same reason
   `transactions.userId` is: `drizzle-kit push` runs without `--force` in
   production and a NOT NULL column on a populated table fails the deploy.

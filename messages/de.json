@@ -75,13 +75,19 @@
     "registerPending": "Konto wird erstellt…",
     "registerAltText": "Sie haben bereits ein Konto?",
     "registerAltLabel": "Anmelden",
+    "signupDisabledTitle": "Registrierung derzeit deaktiviert",
+    "signupDisabledSubtitle": "Auf dieser Instanz können keine neuen Konten erstellt werden.",
+    "signupDisabledBody": "Dies ist eine Entwicklungsversion, deshalb ist das Registrierungsformular vorerst geschlossen. Wenn Sie einen Zugangsschlüssel erhalten haben, ist die Registrierung wieder offen, sobald er hinterlegt ist — und ein bestehendes Konto meldet sich weiterhin wie gewohnt an.",
     "name": "Name",
     "nameOptional": "(optional)",
     "namePlaceholder": "Wie dürfen wir Sie nennen?",
     "email": "E-Mail",
     "emailPlaceholder": "sie@beispiel.ch",
     "password": "Passwort",
-    "passwordPlaceholder": "Mindestens 8 Zeichen"
+    "passwordPlaceholder": "Mindestens 8 Zeichen",
+    "loginKey": "Zugangsschlüssel",
+    "loginKeyPlaceholder": "Der Schlüssel, den Sie erhalten haben",
+    "loginKeyHint": "Ein Konto kann nur erstellen, wer den Schlüssel dieser Instanz hat."
   },
   "AuthErrors": {
     "invalidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
@@ -91,6 +97,8 @@
     "notSignedIn": "Dafür müssen Sie angemeldet sein.",
     "invalidCredentials": "E-Mail oder Passwort ist falsch.",
     "emailTaken": "Mit dieser E-Mail-Adresse besteht bereits ein Konto.",
+    "signupDisabled": "Das Erstellen eines Kontos ist derzeit deaktiviert.",
+    "invalidLoginKey": "Dieser Zugangsschlüssel stimmt nicht.",
     "signedOut": "Abgemeldet."
   },
   "Dashboard": {
@@ -952,6 +960,7 @@
     "siteTagline": "Sehen Sie, wo Ihr Geld wirklich hingeht.",
     "siteDescription": "Private Ausgaben-Insights aus Ihren eigenen Kontoauszügen.",
     "login": "Anmelden",
+    "registerDisabled": "Registrierung deaktiviert",
     "register": "Konto erstellen",
     "account": "Kontoeinstellungen",
     "onboarding": "Erste Schritte",
