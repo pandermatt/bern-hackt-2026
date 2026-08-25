@@ -36,6 +36,9 @@ export default async function HomePage({
 }: PageProps<"/[locale]/home">) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Home" });
+  // The pictures have a namespace of their own — see `Dragon` in the catalogs.
+  // Four components read those alt lines and only one of them is here.
+  const tDragon = await getTranslations({ locale, namespace: "Dragon" });
 
   // The proxy only sniffs for a cookie; this is the authoritative check.
   const user = await getCurrentUser();
@@ -143,7 +146,7 @@ export default async function HomePage({
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={DRAGON_SRC[dragon]}
-                    alt={t(`dragonAlt.${dragon}`)}
+                    alt={tDragon(dragon)}
                     width={512}
                     height={512}
                     className="h-40 w-40 drop-shadow-sm lg:h-64 lg:w-64"

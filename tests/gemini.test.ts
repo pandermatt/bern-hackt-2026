@@ -283,6 +283,17 @@ describe("modelChain", () => {
     expect(chain[0]).toBe("gemini-3.6-flash");
     expect(new Set(chain).size).toBe(chain.length);
   });
+
+  it("leads with Flash and keeps Pro as a fallback", () => {
+    // A deliberate choice, and a one-word edit away from being undone: a chat
+    // turn is up to five rounds and Pro spends ten to fifteen seconds thinking
+    // on each of them. Pro has to stay *in* the chain, though — dropping it
+    // would leave nothing behind Flash but more Flash.
+    const chain = modelChain();
+    expect(chain[0]).toBe("gemini-flash-latest");
+    expect(chain).toContain("gemini-pro-latest");
+    expect(new Set(chain).size).toBe(chain.length);
+  });
 });
 
 describe("callGemini", () => {
