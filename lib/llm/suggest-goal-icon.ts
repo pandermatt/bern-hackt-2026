@@ -1,7 +1,16 @@
 import { GOAL_ICONS, isGoalIconName, type GoalIconName } from "@/lib/goal-icon";
+import {
+  geminiApiKey,
+  geminiEndpoint,
+  geminiFastModel,
+  geminiHeaders,
+  geminiText,
+  toGeminiBody,
+  type GeminiResponse,
+} from "@/lib/llm/gemini";
 
 /**
- * Asks Apertus which glyph a savings goal should wear.
+ * Asks the model which glyph a savings goal should wear.
  *
  * The keyword table in `lib/goal-icon.ts` is tried first and for free; this is
  * only reached for a name it has nothing to say about — "Töggelikasten",
@@ -26,15 +35,16 @@ import { GOAL_ICONS, isGoalIconName, type GoalIconName } from "@/lib/goal-icon";
  * reference.
  */
 
-const APERTUS_URL =
-  process.env.APERTUS_URL ??
-  "https://llm.stoney-cloud.com/v1/chat/completions";
-
 /**
- * Shorter than the scan's 30s. This one sits inside `createSavingsGoal`, so it
- * is a person waiting on a form rather than a background job — and a goal
- * created promptly with a piggy bank beats a goal that takes half a minute to
- * arrive with a dog on it.
+ * Shorter than the scan's timeout. This one sits inside `createSavingsGoal`,
+ * so it is a person waiting on a form rather than a background job — and a
+ * goal created promptly with a piggy bank beats a goal that takes half a
+ * minute to arrive with a dog on it.
+ *
+ * It is also why this is the one call that does not use the assistant's model:
+ * `geminiFastModel` is a Flash model, and Flash is the one that can be told
+ * not to think at all. A reasoning model fits in neither this budget nor the
+ * 32-token answer below.
  */
 const REQUEST_TIMEOUT_MS = 6_000;
 
@@ -78,37 +88,39 @@ export async function suggestGoalIcon(name: string): Promise<GoalIconName | null
   const goal = name.trim().slice(0, MAX_NAME_CHARS);
   if (!goal) return null;
 
-  const key = process.env.APERTUS_KEY;
+  const key = geminiApiKey();
   if (!key) {
     console.warn(
-      "APERTUS_KEY is not set. Skipping the icon suggestion and falling back to the keyword rules.",
+      "GEMINI_API_KEY is not set. Skipping the icon suggestion and falling back to the keyword rules.",
     );
     return null;
   }
 
-  const model = process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
+  const model = geminiFastModel();
 
   try {
-    const response = await fetch(APERTUS_URL, {
+    const response = await fetch(geminiEndpoint(model), {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Savings goal: ${goal}` },
-        ],
-        response_format: { type: "json_object" },
-        // The reply is one word in a JSON wrapper. A cap this low also means a
-        // model that starts explaining itself is cut off rather than billed.
-        max_tokens: 32,
-        // Naming a picture for a phrase is a lookup, not a creative act; the
-        // same reasoning the narrative layer uses.
-        temperature: 0.1,
-      }),
+      headers: geminiHeaders(key),
+      body: JSON.stringify(
+        toGeminiBody({
+          model,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: `Savings goal: ${goal}` },
+          ],
+          json: true,
+          // The reply is one word in a JSON wrapper. A cap this low also means
+          // a model that starts explaining itself is cut off rather than
+          // billed — which only works with thinking switched off, since
+          // thoughts are charged against the same budget.
+          maxTokens: 32,
+          thinking: 0,
+          // Naming a picture for a phrase is a lookup, not a creative act; the
+          // same reasoning the narrative layer uses.
+          temperature: 0.1,
+        }),
+      ),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
@@ -117,10 +129,7 @@ export async function suggestGoalIcon(name: string): Promise<GoalIconName | null
       return null;
     }
 
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const content = data.choices?.[0]?.message?.content;
+    const content = geminiText((await response.json()) as GeminiResponse);
     if (!content) return null;
 
     const parsed: unknown = JSON.parse(content);

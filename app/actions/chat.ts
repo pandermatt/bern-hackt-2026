@@ -8,29 +8,39 @@ import { getDashboard, listTransactions } from "@/app/actions/transactions";
 import {
   anomaliesToolResult,
   buildAllocationProposal,
+  chartToolForSource,
+  composeEChart,
   defaultAllocationSplit,
+  defaultChartSource,
   defaultPeriod,
   extractFollowUps,
+  extractJsonAfter,
   extractSql,
   formatSwissNumbers,
   languageName,
   looksLikeStall,
   parseAllocationArgs,
+  parseChartRequest,
   parsePeriod,
   parseToolCalls,
   periodFromQuestion,
   resolvePeriod,
   routeTool,
   runTool,
+  sanitizeEChartsOption,
   savingsGoalsToolResult,
   savingsPotentialToolResult,
+  shouldDefaultChart,
   stripModelMarkup,
   subscriptionsToolResult,
   systemPromptFor,
+  wantsNonPieChart,
   SUGGESTION_KEYS,
   TOOL_DEFINITIONS,
   type AllocationProposal,
   type AssistantTurn,
+  type ChartRequest,
+  type ChartSpec,
   type Period,
   type WireMessage,
 } from "@/lib/assistant";
@@ -62,20 +72,22 @@ import {
 } from "@/lib/assistant-log";
 import { getCurrentUser } from "@/lib/auth";
 import { monthHasEnded } from "@/lib/clock";
-
-const APERTUS_URL =
-  process.env.APERTUS_URL ?? "https://llm.stoney-cloud.com/v1/chat/completions";
-
-/** The model and the cap, read fresh on every call rather than frozen at
- * module load: an edited `.env.local` lands on the next request in dev, and
- * the debug panel's header has to name what the *next* request would use, not
- * what the server booted with. */
-function assistantModel(): string {
-  return process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
-}
+import {
+  geminiApiKey,
+  geminiEndpoint,
+  geminiFinishReason,
+  geminiHeaders,
+  geminiModel,
+  geminiText,
+  geminiUsage,
+  toGeminiBody,
+  type GeminiResponse,
+} from "@/lib/llm/gemini";
 
 /** Unset (or unparseable, or 0) means "no cap": the request then carries no
- * max_tokens at all and the endpoint's own default applies. */
+ * output cap at all and the model's own default applies. The thinking budget
+ * is added on top of this inside `toGeminiBody` — this number is what the
+ * customer actually reads. */
 function assistantMaxTokens(): number | undefined {
   return Number.parseInt(process.env.MAX_TOKENS ?? "", 10) || undefined;
 }
@@ -124,26 +136,27 @@ const DASHBOARD_TOOLS = new Set<string>([
   "get_income_breakdown",
   "get_monthly_series",
   "get_savings_potential",
+  "display_chart",
 ]);
 
 /**
  * One turn of the chat, as a tool-calling loop. The model starts with no
  * figures at all: it requests data through the tools in `lib/assistant.ts`,
  * and each request is answered from the account's real aggregates. Raw
- * transaction rows never leave the server, and the assistant draws nothing —
- * the dashboard's own charts carry the visuals.
+ * transaction rows never leave the server, and a chart the turn produces is
+ * built from the same figures the model was handed — never from its prose.
  *
- * The endpoint accepts OpenAI `tools` but leaves Apertus's native call
- * syntax in the content instead of populating `tool_calls`, so calls are
- * parsed by name here and results go back as `tool`-role messages.
+ * Gemini returns its calls as structured `functionCall` parts;
+ * `lib/llm/gemini.ts` renders them back into the `{"name": {…}}` text
+ * `lib/assistant.ts` parses, and results go back as `tool`-role messages.
  *
  * Returns an `AssistantTurn` directly rather than the `ActionResult` envelope:
  * like the reads in `transactions.ts`, a failed turn is rendered in place (as
  * a chat bubble), not raised as a toast.
  *
  * Every API request is recorded to the in-memory debug log — a turn with tool
- * rounds shows up as several entries. The Authorization header is never part
- * of the snapshot.
+ * rounds shows up as several entries. The API key travels in a header and is
+ * never part of the snapshot.
  */
 export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> {
   const user = await getCurrentUser();
@@ -152,7 +165,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   }
 
   const turnStarted = Date.now();
-  const model = assistantModel();
+  const model = geminiModel();
   const maxTokens = assistantMaxTokens();
 
   const history = normalizeHistory(rawHistory);
@@ -180,7 +193,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     return failure("That message could not be read — try rephrasing it.");
   }
 
-  const key = process.env.APERTUS_KEY;
+  const key = geminiApiKey();
 
   // The happy paths come first, and deliberately before the key check: they
   // answer from the app's own aggregates, so a missing key costs them their
@@ -199,9 +212,9 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   }
 
   if (!key) {
-    record(turnStarted, { status: "error", error: "APERTUS_KEY is not set." });
+    record(turnStarted, { status: "error", error: "GEMINI_API_KEY is not set." });
     return failure(
-      "The assistant is not configured yet. Set APERTUS_KEY in .env.local and restart the server.",
+      "The assistant is not configured yet. Set GEMINI_API_KEY in .env.local and restart the server.",
     );
   }
 
@@ -216,11 +229,18 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
 
   const messages: WireMessage[] = [
     { role: "system", content: systemPromptFor(await getLocale()) },
-    // Older turns only pad the context window of an 8B model.
+    // Older turns are dropped rather than sent: the model has room for them,
+    // but a chat turn is billed per prompt token and the last eight carry the
+    // thread.
     ...history.slice(-8),
   ];
   // A validated surplus split from propose_allocation, if the model made one.
   let proposal: AllocationProposal | undefined;
+  // The chart shown under the reply. An explicit display_chart /
+  // display_echart call outranks the auto-attach that fires when the model
+  // fetched chartable data without asking for a picture.
+  let chart: ChartSpec | undefined;
+  let chartExplicit = false;
   let reply: string | undefined;
   let proposedFollowUps: string[] = [];
   // Once any tool has run this turn, a digit-bearing reply is a caption, not a
@@ -260,29 +280,30 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   // hiccup: the split is the app's own figures, so a short localized caption
   // carries it out where failure() would have thrown it away with the error.
   const salvage = async (): Promise<AssistantTurn | undefined> => {
-    if (!proposal) return undefined;
+    if (!proposal && !chart) return undefined;
     const t = await getTranslations("Chat");
-    return { reply: t("partialReply"), proposal };
+    return { reply: t("partialReply"), proposal, chart };
   };
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const offerTools = round < MAX_ROUNDS;
-    const body = {
+    const body = toGeminiBody({
       model,
       messages,
       // MAX_TOKENS caps the visible answer; the +80 is the budget for the
       // FOLLOWUP: lines parsed out of it. Tool rounds get a higher floor —
       // a truncated SQL statement or allocation array is an unusable one.
-      // Without MAX_TOKENS the key is omitted and the endpoint decides.
+      // Thinking is budgeted on top of this, inside toGeminiBody. Without
+      // MAX_TOKENS no cap is sent at all and the model decides.
       ...(maxTokens !== undefined
         ? {
-            max_tokens: offerTools
+            maxTokens: offerTools
               ? Math.max(maxTokens + 80, 700)
               : maxTokens + 80,
           }
         : {}),
       ...(offerTools ? { tools: TOOL_DEFINITIONS } : {}),
-    };
+    });
     const startedAt = Date.now();
     const request = truncateSnapshot(JSON.stringify(body, null, 2));
     const messageCount = messages.length;
@@ -290,14 +311,13 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     let response: Response;
     let raw: string;
     try {
-      response = await fetch(APERTUS_URL, {
+      response = await fetch(geminiEndpoint(model), {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-        },
+        headers: geminiHeaders(key),
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30_000),
+        // Longer than the 30s the 8B endpoint got: a reasoning model thinks
+        // before it answers, and a tool round pays that twice over.
+        signal: AbortSignal.timeout(60_000),
       });
       raw = await response.text();
     } catch (cause) {
@@ -305,7 +325,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         status: "error",
         error:
           cause instanceof Error && cause.name === "TimeoutError"
-            ? "Request timed out after 30s."
+            ? "Request timed out after 60s."
             : "Fetch failed — endpoint unreachable.",
         note: `round ${round}`,
         messageCount,
@@ -314,7 +334,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       return (
         (await salvage()) ??
         failure(
-          "Could not reach llm.stoney-cloud.com — check the connection and try again.",
+          "Could not reach the Gemini API — check the connection and try again.",
         )
       );
     }
@@ -333,17 +353,15 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       return (
         (await salvage()) ??
         failure(
-          response.status === 401
-            ? "The model endpoint rejected the API key — check APERTUS_KEY."
+          // Gemini rejects a bad or unauthorized key with either code.
+          response.status === 401 || response.status === 403
+            ? "The model endpoint rejected the API key — check GEMINI_API_KEY."
             : `The model endpoint answered ${response.status} — try again in a moment.`,
         )
       );
     }
 
-    let data: {
-      choices?: { message?: { content?: string } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
+    let data: GeminiResponse;
     try {
       data = JSON.parse(raw);
     } catch {
@@ -362,11 +380,8 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       );
     }
 
-    const usage = data.usage && {
-      promptTokens: data.usage.prompt_tokens,
-      completionTokens: data.usage.completion_tokens,
-    };
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const usage = geminiUsage(data);
+    const content = geminiText(data);
     let calls = offerTools ? parseToolCalls(content) : [];
     // The model sometimes stalls — "Let me call the relevant tool…" with no
     // name to parse. Rather than showing that as the answer, route the
@@ -413,7 +428,10 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       note:
         calls.length > 0
           ? `round ${round} · fetched ${calls.join(", ")}${routed ? " (routed)" : ""}${period ? ` · ${period.label}` : ""}`
-          : `round ${round} · answer`,
+          : // An empty answer from a reasoning model usually means the output
+            // budget went on thoughts — say so rather than leaving the log to
+            // read like the model simply had nothing to add.
+            `round ${round} · answer${content ? "" : ` · empty (${geminiFinishReason(data) ?? "no reason given"})`}`,
       messageCount,
       request,
       response: snapshot,
@@ -444,8 +462,62 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
           })) ?? dashboard)
         : dashboard;
 
+    // Presentation choices for a display_chart call; the source falls back
+    // to what the question is about when the argument didn't survive.
+    let chartRequest: ChartRequest | undefined;
+    if (calls.includes("display_chart")) {
+      chartRequest = parseChartRequest(content);
+      chartRequest.source ??= defaultChartSource(question.content);
+      // "just the top 3" in the question stands in for a lost top_n arg.
+      chartRequest.topN ??=
+        Number(/\btop\s+(\d{1,2})\b/i.exec(question.content)?.[1]) || undefined;
+    }
+
     messages.push({ role: "assistant", content });
     for (const name of calls) {
+      // The model composed a chart itself. Only presentation is trusted:
+      // the option is sanitized (JSON-only, size-capped, graphic/image/
+      // tooltip stripped) before it is stored or rendered.
+      if (name === "display_echart") {
+        const args = extractJsonAfter(content, "display_echart");
+        const argObject =
+          args && typeof args === "object" && !Array.isArray(args)
+            ? (args as Record<string, unknown>)
+            : undefined;
+        // The declared argument is a JSON string, which the sanitizer parses
+        // itself; a model that hands over a bare object is understood too.
+        const option = sanitizeEChartsOption(
+          argObject && "option" in argObject ? argObject.option : argObject,
+        );
+        let result;
+        if (!option) {
+          result = {
+            error:
+              'No usable ECharts option found — pass {"display_echart": {"option": "{…}"}} as a JSON string with a "series" array.',
+          };
+        } else {
+          chart = {
+            kind: "echarts",
+            title:
+              typeof argObject?.title === "string"
+                ? argObject.title.slice(0, 60)
+                : undefined,
+            option,
+          };
+          chartExplicit = true;
+          result = {
+            displayed: true,
+            note: "The chart is now shown. Answer with its takeaway.",
+          };
+        }
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({ tool: name, result }),
+        });
+        toolRan = true;
+        continue;
+      }
+
       // The SQL escape hatch: the model's SELECT runs in a throwaway
       // in-memory database seeded with only this user's rows — see
       // lib/sql-sandbox.ts for the layers under that sentence.
@@ -582,7 +654,22 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
         continue;
       }
 
-      const tool = runTool(name, scoped, period);
+      const tool = runTool(
+        name,
+        scoped,
+        period,
+        name === "display_chart" ? chartRequest : undefined,
+      );
+      // A pie the model asked for wins; one that merely came along with a
+      // data tool fills an empty slot and never overwrites a chosen chart.
+      if (tool.chart) {
+        if (name === "display_chart") {
+          chart = tool.chart;
+          chartExplicit = true;
+        } else if (!chartExplicit) {
+          chart = tool.chart;
+        }
+      }
       messages.push({
         role: "tool",
         content: JSON.stringify({ tool: name, result: tool.result }),
@@ -596,6 +683,41 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       (await salvage()) ??
       failure("The model returned an empty answer — try asking again.")
     );
+  }
+
+  // Chart safety net. Two cases, both only when the model did not compose a
+  // chart itself (an explicit one is never overridden — it may have chosen its
+  // shape deliberately):
+  //   1. the user named a bar/line chart → compose it from real aggregates;
+  //   2. no chart came out but the question is about how the customer's money
+  //      splits → attach a pie from real aggregates.
+  // Both draw only figures the tools produce, scoped to the resolved window.
+  const wantedType = wantsNonPieChart(question.content);
+  const wantsDefaultChart = !chart && shouldDefaultChart(question.content);
+  if (!chartExplicit && (wantedType || wantsDefaultChart)) {
+    const window =
+      lastPeriod ??
+      resolvePeriod(
+        periodFromQuestion(question.content) ?? defaultPeriod(question.content),
+        dashboard.facets.last,
+      );
+    const scopedForChart = window
+      ? ((await getDashboard({
+          from: window.from,
+          to: window.to,
+          view: "list",
+        })) ?? dashboard)
+      : dashboard;
+    if (wantedType) {
+      chart =
+        composeEChart(wantedType, question.content, scopedForChart, window) ??
+        chart;
+    } else {
+      const source = defaultChartSource(question.content);
+      chart =
+        runTool(chartToolForSource(source), scopedForChart, window).chart ??
+        chart;
+    }
   }
 
   // Proposal safety net. The customer
@@ -624,6 +746,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
 
   return {
     reply,
+    chart,
     proposal,
     followUps: await followUpsFor(history, proposedFollowUps),
   };
@@ -670,7 +793,7 @@ async function followUpsFor(
  *
  * Step 2 is the only part that can fail, and when it does the rendered summary
  * IS the answer. That covers a timeout, a 500, a truncated reply, an invented
- * total (`keepsFigures`), and an unset APERTUS_KEY — which is why the caller
+ * total (`keepsFigures`), and an unset GEMINI_API_KEY — which is why the caller
  * reaches this before the key check rather than after it.
  */
 async function answerHappyPath({
@@ -732,6 +855,12 @@ async function answerHappyPath({
   };
 
   let summary: HappySummary;
+  // The one happy path with a picture in it. The category split is the
+  // question a pie answers best, and the chart comes out of the same scoped
+  // dashboard the summary is rendered from — so it costs no extra read and
+  // cannot show a figure the sentence does not. The advice recipes stay
+  // words-only, for the reason `shouldDefaultChart` keeps them off the pie.
+  let chart: ChartSpec | undefined;
   switch (id) {
     case "recent_spending": {
       // Unscoped and unfiltered: "my last ten" means the last ten there are,
@@ -779,6 +908,11 @@ async function answerHappyPath({
       const dashboards = await scopedDashboard();
       if (!dashboards) return expired();
       summary = categorySummary(dashboards.scoped, context(dashboards.year));
+      chart = runTool(
+        "get_spending_by_category",
+        dashboards.scoped,
+        resolvePeriod("ytd", dashboards.whole.facets.last),
+      ).chart;
       break;
     }
   }
@@ -790,7 +924,7 @@ async function answerHappyPath({
       status: "ok",
       note: `happy path · ${id} · no key, summary served`,
     });
-    return { reply: text, followUps };
+    return { reply: text, chart, followUps };
   }
   const reply = await paraphrase({
     id,
@@ -801,7 +935,7 @@ async function answerHappyPath({
     key,
     record,
   });
-  return { reply: reply ?? text, followUps };
+  return { reply: reply ?? text, chart, followUps };
 }
 
 /**
@@ -834,7 +968,7 @@ async function paraphrase({
     patch: Partial<AssistantLogEntry> & { status: AssistantLogEntry["status"] },
   ) => void;
 }): Promise<string | undefined> {
-  const body = {
+  const body = toGeminiBody({
     model,
     messages: [
       {
@@ -846,25 +980,22 @@ async function paraphrase({
     // No tool round to budget for, and no FOLLOWUP lines to parse out — the
     // chips fall back to the starters. A paraphrase of a fixed summary is a
     // short completion; +40 is the slack for a longer language's wording.
-    ...(maxTokens !== undefined ? { max_tokens: maxTokens + 40 } : {}),
-  };
+    ...(maxTokens !== undefined ? { maxTokens: maxTokens + 40 } : {}),
+  });
   const startedAt = Date.now();
   const request = truncateSnapshot(JSON.stringify(body, null, 2));
 
   let response: Response;
   let raw: string;
   try {
-    response = await fetch(APERTUS_URL, {
+    response = await fetch(geminiEndpoint(model), {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
+      headers: geminiHeaders(key),
       body: JSON.stringify(body),
-      // Shorter than the loop's 30s on purpose: the fallback here is instant
+      // Shorter than the loop's 60s on purpose: the fallback here is instant
       // and already correct, so a slow endpoint should cost the wording
       // rather than the answer.
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(30_000),
     });
     raw = await response.text();
   } catch (cause) {
@@ -872,7 +1003,7 @@ async function paraphrase({
       status: "error",
       error:
         cause instanceof Error && cause.name === "TimeoutError"
-          ? "Paraphrase timed out after 20s."
+          ? "Paraphrase timed out after 30s."
           : "Paraphrase fetch failed — endpoint unreachable.",
       note: `happy path · ${id} · summary served`,
       messageCount: 2,
@@ -895,10 +1026,7 @@ async function paraphrase({
     return undefined;
   }
 
-  let data: {
-    choices?: { message?: { content?: string } }[];
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  };
+  let data: GeminiResponse;
   try {
     data = JSON.parse(raw);
   } catch {
@@ -914,11 +1042,8 @@ async function paraphrase({
     return undefined;
   }
 
-  const usage = data.usage && {
-    promptTokens: data.usage.prompt_tokens,
-    completionTokens: data.usage.completion_tokens,
-  };
-  const content = data.choices?.[0]?.message?.content ?? "";
+  const usage = geminiUsage(data);
+  const content = geminiText(data);
   // FOLLOWUP lines are not asked for here, but a model that has seen the other
   // prompt sometimes writes them anyway; stripping is cheaper than explaining.
   const cleaned = formatSwissNumbers(
@@ -960,13 +1085,13 @@ async function paraphrase({
 /** Where the calls go and under what caps — the header of the debug panel,
  * which otherwise says nothing at all until a turn has been logged. The API
  * key is deliberately not part of it, the same way the request snapshots
- * never carry the Authorization header. */
+ * never carry the X-goog-api-key header. */
 export async function getAssistantConfig(): Promise<AssistantConfigView | null> {
   const user = await getCurrentUser();
   if (!user) return null;
   return {
-    url: APERTUS_URL,
-    model: assistantModel(),
+    url: geminiEndpoint(geminiModel()),
+    model: geminiModel(),
     maxTokens: assistantMaxTokens(),
   };
 }

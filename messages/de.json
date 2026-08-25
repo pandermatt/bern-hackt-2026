@@ -56,7 +56,7 @@
     "faq3Question": "Wie werden Buchungen kategorisiert?",
     "faq3Answer": "Beim Import, anhand einer Händlertabelle der App: derselbe Laden, im Export dreifach geschrieben, wird zu einem Händler und einer Kategorie — so zerfällt ein Ranking nie unbemerkt in zwei.",
     "faq4Question": "Was sieht der Assistent?",
-    "faq4Answer": "Ihre Zeilen, und sonst nichts. Seine Abfragen laufen gegen eine flüchtige Kopie im Arbeitsspeicher, die nur Ihre eigenen Buchungen enthält — keine anderen Konten, keine Benutzer, keine Sitzungen, keine Datei auf der Platte. Er nutzt Apertus, ein offen veröffentlichtes Schweizer Modell.",
+    "faq4Answer": "Ihre Zeilen, und sonst nichts. Seine Abfragen laufen gegen eine flüchtige Kopie im Arbeitsspeicher, die nur Ihre eigenen Buchungen enthält — keine anderen Konten, keine Benutzer, keine Sitzungen, keine Datei auf der Platte.",
     "faq5Question": "Warum ist der Scan ein Knopf?",
     "faq5Answer": "Weil er echte Arbeit über Ihre ganze Historie ist — früher lief er bei jedem Seitenaufruf. Jetzt läuft er, wenn Sie ihn starten, zeigt seinen Fortschritt und speichert die Befunde. So bleibt das Dashboard sofort da.",
     "faq6Question": "Kann ich meine Daten löschen?",
@@ -831,6 +831,10 @@
     "proposalApplying": "Wird verschoben…",
     "proposalApplied": "In die Töpfe gelegt",
     "partialReply": "Die Verbindung hat vor der Antwort gehakt — das habe ich gefunden.",
+    "chartFallback": "Diagramm des Assistenten",
+    "chartFailed": "Der Assistent hat ein Diagramm gesendet, das dieser Browser nicht zeichnen konnte.",
+    "pieTotal": "Total",
+    "pieSlice": "Segment",
     "pieAmount": "Betrag",
     "pieShare": "Anteil",
     "pieChartLabel": "Kreisdiagramm: {title}. Die Zahlen stehen in der Tabelle nach dem Diagramm.",
@@ -869,8 +873,7 @@
       "potentialNote": "Miete, Versicherungen und Steuern lassen sich kaum kürzen; die Kategorien oben schon.",
       "categoriesEmpty": "Für {year} sind noch keine Ausgaben verbucht.",
       "categoriesHeadline": "{year} haben Sie {total} ausgegeben, in {payments} Zahlungen über {count} Kategorien.",
-      "categoriesLine": "{category} — {amount} ({share}%, {payments} Zahlungen)",
-      "categoriesNote": "Das Kreisdiagramm auf dem Dashboard zeigt dieselbe Aufteilung."
+      "categoriesLine": "{category} — {amount} ({share}%, {payments} Zahlungen)"
     }
   },
   "ChatDebug": {

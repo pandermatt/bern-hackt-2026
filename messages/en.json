@@ -56,7 +56,7 @@
     "faq3Question": "How are transactions categorized?",
     "faq3Answer": "At import, from a merchant table the app keeps: the same shop spelled three ways in an export resolves to one merchant and one category, so a ranking never silently splits in two.",
     "faq4Question": "What can the assistant see?",
-    "faq4Answer": "Your rows, and nothing else. Its queries run against a throwaway in-memory copy containing only your own transactions — no other accounts, no users, no sessions, and no file on disk. It uses Apertus, an openly published Swiss model.",
+    "faq4Answer": "Your rows, and nothing else. Its queries run against a throwaway in-memory copy containing only your own transactions — no other accounts, no users, no sessions, and no file on disk.",
     "faq5Question": "Why is the anomaly scan a button?",
     "faq5Answer": "Because it is real work over your whole history, and it used to run on every page load. It now runs when you ask it to, reports its progress, and stores its findings — so opening the dashboard stays instant.",
     "faq6Question": "Can I delete my data?",
@@ -831,6 +831,10 @@
     "proposalApplying": "Moving…",
     "proposalApplied": "Moved into the pots",
     "partialReply": "The connection hiccuped before the answer arrived — here is what I found.",
+    "chartFallback": "Chart from the assistant",
+    "chartFailed": "The assistant sent a chart this browser could not draw.",
+    "pieTotal": "total",
+    "pieSlice": "Slice",
     "pieAmount": "Amount",
     "pieShare": "Share",
     "pieChartLabel": "Pie chart: {title}. The figures are listed in the table after the chart.",
@@ -869,8 +873,7 @@
       "potentialNote": "Rent, insurance and taxes can hardly be cut; the categories above can.",
       "categoriesEmpty": "Nothing has been spent in {year} yet.",
       "categoriesHeadline": "In {year} you spent {total}, across {payments} payments in {count} categories.",
-      "categoriesLine": "{category} — {amount} ({share}%, {payments} payments)",
-      "categoriesNote": "The dashboard's donut chart shows the same split."
+      "categoriesLine": "{category} — {amount} ({share}%, {payments} payments)"
     }
   },
   "ChatDebug": {

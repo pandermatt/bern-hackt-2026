@@ -26,7 +26,7 @@ type LlmReply = {
   }>;
 };
 
-/** Stands in for the Apertus endpoint, one queued reply per request. */
+/** Stands in for the Gemini endpoint, one queued reply per request. */
 function mockLlm(...replies: LlmReply[]) {
   const fetchMock = vi.fn(async () => {
     const reply = replies.shift() ?? { insights: [] };
@@ -34,7 +34,9 @@ function mockLlm(...replies: LlmReply[]) {
       ok: true,
       status: 200,
       json: async () => ({
-        choices: [{ message: { content: JSON.stringify(reply) } }],
+        candidates: [
+          { content: { parts: [{ text: JSON.stringify(reply) }] } },
+        ],
       }),
     };
   });
@@ -61,16 +63,16 @@ const mockCandidates: AnomalyInsight[] = [
 ];
 
 describe("analyzeTransactionInsights", () => {
-  const originalKey = process.env.APERTUS_KEY;
+  const originalKey = process.env.GEMINI_API_KEY;
 
   beforeEach(() => {
-    process.env.APERTUS_KEY = "test_key";
+    process.env.GEMINI_API_KEY = "test_key";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    if (originalKey === undefined) delete process.env.APERTUS_KEY;
-    else process.env.APERTUS_KEY = originalKey;
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
   });
 
   it("returns empty array when given empty array", async () => {
@@ -79,7 +81,7 @@ describe("analyzeTransactionInsights", () => {
   });
 
   it("gracefully falls back when API key is missing", async () => {
-    delete process.env.APERTUS_KEY;
+    delete process.env.GEMINI_API_KEY;
     const result = await analyzeTransactionInsights(mockCandidates);
     expect(result).toEqual(mockCandidates);
   });
@@ -102,8 +104,10 @@ describe("analyzeTransactionInsights", () => {
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        // A response truncated at max_tokens looks exactly like this.
-        json: async () => ({ choices: [{ message: { content: '{"insights":[' } }] }),
+        // A response truncated at the output cap looks exactly like this.
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: '{"insights":[' }] } }],
+        }),
       })),
     );
 
