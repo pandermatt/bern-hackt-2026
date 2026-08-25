@@ -9,6 +9,7 @@ import {
   anomaliesToolResult,
   budgetStatusToolResult,
   buildAllocationProposal,
+  buildBudgetFix,
   chartToolForSource,
   composeEChart,
   defaultAllocationSplit,
@@ -41,6 +42,7 @@ import {
   TOOL_DEFINITIONS,
   type AllocationProposal,
   type AssistantTurn,
+  type BudgetFix,
   type ChartRequest,
   type ChartSpec,
   type Period,
@@ -324,6 +326,8 @@ export async function* runAssistantTurn(
   ];
   // A validated surplus split from propose_allocation, if the model made one.
   let proposal: AllocationProposal | undefined;
+  /** The broken-budget card, assembled by the app the moment the tool runs. */
+  let budget: BudgetFix | undefined;
   // The chart shown under the reply. An explicit display_chart /
   // display_echart call outranks the auto-attach that fires when the model
   // fetched chartable data without asking for a picture.
@@ -369,12 +373,12 @@ export async function* runAssistantTurn(
   // hiccup: the split is the app's own figures, so a short localized caption
   // carries it out where failure() would have thrown it away with the error.
   const salvage = async (): Promise<AssistantTurn | undefined> => {
-    if (!proposal && !chart) return undefined;
+    if (!proposal && !chart && !budget) return undefined;
     const t = await getTranslations({ locale, namespace: "Chat" });
     // A chart or a proposal did arrive, so this is not a failure the way
     // `failure()` is — the app's own figures made it out. `thinking` rather
     // than `sad`: the answer is partial, not wrong.
-    return { reply: t("partialReply"), proposal, chart, mood: "thinking" };
+    return { reply: t("partialReply"), proposal, chart, budget, mood: "thinking" };
   };
 
   // Every failed try, named with the model that failed and whether another one
@@ -730,11 +734,16 @@ export async function* runAssistantTurn(
       if (name === "get_budget_status") {
         // The budget page's own default month, which is the month the customer
         // is looking at when the nudge sends them here.
+        const overview = await getBudgetOverview();
+        // The card is the app's, not the model's: every broken budget gets the
+        // same two offers, so there is nothing here for the model to decide
+        // and no figure for it to get wrong.
+        budget = buildBudgetFix(overview) ?? budget;
         messages.push({
           role: "tool",
           content: JSON.stringify({
             tool: name,
-            result: budgetStatusToolResult(await getBudgetOverview()),
+            result: budgetStatusToolResult(overview),
           }),
         });
         toolRan = true;
@@ -869,6 +878,7 @@ export async function* runAssistantTurn(
     reply,
     chart,
     proposal,
+    budget,
     followUps: await followUpsFor(history, proposedFollowUps, locale),
     mood,
   });

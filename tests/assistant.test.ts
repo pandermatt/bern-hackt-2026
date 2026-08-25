@@ -12,6 +12,7 @@ import {
   sanitizeEChartsOption,
   shouldDefaultChart,
   wantsNonPieChart,
+  buildBudgetFix,
   defaultAllocationSplit,
   defaultPeriod,
   detectSubscriptions,
@@ -219,6 +220,18 @@ describe("routeTool", () => {
     expect(
       routeTool("Wie soll ich den Überschuss vom letzten Monat auf meine Sparziele verteilen?"),
     ).toBe("get_savings_goals");
+  });
+
+  it("routes a budget question to the budget tool, not the category list", () => {
+    // The nudge on `/home` sends exactly this, and the catch-all below would
+    // otherwise answer it with what was spent and never mention a limit.
+    expect(routeTool("Which budgets am I over, and what should I do about it?")).toBe(
+      "get_budget_status",
+    );
+    expect(routeTool("Bei welchen Budgets bin ich über dem Limit?")).toBe(
+      "get_budget_status",
+    );
+    expect(routeTool("Am I over my Housing limit?")).toBe("get_budget_status");
   });
 
   it("keeps 'how much did I save' on the overview, away from savings potential", () => {
@@ -531,6 +544,64 @@ describe("buildAllocationProposal", () => {
       overview({ pots: [] }),
     );
     expect((goalless.result as { error: string }).error).toContain("no saving goals");
+  });
+});
+
+describe("buildBudgetFix", () => {
+  const budget = (
+    category: string,
+    limitMinor: number | null,
+    usedMinor: number,
+    warnOverspend = true,
+  ) => ({ category, slot: 1, limitMinor, suggestedMinor: 0, usedMinor, warnOverspend });
+
+  const overview = (rows: ReturnType<typeof budget>[]) => ({
+    months: ["2026-08"],
+    month: "2026-08",
+    rows,
+  });
+
+  it("offers only the categories that are past their limit, worst first", () => {
+    const fix = buildBudgetFix(
+      overview([
+        budget("Food & Drink", 20_000, 25_000),
+        budget("Housing", 100_000, 160_000),
+        budget("Travel", 50_000, 10_000),
+        budget("Pets", null, 9_000),
+      ]),
+    );
+
+    expect(fix?.rows.map((row) => row.category)).toEqual(["Housing", "Food & Drink"]);
+    expect(fix?.rows[0]).toMatchObject({
+      overMinor: 60_000,
+      // What the Raise button would set the limit to: the real figure, not a
+      // rounded one.
+      usedMinor: 160_000,
+      warns: true,
+    });
+  });
+
+  it("has no card when every limit is being kept", () => {
+    expect(buildBudgetFix(overview([budget("Housing", 100_000, 100_000)]))).toBeUndefined();
+  });
+
+  it("marks a category that is already silenced", () => {
+    // The panel gives that row one button rather than two: there is no warning
+    // left to switch off.
+    const fix = buildBudgetFix(overview([budget("Housing", 100_000, 160_000, false)]));
+    expect(fix?.rows[0].warns).toBe(false);
+  });
+
+  it("caps the card rather than letting it become a list", () => {
+    const many = Array.from({ length: 9 }, (_, i) =>
+      budget(`Cat ${i}`, 10_000, 20_000 + i * 1_000),
+    );
+    expect(buildBudgetFix(overview(many))?.rows).toHaveLength(6);
+  });
+
+  it("has nothing to offer before there are statements", () => {
+    expect(buildBudgetFix(null)).toBeUndefined();
+    expect(buildBudgetFix({ months: [], month: null, rows: [] })).toBeUndefined();
   });
 });
 

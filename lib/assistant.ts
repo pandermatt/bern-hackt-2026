@@ -114,12 +114,37 @@ export type AllocationProposal = {
   addTotalMinor: number;
 };
 
+/**
+ * The broken budgets, and the two things that can be done about each.
+ *
+ * The sibling of `AllocationProposal`, and deliberately not built the same
+ * way: the model *proposes* a split because how to divide a surplus is a
+ * judgement, whereas every over-budget category gets the identical pair of
+ * offers. So the app assembles this from `getBudgetOverview` the moment
+ * `get_budget_status` runs, and the model's job is the caption — the same
+ * reason `display_chart` names a source rather than sending figures.
+ */
+export type BudgetFix = {
+  month: string;
+  rows: {
+    category: string;
+    limitMinor: number;
+    usedMinor: number;
+    /** Always positive: only categories past their limit are on this card. */
+    overMinor: number;
+    /** A category already silenced is only offered the raise. */
+    warns: boolean;
+  }[];
+};
+
 export type AssistantTurn = {
   reply: string;
   /** The chart shown under the reply, when the turn produced one. */
   chart?: ChartSpec;
   /** A surplus split awaiting the user's Apply tap, rendered as a card. */
   proposal?: AllocationProposal;
+  /** Broken budgets and their two remedies, rendered as a card of rows. */
+  budget?: BudgetFix;
   /** Ready-to-send follow-up questions, shown as chips above the input. */
   followUps?: string[];
   /**
@@ -206,7 +231,7 @@ export const SYSTEM_PROMPT = [
   "Name only the figures that answer the question — the biggest item and the takeaway — rather than listing everything a tool returned.",
   "When the tools cannot answer — a specific transaction, a day of week, a count, a comparison they don't cover — call run_sql with one SQLite SELECT over the transactions table; the schema is in the tool description.",
   "Four tools carry the advice questions: get_savings_potential for where the customer could save (advise only on its flexible categories — fixed costs like housing, insurance and taxes cannot be cut); get_recent_anomalies for anything suspicious or unusual (stay calm — most findings are the customer's own legitimate spending); get_subscriptions for recurring subscriptions; get_savings_goals for the saving goals and a month's unallocated surplus.",
-  "For anything about budgets or limits — which ones are broken, by how much, what to do — call get_budget_status. Name the figures it returns, then give the customer both ways out: leave the budget alone and switch that category's warning off on the budget page, or raise its limit to what they actually spent. You cannot change a budget yourself — never claim you did, or that you will.",
+  "For anything about budgets or limits — which ones are broken, by how much, what to do — call get_budget_status. When something is over, the app puts a card under your answer listing each broken budget with two buttons: raise the limit to what was spent, or mute that category's warning. So write a caption, not a list: name the worst one and the overall shape, and invite the tap. Only that tap changes a budget — never claim you changed one, or that you will.",
   "To allocate a month's surplus: call get_savings_goals first, then propose_allocation with one amount per goal from the free amount. The app validates the split and shows it to the customer with an Apply button; caption the final split the tool returns and invite the tap. Only that tap moves money — never claim it already moved.",
   'You can show one chart per answer. When the question is about how money splits or how it moves — spending by category, top merchants, income, a trend over months — call display_chart with a source, e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie from the customer\'s real data and hands you the same figures back for your caption. Skip the chart for a single specific number, a date, a yes/no answer, and for the advice questions below — a pie under "is anything suspicious" helps nobody.',
   'For a visual a pie cannot carry — bars over months, a line, a scatter — call display_echart with a complete Apache ECharts option as a JSON string, built only from figures you already fetched with the tools or run_sql. When the user names a chart type that is not a pie, display_echart is the only right tool.',
@@ -1346,6 +1371,38 @@ export function budgetStatusToolResult(overview: BudgetOverview | null): unknown
     note: notes.join(" "),
   };
 }
+
+/**
+ * The card that goes under a budget answer, or nothing when every limit is
+ * being kept.
+ *
+ * Built from the same overview that answered the tool call, so the card and the
+ * caption cannot disagree about a franc. Worst overspend first, because that is
+ * the row somebody is going to press.
+ */
+export function buildBudgetFix(overview: BudgetOverview | null): BudgetFix | undefined {
+  if (!overview || overview.month === null) return undefined;
+
+  const rows = overview.rows
+    .filter((row) => row.limitMinor !== null && row.usedMinor > row.limitMinor)
+    .map((row) => ({
+      category: row.category,
+      limitMinor: row.limitMinor as number,
+      usedMinor: row.usedMinor,
+      overMinor: row.usedMinor - (row.limitMinor as number),
+      warns: row.warnOverspend,
+    }))
+    .sort((a, b) => b.overMinor - a.overMinor)
+    // A chat bubble is not a settings page. Past a handful the card stops
+    // being a thing to act on and becomes a list to scroll, and `/budget`
+    // is where the whole set lives.
+    .slice(0, BUDGET_FIX_ROWS);
+
+  return rows.length > 0 ? { month: overview.month, rows } : undefined;
+}
+
+/** How many broken budgets the card offers to fix. */
+const BUDGET_FIX_ROWS = 6;
 
 /** A goal-and-francs pair as the model wrote it, minor units, unvalidated. */
 export type RawAllocation = { goal: string; amountMinor: number };

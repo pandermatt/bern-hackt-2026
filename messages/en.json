@@ -327,7 +327,8 @@
     "malformed": "That budget looks malformed.",
     "notAnAmount": "“{amount}” is not an amount.",
     "tooLarge": "That limit is larger than this app can hold.",
-    "saveFailed": "Could not save that budget. Try again."
+    "saveFailed": "Could not save that budget. Try again.",
+    "noSuchBudget": "That category has no limit to change any more."
   },
   "Savings": {
     "heading": "Savings goals",
@@ -927,6 +928,12 @@
     "send": "Send message",
     "disclaimer": "Answers come from a model reading your own figures. Check anything that matters.",
     "failed": "Something went wrong — try asking again.",
+    "budgetFixTitle": "What you can do about it",
+    "budgetFixOver": "{amount} over",
+    "budgetFixRaise": "Raise to {amount}",
+    "budgetFixRaised": "Limit raised",
+    "budgetFixMute": "Mute",
+    "budgetFixMuted": "Muted",
     "proposalTitle": "Proposed allocation",
     "proposalTotal": "Total",
     "proposalApply": "Move it into the pots",

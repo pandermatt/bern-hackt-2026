@@ -327,7 +327,8 @@
     "malformed": "Dieses Budget sieht fehlerhaft aus.",
     "notAnAmount": "„{amount}“ ist kein Betrag.",
     "tooLarge": "Dieses Limit ist grösser, als diese App speichern kann.",
-    "saveFailed": "Budget konnte nicht gespeichert werden. Versuchen Sie es erneut."
+    "saveFailed": "Budget konnte nicht gespeichert werden. Versuchen Sie es erneut.",
+    "noSuchBudget": "Für diese Kategorie gibt es kein Limit mehr zu ändern."
   },
   "Savings": {
     "heading": "Sparziele",
@@ -927,6 +928,12 @@
     "send": "Nachricht senden",
     "disclaimer": "Die Antworten stammen von einem Modell, das Ihre eigenen Zahlen liest. Prüfen Sie alles, worauf es ankommt.",
     "failed": "Etwas ist schiefgelaufen — fragen Sie es bitte noch einmal.",
+    "budgetFixTitle": "Das können Sie tun",
+    "budgetFixOver": "{amount} darüber",
+    "budgetFixRaise": "Auf {amount} erhöhen",
+    "budgetFixRaised": "Limit erhöht",
+    "budgetFixMute": "Stumm",
+    "budgetFixMuted": "Stummgeschaltet",
     "proposalTitle": "Vorgeschlagene Verteilung",
     "proposalTotal": "Total",
     "proposalApply": "In die Töpfe legen",

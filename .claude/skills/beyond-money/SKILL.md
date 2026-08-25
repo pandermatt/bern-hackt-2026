@@ -477,8 +477,27 @@ Unchanged from the template this app grew out of, and still exactly true.
   control is spelled from the model id. The chat debug panel's dropdown picks
   which model leads, stored in an `httpOnly` cookie and validated against
   `geminiModelChoices()` on the way back in.
+- **A broken budget is answered with a card of two-button rows, and the app
+  builds it.** `buildBudgetFix` assembles it from the same `getBudgetOverview`
+  that answered `get_budget_status`, so the caption and the card cannot
+  disagree about a franc — the same contract as `display_chart` naming a
+  *source*. It is deliberately **not** shaped like `propose_allocation`: how to
+  divide a surplus is a judgement, so the model proposes it, whereas every
+  over-budget category gets the identical pair of offers and there is nothing
+  to decide. Three things:
+  - **The client posts a category and a choice, never a figure.**
+    `applyBudgetFix` resolves what "raise" means server-side, the way
+    `allocateSurplus` recomputes the month's surplus rather than trusting a
+    posted ceiling.
+  - **Raising leaves the warning as it was.** A category somebody silenced and
+    later raised is still silenced; switching it back on would be a second
+    change nobody asked for.
+  - **A silenced row gets one button, not two** — there is no warning left to
+    switch off — and the per-row outcome lives on the message (`budgetDone`),
+    like `proposalApplied`, so a card acted on stays acted on when the shell
+    toggles away from the panel.
 - **The over-budget nudge opens a conversation; the budget page is where it is
-  acted on.** `components/nudge-card.tsx` sends `Chat.budgetQuestion` through
+  also acted on.** `components/nudge-card.tsx` sends `Chat.budgetQuestion` through
   `askBatzi`, and `get_budget_status` answers it from `getBudgetOverview` — the
   model has no other way to see a limit, since the `run_sql` sandbox holds
   `transactions` and nothing else. The reply offers the two ways out: switch

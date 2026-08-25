@@ -17,7 +17,9 @@ vi.mock("next-intl/server", async () => {
   };
 });
 
-const { getBudgetOverview, saveBudgets } = await import("@/app/actions/budget");
+const { applyBudgetFix, getBudgetOverview, saveBudgets } = await import(
+  "@/app/actions/budget",
+);
 
 async function signIn() {
   const [user] = await db
@@ -156,5 +158,77 @@ describe("saveBudgets", () => {
       .returning();
 
     expect(await savedRows(theirs.id)).toEqual([]);
+  });
+});
+
+describe("applyBudgetFix", () => {
+  it("refuses a caller with no session", async () => {
+    const result = await applyBudgetFix({ category: "Housing", action: "mute" });
+    expect(result).toEqual({ ok: false, error: "Sign in to set a budget." });
+  });
+
+  it("raises the limit to what was actually spent", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values(spend(user.id, "Housing", 180_000, "a"));
+    await saveBudgets([{ category: "Housing", amount: "1000" }]);
+
+    // The client names the category and the choice; the figure is resolved
+    // here, from the same overview the card was built from.
+    const result = await applyBudgetFix({ category: "Housing", action: "raise" });
+
+    expect(result).toEqual({ ok: true, limitMinor: 180_000, warn: true });
+    expect((await savedRows(user.id))[0]).toMatchObject({ limitMinor: 180_000 });
+  });
+
+  it("leaves a silenced category silenced when its limit is raised", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values(spend(user.id, "Housing", 180_000, "a"));
+    await saveBudgets([{ category: "Housing", amount: "1000", warn: false }]);
+
+    await applyBudgetFix({ category: "Housing", action: "raise" });
+
+    // Switching the warning back on would be a second change nobody asked for.
+    expect((await savedRows(user.id))[0]).toMatchObject({
+      limitMinor: 180_000,
+      warnOverspend: false,
+    });
+  });
+
+  it("mutes without touching the limit", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values(spend(user.id, "Housing", 180_000, "a"));
+    await saveBudgets([{ category: "Housing", amount: "1000" }]);
+
+    const result = await applyBudgetFix({ category: "Housing", action: "mute" });
+
+    expect(result).toEqual({ ok: true, limitMinor: 100_000, warn: false });
+    expect((await savedRows(user.id))[0]).toMatchObject({
+      limitMinor: 100_000,
+      warnOverspend: false,
+    });
+  });
+
+  it("refuses a category with no limit to change", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values(spend(user.id, "Housing", 180_000, "a"));
+
+    // What a card left open in a tab asks for after the budget was cleared
+    // somewhere else.
+    const result = await applyBudgetFix({ category: "Housing", action: "raise" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "That category has no limit to change any more.",
+    });
+  });
+
+  it("cannot be aimed at a category that is not on the account", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values(spend(user.id, "Housing", 180_000, "a"));
+
+    const result = await applyBudgetFix({ category: "Pets", action: "mute" });
+
+    expect(result.ok).toBe(false);
+    expect(await savedRows(user.id)).toEqual([]);
   });
 });
