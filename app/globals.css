@@ -532,6 +532,29 @@
   }
 }
 
+/*
+ * Selection inside a `.on-brand` band.
+ *
+ * The landing page sets its own selection to Supernova at 30% — which over
+ * the yellow bands is Supernova on Supernova, and dragging across the copy
+ * looks like nothing happened at all. The fix is the same trade `.on-brand`
+ * makes everywhere else: a fixed ground gets fixed treatment, here the band's
+ * own ink at 20% instead of the theme's brand tint.
+ *
+ * Unlayered, for the reason the block above spells out — `selection:bg-brand/30`
+ * is a utility, utilities live in a layer, and a layered rule wins over an
+ * unlayered one never. Specificity cannot settle this one; the layer can.
+ *
+ * Both halves are needed: `::selection` on the band itself, and the descendant
+ * form for the text inside it. A highlight pseudo-element does not inherit
+ * from its originating element the way ordinary properties do.
+ */
+.on-brand::selection,
+.on-brand ::selection {
+  background-color: #1a1a1a33;
+  color: #1a1a1a;
+}
+
 /* Logo hover: a flame runs round the coil, tail to head.
    Every path in `components/logo.tsx` runs these same keyframes and differs
    only in `animation-delay`, which comes from the colour's place in

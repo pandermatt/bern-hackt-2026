@@ -19,6 +19,10 @@
     "register": "Registrieren"
   },
   "Landing": {
+    "winEyebrow": "1. Rang",
+    "winTitle": "Wir haben BärnHäckt 2026 gewonnen.",
+    "winBody": "Beyond Money holte den ersten Rang. Danke <bernhackt>BärnHäckt</bernhackt> für das Wochenende und <postfinance>PostFinance</postfinance> für die Challenge.",
+    "winPhotoAlt": "Das Beyond-Money-Team mit dem Siegercheck am BärnHäckt 2026",
     "heroTitle1": "Sehen Sie, wo Ihr Geld",
     "heroTitle2": "wirklich hingeht.",
     "heroSubtitle": "Beyond Money liest Ihre Schweizer Kontoauszüge, sortiert jede Zeile, achtet auf Auffälligkeiten — und antwortet, wenn Sie fragen. Die Diagramme gibt es auch, sobald es etwas von Ihnen zu zeichnen gibt.",

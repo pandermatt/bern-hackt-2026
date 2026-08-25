@@ -19,6 +19,10 @@
     "register": "Register"
   },
   "Landing": {
+    "winEyebrow": "1st place",
+    "winTitle": "We won BärnHäckt 2026.",
+    "winBody": "Beyond Money took first place. Thank you <bernhackt>BärnHäckt</bernhackt> for the weekend, and <postfinance>PostFinance</postfinance> for the challenge.",
+    "winPhotoAlt": "The Beyond Money team with the first-place cheque at BärnHäckt 2026",
     "heroTitle1": "See where your money",
     "heroTitle2": "actually goes.",
     "heroSubtitle": "Beyond Money reads your Swiss bank statements, sorts every line, watches for the unusual — and answers when you ask. The charts are there too, once there is something of yours to draw.",

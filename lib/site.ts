@@ -27,6 +27,12 @@ export const site = {
    * other link in the app.
    */
   hackathon: { name: "BärnHäckt 2026", url: "https://www.bernhackt.ch/" },
+  /**
+   * Who put up the challenge this was built for, credited beside the event on
+   * the landing page's victory banner. Same arrangement as `hackathon`: the
+   * href lives here, the sentence around it lives in the message catalogs.
+   */
+  sponsor: { name: "PostFinance", url: "https://www.postfinance.ch/" },
 } as const;
 
 export const SESSION_COOKIE = `${site.slug}_session`;
