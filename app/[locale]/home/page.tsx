@@ -78,11 +78,9 @@ export default async function HomePage({
       monthEnded: savings.monthEnded,
       freeMinor: savings.freeMinor,
     },
-    // Merchants with no decision on them. A signed-out read answers `null`,
-    // which the redirect above has already ruled out.
-    unfiledMerchants: (merchants?.merchants ?? []).filter(
-      (row) => row.category === merchants?.unfiled,
-    ).length,
+    // Merchants with no decision on them — the mapper's own top list. A
+    // signed-out read answers `null`, which the redirect above has ruled out.
+    unfiledMerchants: merchants?.open.length ?? 0,
     // Which is also why `anomalies` above is empty in this state: the deck
     // says the scan is behind instead of quoting findings that describe
     // statements which have since changed. Not while one is running — that is

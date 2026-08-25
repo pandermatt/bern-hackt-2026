@@ -166,7 +166,9 @@ export default async function AccountPage({
             panelClassName={SETTINGS_GROUP}
           >
             <MerchantMapper
-              mapping={mapping ?? { merchants: [], categories: [], unfiled: "Other" }}
+              mapping={
+                mapping ?? { open: [], filed: [], categories: [], unfiled: "Other" }
+              }
               defaultOpen={merchantsParam === "open"}
             />
           </Section>

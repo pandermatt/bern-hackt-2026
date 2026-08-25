@@ -155,21 +155,68 @@ describe("the merchant mapper", () => {
 
     const mapping = await getMerchantMapping();
 
-    expect(mapping?.merchants.map((m) => m.merchant)).toEqual([
-      "Sunrise",
-      "Kiosk",
-    ]);
-    expect(mapping?.merchants[1]).toMatchObject({
+    expect(mapping?.open.map((m) => m.merchant)).toEqual(["Sunrise", "Kiosk"]);
+    expect(mapping?.open[1]).toMatchObject({
       count: 2,
       spentMinor: 1200,
       category: "Other",
+      base: "Other",
       domain: "",
     });
     // A merchant the shipped map can already answer for says so, as the
     // domain field's placeholder rather than as a value.
-    expect(mapping?.merchants[0].suggestedDomain).toBe("sunrise.ch");
+    expect(mapping?.open[0].suggestedDomain).toBe("sunrise.ch");
     expect(mapping?.categories).not.toContain("Opening balance");
     expect(mapping?.categories).toContain("Food & Drink");
+  });
+
+  it("puts the merchants that already have a category in the second list", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values([
+      row(user.id, "Kiosk", "Other", -500, "a"),
+      row(user.id, "Coop", "Food & Drink", -4000, "b"),
+    ]);
+
+    const mapping = await getMerchantMapping();
+
+    // The importer's own answers are in here too — re-filing one is the whole
+    // point of the list, and before it a merchant the rules placed was
+    // unreachable.
+    expect(mapping?.open.map((m) => m.merchant)).toEqual(["Kiosk"]);
+    expect(mapping?.filed).toMatchObject([
+      { merchant: "Coop", category: "Food & Drink", base: "Food & Drink" },
+    ]);
+  });
+
+  it("reads a merchant by the category most of its lines are in", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values([
+      row(user.id, "Zalando", "Clothing", -6000, "a"),
+      row(user.id, "Zalando", "Clothing", -4000, "b"),
+      // A returned parcel. `Refund` says which way one line went, not what the
+      // merchant is.
+      row(user.id, "Zalando", "Refund", 2000, "c"),
+    ]);
+
+    const mapping = await getMerchantMapping();
+
+    expect(mapping?.filed).toMatchObject([
+      { merchant: "Zalando", category: "Clothing", count: 3 },
+    ]);
+  });
+
+  it("leaves the opening balance out of both lists", async () => {
+    const user = await signIn();
+    await db.insert(transactions).values([
+      row(user.id, "Opening balance", "Opening balance", 2_000_000, "a"),
+      row(user.id, "Kiosk", "Other", -500, "b"),
+    ]);
+
+    const mapping = await getMerchantMapping();
+
+    // Not a merchant: the synthetic line each importer writes to seed the
+    // running balance.
+    expect([...(mapping?.open ?? []), ...(mapping?.filed ?? [])]).toHaveLength(1);
   });
 
   it("saves a decision and applies it to every line of that merchant", async () => {
@@ -204,7 +251,7 @@ describe("the merchant mapper", () => {
     expect(rows.every((r) => r.category === "Other")).toBe(true);
   });
 
-  it("keeps a filed merchant on the list, showing what it was filed as", async () => {
+  it("moves a merchant to the filed list once it has been given a category", async () => {
     const user = await signIn();
     await db
       .insert(transactions)
@@ -214,10 +261,32 @@ describe("the merchant mapper", () => {
     ]);
 
     const mapping = await getMerchantMapping();
-    expect(mapping?.merchants[0]).toMatchObject({
+
+    expect(mapping?.open).toEqual([]);
+    expect(mapping?.filed[0]).toMatchObject({
       merchant: "Sunrise",
       category: "Utilities & Telecom",
+      // What the importer said, so the form can tell "set it back" from
+      // "store this" — `base` is what a blank category reverts to.
+      base: "Other",
     });
+  });
+
+  it("sends a merchant back to the open list when its rule is dropped", async () => {
+    const user = await signIn();
+    await db
+      .insert(transactions)
+      .values([row(user.id, "Sunrise", "Other", -9000, "a")]);
+    await saveMerchantOverrides([
+      { merchant: "Sunrise", category: "Utilities & Telecom", domain: "" },
+    ]);
+    // A blank category is the absence of an opinion — the form sends this when
+    // a merchant is set back to what the importer said.
+    await saveMerchantOverrides([{ merchant: "Sunrise", category: "", domain: "" }]);
+
+    const mapping = await getMerchantMapping();
+    expect(mapping?.open.map((m) => m.merchant)).toEqual(["Sunrise"]);
+    expect(mapping?.filed).toEqual([]);
   });
 
   it("stores no row for a merchant nobody had an opinion about", async () => {
@@ -285,10 +354,10 @@ describe("the merchant mapper", () => {
     });
 
     const mapping = await getMerchantMapping();
-    expect(mapping?.merchants.map((m) => m.merchant)).toEqual(["Kiosk"]);
+    expect(mapping?.open.map((m) => m.merchant)).toEqual(["Kiosk"]);
     // Their row for the same merchant name is not mine to see, and mine is
     // written without touching theirs.
-    expect(mapping?.merchants[0].category).toBe("Other");
+    expect(mapping?.open[0].category).toBe("Other");
 
     await saveMerchantOverrides([
       { merchant: "Kiosk", category: "Food & Drink", domain: "" },

@@ -768,11 +768,30 @@ Unchanged from the template this app grew out of, and still exactly true.
   deep on one control — and the `#anomaly-scan` anchor `/anomalies` links to
   twice lives on the Data group, so the link lands on a heading rather than
   mid-panel.
-- **The Merchants group ships folded, as a native `<details>`.** It is one row
-  per unrecognised merchant with two controls each, which on a real statement
+- **The Merchants group is two lists, and ships folded as a native
+  `<details>`.** `getMerchantMapping` returns `open` — merchants still reading
+  as `Other` — and `filed`, **every other merchant the account has ever had**,
+  the ones the importer placed included. The second list is the whole of
+  re-categorising: before it a merchant the rules got right was unreachable, so
+  "Coop is not groceries for me" had nowhere to be said. A merchant *moves*
+  lists when it is filed rather than vanishing, which is the better answer to
+  the worry the old single list was built around. Three things hang off it:
+  - **`base` travels with every row** — what the importer's rules said, beside
+    `category`, which is what the merchant reads as now. Setting a merchant
+    back to `base` sends a **blank** category, which deletes the override:
+    agreeing with the rules is the absence of an opinion, and storing a copy
+    would leave a rule that does nothing until the rules change and then
+    quietly overrules them.
+  - **Save sends only what moved.** The form holds hundreds of merchants and
+    the action reads an absent one as "leave it alone", so the payload is the
+    changed rows and the footer counts them.
+  - **The dominant category wins when a merchant has rows in two**, and
+    `Refund` loses a tie on purpose: a shop's refunds say which way a few lines
+    went, not what the shop sells.
+  It is one row per merchant with two controls each, which on a real statement
   is most of the page, so `MerchantMapper` renders a `<summary>` carrying the
-  count of merchants still filed under `Other` and nothing else until it is
-  opened. `<details>` rather than React state: it arrives folded from the
+  count still filed under `Other` and nothing else until it is opened; the
+  filed list is folded again inside it. `<details>` rather than React state: it arrives folded from the
   server with no hydration, opens with JS off, and brings its own keyboard and
   screen-reader behaviour. It does not animate, and should not — the element
   hides its content with `display: none`, which does not interpolate, and the
