@@ -1,10 +1,10 @@
 import { GOAL_ICONS, isGoalIconName, type GoalIconName } from "@/lib/goal-icon";
 import {
+  callGemini,
   geminiApiKey,
-  geminiEndpoint,
   geminiFastModel,
-  geminiHeaders,
   geminiText,
+  modelChain,
   toGeminiBody,
   type GeminiResponse,
 } from "@/lib/llm/gemini";
@@ -96,15 +96,18 @@ export async function suggestGoalIcon(name: string): Promise<GoalIconName | null
     return null;
   }
 
-  const model = geminiFastModel();
+  // The fast model leads; the rest of the chain follows, because a 503 here
+  // costs a glyph and there is a whole second of budget left to spend on
+  // asking someone else.
+  const models = modelChain(geminiFastModel());
 
   try {
-    const response = await fetch(geminiEndpoint(model), {
-      method: "POST",
-      headers: geminiHeaders(key),
-      body: JSON.stringify(
+    const call = await callGemini({
+      models,
+      key,
+      body: (target) =>
         toGeminiBody({
-          model,
+          model: target,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: `Savings goal: ${goal}` },
@@ -120,16 +123,23 @@ export async function suggestGoalIcon(name: string): Promise<GoalIconName | null
           // same reasoning the narrative layer uses.
           temperature: 0.1,
         }),
-      ),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      // The budget is for the whole chain, not for each try: a person is
+      // waiting on a form, and four fallbacks at six seconds each would be
+      // forty seconds of "Add goal" doing nothing. A model that fails fast
+      // (a 503 arrives in a fraction of a second) leaves the rest of the
+      // budget for the next one; one that hangs uses it up alone.
+      extraSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      onAttempt: (attempt) => {
+        if (attempt.error) {
+          console.error(`Icon suggestion failed on ${attempt.model}: ${attempt.error}`);
+        }
+      },
     });
 
-    if (!response.ok) {
-      console.error(`Icon suggestion failed with status ${response.status}.`);
-      return null;
-    }
+    if (!call.ok) return null;
 
-    const content = geminiText((await response.json()) as GeminiResponse);
+    const content = geminiText(JSON.parse(call.raw) as GeminiResponse);
     if (!content) return null;
 
     const parsed: unknown = JSON.parse(content);

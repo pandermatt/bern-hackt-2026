@@ -50,6 +50,9 @@ export type AssistantLogView = Omit<AssistantLogEntry, "userId">;
 export type AssistantConfigView = {
   url: string;
   model: string;
+  /** Every model a turn may use, in the order it would try them — the first
+   * is the one in `model`. Rendered as the debug panel's dropdown. */
+  choices: string[];
   /** Absent when MAX_TOKENS is unset — requests then carry no cap. */
   maxTokens?: number;
 };

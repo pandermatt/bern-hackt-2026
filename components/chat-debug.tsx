@@ -8,6 +8,7 @@ import {
   clearAssistantLogAction,
   getAssistantConfig,
   getAssistantLog,
+  setAssistantModel,
 } from "@/app/actions/chat";
 // Type-only import — the module itself is `server-only`, but types are erased.
 import type { AssistantConfigView, AssistantLogView } from "@/lib/assistant-log";
@@ -37,6 +38,21 @@ export function ChatDebug() {
       setConfig(settings);
     });
   }, [startTransition]);
+
+  /**
+   * Point this browser at another model. Gemini answers 503 under load often
+   * enough that the demo needs a way out that is not a redeploy — the turn
+   * already falls back down the chain on its own, and this is how you change
+   * which one it starts from. The choice is optimistic on screen and settled
+   * by the refresh, so the header cannot disagree with the cookie.
+   */
+  const chooseModel = (model: string) => {
+    setConfig((prev) => (prev ? { ...prev, model } : prev));
+    startTransition(async () => {
+      await setAssistantModel(model);
+      setConfig(await getAssistantConfig());
+    });
+  };
 
   const clear = () => {
     startTransition(async () => {
@@ -96,11 +112,30 @@ export function ChatDebug() {
           </div>
           <div className="flex items-baseline gap-3">
             <dt className="shrink-0 text-text-subtle">{t("modelLabel")}</dt>
-            <dd
-              className="ml-auto truncate font-mono text-text-muted"
-              title={config.model}
-            >
-              {config.model}
+            <dd className="ml-auto min-w-0">
+              {/* The order is the order a turn tries them: the first is where
+                  it starts, the rest are what it falls back to on a 503. */}
+              <select
+                value={config.model}
+                onChange={(event) => chooseModel(event.target.value)}
+                disabled={pending}
+                aria-label={t("modelLabel")}
+                className="w-full cursor-pointer truncate rounded-md border border-line bg-surface px-1.5 py-0.5 text-right font-mono text-[11px] text-text-muted transition-colors hover:border-line-strong disabled:opacity-40"
+              >
+                {config.choices.map((choice) => (
+                  <option key={choice} value={choice}>
+                    {choice}
+                  </option>
+                ))}
+              </select>
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <dt className="shrink-0 text-text-subtle">{t("fallbackLabel")}</dt>
+            <dd className="ml-auto truncate font-mono text-text-muted">
+              {config.choices.length > 1
+                ? config.choices.slice(1).join(" → ")
+                : t("noFallback")}
             </dd>
           </div>
           <div className="flex items-baseline gap-3">

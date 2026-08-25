@@ -441,6 +441,18 @@ Unchanged from the template this app grew out of, and still exactly true.
   `lib/assistant.ts`'s parsers were written for when the endpoint was an 8B
   model that could not call tools at all. Those tolerant parsers stay as the
   net for a model that narrates its call instead of making one.
+- **No model call is made against one model.** `callGemini` walks
+  `modelChain()` — Gemini answers `503 UNAVAILABLE` under load often enough
+  that a single model is a single point of failure for the whole assistant, and
+  it retires model ids from under a running deployment (`gemini-2.5-flash` now
+  404s with "no longer available to new users"). So 404, 429 and 5xx move to
+  the next model; 400, 401 and 403 do not, because they would fail identically
+  all the way down. Every chain has an **overall deadline** beside the
+  per-attempt timeout — four fallbacks at six seconds each is forty seconds of
+  a form doing nothing — and the body is rebuilt per model, since the thinking
+  control is spelled from the model id. The chat debug panel's dropdown picks
+  which model leads, stored in an `httpOnly` cookie and validated against
+  `geminiModelChoices()` on the way back in.
 - **The assistant draws again, and never from its own numbers.**
   `display_chart` names a *source* and the app assembles the pie from the same
   aggregate that answered the tool call, so the caption and the picture cannot
@@ -451,6 +463,19 @@ Unchanged from the template this app grew out of, and still exactly true.
   `image://` / `path://` string *values* dropped, because ECharts fetches those
   from the viewer's browser). Don't weaken it, and don't let a chart carry a
   figure no tool returned.
+- **A chat turn is streamed, not awaited.** `lib/assistant-turn.ts` holds the
+  whole turn as an async generator of `TurnEvent`s; `app/api/assistant/route.ts`
+  forwards them as NDJSON and `askAssistant` drains the same generator for
+  anything that cannot stream. The point is not speed — time-to-first-token
+  equals total time on this API, so there is nothing to stream *within* a round
+  — it is that a charted answer is three round trips of the model thinking for
+  ten to fifteen seconds apiece, and the panel can say which figures it is
+  fetching instead of showing dots for forty seconds. Two things that bite:
+  the route carries **no locale segment** and the proxy does not run for it, so
+  the panel sends its locale and the turn is answered in it (inferring one
+  gives the default, and German answers for English readers); and the hook uses
+  **plain state, not `useTransition`** — a transition commits its updates when
+  it settles, which swallowed every status after the first.
 - **The assistant lives on `/home` and nowhere else, and its state lives in
   the shell.** `components/chat-panel.tsx` exports `useAssistantChat()` beside
   `<ChatPanel>`; `HomeChat` is the one shell around it, inline and already

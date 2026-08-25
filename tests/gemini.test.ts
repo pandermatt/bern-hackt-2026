@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   extractSql,
@@ -8,10 +8,14 @@ import {
   TOOL_DEFINITIONS,
 } from "@/lib/assistant";
 import {
+  callGemini,
   geminiText,
   geminiUsage,
+  isRetryableStatus,
+  modelChain,
   toFunctionDeclarations,
   toGeminiBody,
+  type GeminiAttempt,
   type GeminiResponse,
 } from "@/lib/llm/gemini";
 
@@ -244,5 +248,136 @@ describe("geminiUsage", () => {
       }),
     ).toEqual({ promptTokens: 1200, completionTokens: 90 });
     expect(geminiUsage({})).toBeUndefined();
+  });
+});
+
+/* =========================================================================
+   THE FALLBACK CHAIN
+
+   Gemini answers `503 UNAVAILABLE — this model is currently experiencing high
+   demand` under load, and on a live deployment a single model is a single
+   point of failure for the whole assistant. A turn walks the chain instead.
+   ========================================================================= */
+
+describe("isRetryableStatus", () => {
+  it("moves on for capacity, stays put for a bad key or a bad request", () => {
+    for (const status of [429, 500, 502, 503, 504]) {
+      expect(isRetryableStatus(status)).toBe(true);
+    }
+    // These would fail identically on every model in the chain.
+    for (const status of [400, 401, 403]) {
+      expect(isRetryableStatus(status)).toBe(false);
+    }
+  });
+
+  it("moves on from a retired model id", () => {
+    // Google took `gemini-2.5-flash` away from new users mid-flight; a pinned
+    // GEMINI_MODEL that retires must not take the assistant with it.
+    expect(isRetryableStatus(404)).toBe(true);
+  });
+});
+
+describe("modelChain", () => {
+  it("puts the caller's pick first and never repeats a name", () => {
+    const chain = modelChain("gemini-3.6-flash");
+    expect(chain[0]).toBe("gemini-3.6-flash");
+    expect(new Set(chain).size).toBe(chain.length);
+  });
+});
+
+describe("callGemini", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Answers each call from a queue: a number is an HTTP status, a thrown
+   * Error stands in for a transport failure. */
+  function mockFetch(...replies: (number | Error)[]) {
+    // Typed through the generic rather than by declaring parameters the stub
+    // does not use: a bare `vi.fn` records its calls as `[]`, and the
+    // per-model body assertion below reads `calls[n][1]`.
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<unknown>>(async () => {
+      const reply = replies.shift() ?? 200;
+      if (reply instanceof Error) throw reply;
+      return {
+        ok: reply < 400,
+        status: reply,
+        text: async () => JSON.stringify({ status: reply }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  const call = (models: string[], onAttempt?: (a: GeminiAttempt) => void) =>
+    callGemini({
+      models,
+      key: "test_key",
+      body: (model) => ({ model }),
+      timeoutMs: 1000,
+      onAttempt,
+    });
+
+  it("moves to the next model on a 503 and answers from it", async () => {
+    const fetchMock = mockFetch(503, 200);
+    const result = await call(["first", "second", "third"]);
+
+    expect(result.ok).toBe(true);
+    expect(result.model).toBe("second");
+    // Stops as soon as one answers — the third is never asked.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops at a rejected key rather than spending the chain on it", async () => {
+    const fetchMock = mockFetch(403, 200);
+    const result = await call(["first", "second"]);
+
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ status: 403, model: "first" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a transport failure as worth another model", async () => {
+    const fetchMock = mockFetch(new Error("network down"), 200);
+    const result = await call(["first", "second"]);
+
+    expect(result.ok).toBe(true);
+    expect(result.model).toBe("second");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports the last failure when the whole chain is down", async () => {
+    mockFetch(503, 503, 429);
+    const result = await call(["first", "second", "third"]);
+
+    expect(result).toMatchObject({ ok: false, status: 429, model: "third" });
+  });
+
+  it("names every failed try, and whether another one is coming", async () => {
+    const attempts: GeminiAttempt[] = [];
+    mockFetch(503, 200);
+    await call(["first", "second"], (attempt) => attempts.push(attempt));
+
+    // Only the failure is reported as an error; the success carries none.
+    expect(attempts.map((a) => [a.model, a.status, a.retrying, !!a.error])).toEqual([
+      ["first", 503, true, true],
+      ["second", 200, false, false],
+    ]);
+  });
+
+  it("builds the body per model, since the thinking control depends on it", async () => {
+    const fetchMock = mockFetch(503, 200);
+    await call(["gemini-pro-latest", "gemini-3.6-flash"]);
+
+    const sent = fetchMock.mock.calls.map(
+      (args) => JSON.parse(String(args[1].body)).model,
+    );
+    expect(sent).toEqual(["gemini-pro-latest", "gemini-3.6-flash"]);
+  });
+
+  it("keeps the key out of the snapshot it hands the log", async () => {
+    const attempts: GeminiAttempt[] = [];
+    mockFetch(503, 503);
+    await call(["first", "second"], (attempt) => attempts.push(attempt));
+
+    for (const attempt of attempts) expect(attempt.request).not.toContain("test_key");
   });
 });

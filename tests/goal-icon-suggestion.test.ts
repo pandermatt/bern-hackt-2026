@@ -12,7 +12,10 @@ function mockLlm(content: string) {
     async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ candidates: [{ content: { parts: [{ text: content }] } }] }),
+      // `text`, not `json`: the shared client reads the body once as text so
+      // an unparseable one can be shown in the debug log verbatim.
+      text: async () =>
+        JSON.stringify({ candidates: [{ content: { parts: [{ text: content }] } }] }),
     }),
   );
   vi.stubGlobal("fetch", fetchMock);
@@ -77,7 +80,7 @@ describe("suggestGoalIcon", () => {
   it("gives up quietly when the endpoint refuses", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) })),
+      vi.fn(async () => ({ ok: false, status: 401, text: async () => "{}" })),
     );
 
     await expect(suggestGoalIcon("Töggelikasten")).resolves.toBeNull();
