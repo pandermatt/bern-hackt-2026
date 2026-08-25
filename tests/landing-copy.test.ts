@@ -26,6 +26,9 @@ const namespaces = Object.fromEntries(
 /** The canned exchanges in `components/landing-dragon.tsx`. */
 const ASK_KEYS = ["ask1", "ask2", "ask3"];
 
+/** Everything `components/victory-banner.tsx` reads. */
+const BANNER_KEYS = ["winEyebrow", "winTitle", "winBody", "winPhotoAlt"];
+
 /** The exchanges in `components/landing.tsx`'s FAQ, in its own order. */
 const FAQ_KEYS = ["faqAnomaly", "faqBank", "faqData", "faqBatzi", "faqDelete"];
 
@@ -130,6 +133,33 @@ describe("the landing copy", () => {
       for (const key of RETIRED_FAQ) {
         expect(namespaces[locale]![key], `Landing.${key} still in ${locale}`)
           .toBeUndefined();
+      }
+    }
+  });
+
+  it("names the victory banner in every locale", () => {
+    // "identical keys in every locale" above catches a key added to one
+    // catalog and forgotten in the other. This catches the emptier failure:
+    // a key that is present and blank, which renders as nothing at all in the
+    // band above the hero.
+    for (const locale of routing.locales) {
+      for (const key of BANNER_KEYS) {
+        expect(namespaces[locale]![key], `Landing.${key} missing from ${locale}`)
+          .toBeTruthy();
+      }
+    }
+  });
+
+  it("pins the banner's two rich tags in every locale", () => {
+    // `VictoryBanner` composes `winBody` with `t.rich`, and a tag in a catalog
+    // with no handler at the call site *throws* — which on this page means the
+    // landing route 500s for readers in that language and nowhere else. Same
+    // guard `tests/auth-copy.test.ts` puts on the prototype notice.
+    for (const locale of routing.locales) {
+      const line = namespaces[locale]!.winBody!;
+      for (const tag of ["bernhackt", "postfinance"]) {
+        expect(line, `Landing.winBody in ${locale}`)
+          .toMatch(new RegExp(`<${tag}>.+</${tag}>`));
       }
     }
   });

@@ -11,6 +11,7 @@ import {
 import { useTranslations } from "next-intl";
 
 import { LandingDragon } from "@/components/landing-dragon";
+import { VictoryBanner } from "@/components/victory-banner";
 import { Link } from "@/i18n/navigation";
 import { DRAGON_SRC, type DragonMood } from "@/lib/nudges";
 
@@ -46,7 +47,18 @@ export function Landing() {
   return (
     <div className="w-full flex-1 flex flex-col bg-bg text-text selection:bg-brand/30 selection:text-text">
       {/* ─────────────────────────────────────────────────────────────
-          1. HERO
+          1. THE WIN
+
+          The first thing on the page, above the headline. It was tried under
+          the hero and read as a footnote there: the band is the loudest thing
+          on the page and burying it half a screen down wastes both the colour
+          and the claim. It keeps its own section rather than being folded into
+          the hero, because it is not part of the pitch.
+         ───────────────────────────────────────────────────────────── */}
+      <VictoryBanner />
+
+      {/* ─────────────────────────────────────────────────────────────
+          2. HERO
          ───────────────────────────────────────────────────────────── */}
       <section className="relative w-full pt-12 pb-16 sm:pt-20 sm:pb-24 overflow-hidden border-b border-line/60">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
@@ -101,7 +113,7 @@ export function Landing() {
         </div>
 
         {/* ─────────────────────────────────────────────────────────────
-            2. THE DRAGON, WAITING TO BE ASKED
+            3. THE DRAGON, WAITING TO BE ASKED
 
             This slot used to hold a mock dashboard: four ECharts views on
             invented figures. It advertised the charts, which are the least
@@ -121,7 +133,7 @@ export function Landing() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. FULL-WIDTH POSTFINANCE YELLOW CONTAINER WITH CALL TO ACTION
+          4. FULL-WIDTH POSTFINANCE YELLOW CONTAINER WITH CALL TO ACTION
          ───────────────────────────────────────────────────────────── */}
       <section className="on-brand relative w-full bg-brand text-text py-20 sm:py-28 overflow-hidden border-y border-brand">
         {/* Subtle geometric background watermark */}
@@ -186,7 +198,7 @@ export function Landing() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          3. FAQ
+          5. FAQ
          ───────────────────────────────────────────────────────────── */}
       <section className="w-full py-16 sm:py-24 bg-surface">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
