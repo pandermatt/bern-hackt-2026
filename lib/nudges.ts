@@ -55,15 +55,80 @@ export type NudgeSpec =
       amountMinor: number;
     };
 
-/** The mascot's mood. Each maps to a file in `public/dragons`. */
-export type DragonMood = "thinking" | "coin" | "celebrate" | "happy";
+/**
+ * The mascot's poses, as they are named in `public/dragons`.
+ *
+ * All 35 of the supplied set, in file order, each entry the file name with its
+ * numeric prefix stripped — `DRAGON_SRC` puts the prefix back, so the tuple
+ * below reads as a vocabulary rather than as a directory listing. It is
+ * deliberately the whole set and not the handful the pages use: it is also the
+ * **assistant's allowlist**, and a model asked to pick a face needs faces to
+ * pick between. `tests/dragon.test.ts` holds it against the directory and
+ * against both message catalogs, which is the drift alarm for 35 files, 35
+ * entries and 70 alt strings.
+ *
+ * Adding a pose means dropping the file in, adding it here in its numbered
+ * position, and writing its alt line in `de` and `en`. Nothing else reads the
+ * order.
+ */
+export const DRAGON_MOODS = [
+  "happy",
+  "wink",
+  "laughing",
+  "sad",
+  "thinking",
+  "surprised",
+  "angry",
+  "in-love",
+  "heart-hug",
+  "thumbs-up",
+  "idea",
+  "cool",
+  "celebrate",
+  "yes",
+  "no",
+  "typing",
+  "support",
+  "reading",
+  "coffee",
+  "sleeping",
+  "knocked-out",
+  "coin",
+  "broke",
+  "piggy-bank",
+  "jackpot",
+  "rich",
+  "money-bag",
+  "cash-hug",
+  "zoom",
+  "detective",
+  "hero",
+  "victory",
+  "zen",
+  "peeking",
+  "bye",
+] as const;
 
-export const DRAGON_SRC: Record<DragonMood, string> = {
-  thinking: "/dragons/05-thinking.webp",
-  coin: "/dragons/22-coin.webp",
-  celebrate: "/dragons/13-celebrate.webp",
-  happy: "/dragons/01-happy.webp",
-};
+export type DragonMood = (typeof DRAGON_MOODS)[number];
+
+/**
+ * Where each pose lives. Built from the tuple rather than written out, so a
+ * mood can never name a file that is not there — the index is the file's own
+ * number, one-based and zero-padded, which is how the assets are named.
+ */
+export const DRAGON_SRC: Record<DragonMood, string> = Object.fromEntries(
+  DRAGON_MOODS.map((mood, index) => [
+    mood,
+    `/dragons/${String(index + 1).padStart(2, "0")}-${mood}.webp`,
+  ]),
+) as Record<DragonMood, string>;
+
+/** Whether a string the model wrote names a pose we actually have. */
+export function isDragonMood(value: unknown): value is DragonMood {
+  return (
+    typeof value === "string" && (DRAGON_MOODS as readonly string[]).includes(value)
+  );
+}
 
 /**
  * A category has overspent only when a limit was actually set.
@@ -218,11 +283,21 @@ export function budgetVerdict(rows: BudgetRow[]): BudgetVerdict {
   return "clear";
 }
 
+/**
+ * A face per verdict, and no two verdicts sharing one.
+ *
+ * Over and tight used to be the same picture, which threw away the distinction
+ * `budgetVerdict` exists to draw: having broken a limit and being about to are
+ * different news, and the mascot is the fastest thing on the page to read. So
+ * over is sorry about it and tight is still thinking. Unplanned is the idea
+ * rather than the coin it used to be: there is nothing to put away on a page
+ * of limits, there is a budget to set — and the coin goes on meaning money,
+ * which is what `dragonFor` still uses it for on `/home`.
+ */
 export function dragonForBudget(verdict: BudgetVerdict): DragonMood {
-  if (verdict === "over" || verdict === "tight") return "thinking";
-  // A budget nobody has set yet is money still to be planned, which is what
-  // the coin means everywhere else in the app.
-  return verdict === "unplanned" ? "coin" : "celebrate";
+  if (verdict === "over") return "sad";
+  if (verdict === "tight") return "thinking";
+  return verdict === "unplanned" ? "idea" : "celebrate";
 }
 
 /**
@@ -268,13 +343,25 @@ export function anomalyVerdict(input: {
   return "clear";
 }
 
+/**
+ * One face per verdict here too, and this page is where the wider set earns
+ * itself: looking for things that are off is detective work, and it has a
+ * drawing. Reading a scan, running one and having found nothing were three
+ * states wearing two faces before.
+ *
+ * `outdated` still gets a face even though the page renders no mascot for it —
+ * the verdict is what tells the page to stay quiet, and a function that
+ * returned nothing for one arm would push that decision into the caller.
+ */
 export function dragonForAnomalies(verdict: AnomalyVerdict): DragonMood {
-  if (verdict === "action" || verdict === "outdated") return "thinking";
-  if (verdict === "resolved") return "celebrate";
-  if (verdict === "context") return "happy";
-  // Unscanned and running are both "there is something to do here", which is
-  // the coin's job — it is the only mood that reads as an offer.
-  return verdict === "clear" ? "happy" : "coin";
+  if (verdict === "action") return "detective";
+  if (verdict === "outdated") return "thinking";
+  if (verdict === "resolved") return "victory";
+  if (verdict === "context") return "reading";
+  if (verdict === "running") return "typing";
+  // Nothing found is a quiet account, not an achievement — see the note on
+  // `anomalyVerdict`. Zen rather than a celebration.
+  return verdict === "clear" ? "zen" : "zoom";
 }
 
 export function dragonFor(nudges: NudgeSpec[], pots: SavingsPot[] = []): DragonMood {
@@ -286,4 +373,102 @@ export function dragonFor(nudges: NudgeSpec[], pots: SavingsPot[] = []): DragonM
     return "celebrate";
   }
   return "happy";
+}
+
+/**
+ * What the savings page's pots add up to, as one word.
+ *
+ * Same split as `budgetVerdict` and `anomalyVerdict`, for the same reason: the
+ * page reads this to pick its copy and hands the identical value to
+ * `dragonForSavings`, so the picture and the sentence cannot disagree.
+ *
+ * Ordered by what the reader can *do* about it. A pool in the red outranks
+ * everything — no allocation is possible out of it, so congratulating anyone
+ * on a well-funded pot above an overdrawn account would be the same class of
+ * lie `outdated` guards against on `/anomalies`. Free money outranks "every
+ * goal is met" for the opposite reason: it is the one state with a next step.
+ */
+export type SavingsVerdict =
+  | "no-goals"
+  | "overdrawn"
+  | "free"
+  | "funded"
+  | "saving";
+
+export function savingsVerdict(input: {
+  pots: SavingsPot[];
+  /** Every franc the ended months left over, less what the pots hold. */
+  freeMinor: number;
+  /** The pool itself. Negative is an account that has spent more than it made. */
+  pooledMinor: number;
+}): SavingsVerdict {
+  if (input.pooledMinor <= 0) return "overdrawn";
+  if (input.pots.length === 0) return "no-goals";
+  if (input.freeMinor >= FREE_MONEY_MIN_MINOR) return "free";
+  // "Every goal with a target has met it". A pot with no target is a jar
+  // nobody set a lid on — it can never be full, and it must not hold the
+  // whole page back from saying so either.
+  const targeted = input.pots.filter((pot) => pot.targetMinor > 0);
+  if (
+    targeted.length > 0 &&
+    targeted.every((pot) => pot.savedMinor >= pot.targetMinor)
+  ) {
+    return "funded";
+  }
+  return "saving";
+}
+
+export function dragonForSavings(verdict: SavingsVerdict): DragonMood {
+  // The offered hand rather than the idea: `/budget` already wears the idea
+  // for its own nothing-set-up-yet state, and the two pages sit one tab apart.
+  // A reader crossing between them should not meet the same drawing twice.
+  if (verdict === "no-goals") return "support";
+  if (verdict === "overdrawn") return "broke";
+  // The one state with a next step gets the picture that reads as an offer —
+  // the same job the coin does on `/home`, one size up because this page is
+  // where the money actually lands.
+  if (verdict === "free") return "money-bag";
+  return verdict === "funded" ? "jackpot" : "piggy-bank";
+}
+
+/**
+ * What the ledger adds up to, as one word.
+ *
+ * Plain numbers rather than a `Dashboard`: this module has no app imports and
+ * keeps none — see the note at the top. The page holds all three already.
+ *
+ * "Nothing matched" and "nothing imported" are deliberately separate, the same
+ * distinction `Dashboard.noMatches` and `Dashboard.nothingImported` already
+ * draw in the subtitle: a filter that kept nothing is a thing to undo, an
+ * empty account is a thing to fill.
+ */
+export type LedgerVerdict =
+  | "empty"
+  | "no-matches"
+  | "negative"
+  | "positive"
+  | "even";
+
+export function ledgerVerdict(input: {
+  /** Rows the filters kept. */
+  count: number;
+  /** Whether the account has any statements at all, filters aside. */
+  hasStatements: boolean;
+  /** Income less spending over the rows in view. */
+  netMinor: number;
+}): LedgerVerdict {
+  if (!input.hasStatements) return "empty";
+  if (input.count === 0) return "no-matches";
+  if (input.netMinor < 0) return "negative";
+  return input.netMinor > 0 ? "positive" : "even";
+}
+
+export function dragonForLedger(verdict: LedgerVerdict): DragonMood {
+  if (verdict === "empty") return "reading";
+  // Looking for something that is not there. The same glass the anomalies page
+  // reaches for before it has scanned, and for the same reason.
+  if (verdict === "no-matches") return "zoom";
+  if (verdict === "negative") return "sad";
+  // A month that broke exactly even is neither news nor an achievement.
+  return verdict === "positive" ? "thumbs-up" : "cool";
 }

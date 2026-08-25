@@ -26,6 +26,22 @@ const namespaces = Object.fromEntries(
 /** The canned exchanges in `components/landing-dragon.tsx`. */
 const ASK_KEYS = ["ask1", "ask2", "ask3"];
 
+/** The exchanges in `components/landing.tsx`'s FAQ, in its own order. */
+const FAQ_KEYS = ["faqAnomaly", "faqBank", "faqData", "faqBatzi", "faqDelete"];
+
+/** The two FAQ entries the section dropped, plus the numbered keys the whole
+ *  set used to be filed under. Both halves must stay gone: the numbered ones
+ *  because nothing renders them any more, and the two answers because they
+ *  explained the app's internals on the page a visitor decides on. */
+const RETIRED_FAQ = [
+  "faq1Question",
+  "faq2Question",
+  "faq3Question",
+  "faq4Question",
+  "faq5Question",
+  "faq6Question",
+];
+
 /** Everything the retired mock dashboard needed, as a sample. It was replaced
  *  by the dragon; these keys must not drift back in beside it. */
 const RETIRED = [
@@ -86,10 +102,32 @@ describe("the landing copy", () => {
         "askThreadLabel",
         "askChipsLabel",
         "askCta",
-        "askNote",
       ]) {
         expect(namespaces[locale]![key], `Landing.${key} missing from ${locale}`)
           .toBeTruthy();
+      }
+    }
+  });
+
+  it("names both halves of every FAQ exchange in every locale", () => {
+    // The section renders `${key}Question` and `${key}Answer` by construction,
+    // so a key spelled one way in the component and another in a catalog shows
+    // up as its own raw name — and only for readers in that language.
+    for (const locale of routing.locales) {
+      for (const key of FAQ_KEYS) {
+        for (const half of [`${key}Question`, `${key}Answer`]) {
+          expect(namespaces[locale]![half], `Landing.${half} missing from ${locale}`)
+            .toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("has dropped the numbered FAQ keys the section was cut down from", () => {
+    for (const locale of routing.locales) {
+      for (const key of RETIRED_FAQ) {
+        expect(namespaces[locale]![key], `Landing.${key} still in ${locale}`)
+          .toBeUndefined();
       }
     }
   });

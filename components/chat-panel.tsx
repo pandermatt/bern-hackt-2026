@@ -18,6 +18,7 @@ import {
 } from "@/lib/assistant";
 import type { TurnEvent } from "@/lib/assistant-turn";
 import { formatMoney } from "@/lib/insights";
+import { DRAGON_SRC, type DragonMood } from "@/lib/nudges";
 
 /**
  * The assistant's body, and the state behind it.
@@ -103,6 +104,13 @@ export type PanelMessage = {
   chart?: ChartSpec;
   /** A validated surplus split, rendered as a card with an Apply button. */
   proposal?: AllocationProposal;
+  /**
+   * The face this reply came back wearing. Kept on the message rather than on
+   * the panel for the same reason `proposalApplied` is: the panel unmounts
+   * when the shell toggles away from it, and a transcript scrolled back
+   * through has to still show what each answer looked like.
+   */
+  mood?: DragonMood;
   /** Apply state lives on the message, not the panel: the panel unmounts
    * when the shell toggles away from it, and an applied card has to stay
    * applied. */
@@ -198,9 +206,10 @@ export function useAssistantChat(): AssistantChat {
               content: turn.reply,
               chart: turn.chart,
               proposal: turn.proposal,
+              mood: turn.mood,
               error: turn.error,
             }
-          : { role: "assistant", content: t("failed"), error: true },
+          : { role: "assistant", content: t("failed"), mood: "sad", error: true },
       ]);
       setFollowUps(turn?.followUps ?? []);
       setPending(false);
@@ -307,6 +316,10 @@ export function ChatPanel({
    * to take the panel down. Several tools in one round are joined, since the
    * model does sometimes ask for two at once.
    */
+  // The pictures' own namespace. Read here rather than passed in, because the
+  // string describes the *drawing* — see `components/dragon-buddy.tsx`.
+  const tDragon = useTranslations("Dragon");
+
   const statusLabel = (() => {
     if (!status || status.tools.length === 0) return t("thinking");
     const named = status.tools
@@ -367,10 +380,33 @@ export function ChatPanel({
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex duration-300 animate-in fade-in slide-in-from-bottom-2 ${
+            className={`flex items-end gap-2 duration-300 animate-in fade-in slide-in-from-bottom-2 ${
               message.role === "user" ? "justify-end" : "justify-start"
             }`}
           >
+            {/* Batzi, wearing the face the *model* picked for this answer —
+                see `MOOD_INSTRUCTION` in `lib/assistant.ts`. The assistant is
+                him, so a transcript of bare bubbles was the one place in the
+                app where he was being quoted without being shown.
+
+                A message with no mood still gets a face: `sad` on an error
+                (the turn never reached the model, or came back broken) and the
+                neutral one otherwise, which is also what an older transcript
+                restored from before this existed renders as.
+
+                A plain `<img>`, like `merchant-avatar.tsx` — a small asset on
+                our own origin. `items-end` sits it on the bubble's baseline,
+                so it stays put as the bubble grows a chart underneath it. */}
+            {message.role === "assistant" && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={DRAGON_SRC[message.mood ?? (message.error ? "sad" : "happy")]}
+                alt={tDragon(message.mood ?? (message.error ? "sad" : "happy"))}
+                width={512}
+                height={512}
+                className="size-9 shrink-0 drop-shadow-sm"
+              />
+            )}
             <div
               className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-[13.5px] whitespace-pre-wrap ${
                 message.role === "user"
@@ -475,20 +511,32 @@ export function ChatPanel({
             >
               {statusLabel}
             </p>
-            <div
-              className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-surface-muted px-4 py-3"
-              aria-hidden
-            >
-              {[0, 1, 2].map((dot) => (
-                <span
-                  key={dot}
-                  className="h-2 w-2 rounded-full bg-accent"
-                  style={{
-                    animation: "chat-dot 1.2s ease-in-out infinite",
-                    animationDelay: `${dot * 0.18}s`,
-                  }}
-                />
-              ))}
+            {/* The one face the app chooses rather than the model — it has not
+                answered yet, so there is nothing for it to have an expression
+                about. `aria-hidden` on the whole row: the status line above
+                already names what is happening, and the dots and the mascot
+                are two more ways of saying it. */}
+            <div className="flex items-end gap-2" aria-hidden>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={DRAGON_SRC.typing}
+                alt=""
+                width={512}
+                height={512}
+                className="size-9 shrink-0 drop-shadow-sm"
+              />
+              <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-surface-muted px-4 py-3">
+                {[0, 1, 2].map((dot) => (
+                  <span
+                    key={dot}
+                    className="h-2 w-2 rounded-full bg-accent"
+                    style={{
+                      animation: "chat-dot 1.2s ease-in-out infinite",
+                      animationDelay: `${dot * 0.18}s`,
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         )}

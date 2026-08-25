@@ -24,6 +24,11 @@ import type { SavingsOverview } from "@/app/actions/savings";
 import type { Dashboard } from "@/app/actions/transactions";
 import type { Transaction } from "@/db/schema";
 import type { Slice } from "@/lib/insights";
+// A value import, and safe from the client: `lib/nudges.ts` is pure and its
+// own imports are all `import type`. `DRAGON_MOODS` is the render table *and*
+// the model's allowlist, which is the whole point of taking it from there
+// rather than restating the names here.
+import { DRAGON_MOODS, isDragonMood, type DragonMood } from "@/lib/nudges";
 
 export type ChatRole = "user" | "assistant";
 
@@ -116,8 +121,77 @@ export type AssistantTurn = {
   proposal?: AllocationProposal;
   /** Ready-to-send follow-up questions, shown as chips above the input. */
   followUps?: string[];
+  /**
+   * The face Batzi answers with, chosen by the model out of `DRAGON_MOODS`.
+   * Optional because a turn that never got a usable one still has an answer —
+   * the panel falls back rather than going faceless.
+   */
+  mood?: DragonMood;
   error?: boolean;
 };
+
+/**
+ * How the model says which face to answer with.
+ *
+ * The assistant *is* Batzi — the card is headed "Ask Batzi" — so a reply has
+ * an expression, and the model is the only thing on the turn that knows
+ * whether it just delivered good news. `MOOD:` is the same seam `FOLLOWUP:`
+ * already uses: one marked line, stripped out of the visible answer by
+ * `extractMood` on the way back.
+ *
+ * **The names go one per line.** That is not formatting: `lib/goal-icon.ts`
+ * measured the difference on the same kind of pick-from-a-list task, and a
+ * list run together as prose had the model answering with a neighbouring word
+ * it had invented. The pairing of a name with when to use it is there for the
+ * same reason — the file names alone ("zoom", "support") do not say what the
+ * drawing shows.
+ *
+ * An invented name costs nothing: `extractMood` drops anything not on the
+ * list, and the panel falls back to a neutral face.
+ */
+const MOOD_HINTS: Partial<Record<DragonMood, string>> = {
+  happy: "the ordinary, friendly answer",
+  wink: "a small aside or a knowing remark",
+  laughing: "something genuinely funny in the figures",
+  sad: "bad news — an overspend, a shortfall",
+  thinking: "a judgement call, or an answer with a caveat",
+  surprised: "a figure that is startling on its own",
+  angry: "something that ought not to have been charged",
+  "in-love": "the customer's own favourite thing to spend on",
+  "heart-hug": "reassurance after a worrying number",
+  "thumbs-up": "confirming something is fine",
+  idea: "a suggestion the customer had not asked for",
+  cool: "an unremarkable answer, delivered flatly",
+  celebrate: "a goal met, a budget kept",
+  yes: "a yes to a yes/no question",
+  no: "a no to a yes/no question",
+  typing: "listing or writing something out at length",
+  support: "an offer to help with a next step",
+  reading: "reporting what the statements say",
+  coffee: "a small everyday expense",
+  sleeping: "a quiet month with nothing to report",
+  "knocked-out": "a genuinely alarming total",
+  coin: "a single amount, named",
+  broke: "the money has run out",
+  "piggy-bank": "saving and savings goals",
+  jackpot: "an unusually good result",
+  rich: "a large balance or a big month of income",
+  "money-bag": "money free to put away",
+  "cash-hug": "money kept rather than spent",
+  zoom: "looking something specific up",
+  detective: "anything suspicious or unusual",
+  hero: "a problem solved for the customer",
+  victory: "work finished — everything ticked off",
+  zen: "nothing is wrong, calmly",
+  peeking: "a tentative or partial answer",
+  bye: "closing the conversation",
+};
+
+const MOOD_INSTRUCTION = [
+  "End your answer with one line starting with MOOD: naming the face to answer with — nothing else on that line. Choose from exactly these names:",
+  ...DRAGON_MOODS.map((mood) => `${mood} — ${MOOD_HINTS[mood] ?? mood}`),
+  "Use the name exactly as written above. If none fits, write MOOD: happy.",
+].join("\n");
 
 /** No figures — the model has to ask for them. */
 export const SYSTEM_PROMPT = [
@@ -136,6 +210,7 @@ export const SYSTEM_PROMPT = [
   'For a visual a pie cannot carry — bars over months, a line, a scatter — call display_echart with a complete Apache ECharts option as a JSON string, built only from figures you already fetched with the tools or run_sql. When the user names a chart type that is not a pie, display_echart is the only right tool.',
   "When a chart is shown, your text is its caption: one or two sentences naming the biggest item and the takeaway. Never describe the chart's shape and never list figures it already shows.",
   "After your answer, propose 2 or 3 short follow-up questions the user could ask next, each on its own line starting with FOLLOWUP: — nothing else on those lines.",
+  MOOD_INSTRUCTION,
 ].join("\n");
 
 /**
@@ -1828,3 +1903,51 @@ export function extractFollowUps(text: string): {
   return { text: kept.join("\n").trim(), followUps: unique.slice(0, 3) };
 }
 
+
+/**
+ * The marker `MOOD_INSTRUCTION` asks for, written as tolerantly as
+ * `FOLLOWUP_MARKER` is: a model that quotes it, bullets it or wraps it in
+ * asterisks meant the same thing.
+ */
+const MOOD_MARKER = /^[\s>*_[{"'-]*MOOD["']?\s*:/i;
+
+/**
+ * Pull the face the model chose out of its answer.
+ *
+ * Two things it deliberately does not do. It does not *repair* a name — an
+ * answer of "happyface" or "excited" is dropped rather than guessed at, the
+ * same allowlist discipline `GOAL_ICONS` keeps for the goal glyphs, because a
+ * near-miss repaired into the wrong drawing is worse than the fallback. And it
+ * does not require the line to be last: models put it first about as often,
+ * and either way the line comes out of the visible reply.
+ *
+ * The last usable marker wins, so a model that reconsiders mid-answer is taken
+ * at its final word. Every marked line is stripped whether or not it named
+ * something real — leaving `MOOD: excited` in the bubble would be the one
+ * failure a reader can see.
+ */
+export function extractMood(text: string): {
+  text: string;
+  mood?: DragonMood;
+} {
+  const kept: string[] = [];
+  let mood: DragonMood | undefined;
+
+  for (const line of text.split("\n")) {
+    if (!MOOD_MARKER.test(line)) {
+      kept.push(line);
+      continue;
+    }
+    // Everything after the colon, stripped of the punctuation a model wraps a
+    // one-word answer in. Lower-cased because the names are, and hyphens are
+    // kept because six of them carry one (`in-love`, `piggy-bank`, …).
+    const named = line
+      .replace(MOOD_MARKER, "")
+      .trim()
+      .replace(/^[["'*_\s]+|[\]"'*_.\s]+$/g, "")
+      .toLowerCase();
+    if (isDragonMood(named)) mood = named;
+  }
+
+  return { text: kept.join("\n").trim(), mood };
+}

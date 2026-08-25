@@ -113,9 +113,21 @@ function thinkingConfigFor(model: string, budget: number): Record<string, unknow
  * should land on the next request in dev, and the chat debug panel's header
  * has to name what the *next* request would use, not what the server booted
  * with.
+ *
+ * **Flash leads, not Pro.** A chat turn is up to five rounds and a charted
+ * answer is three of them, each ten to fifteen seconds of Pro thinking — the
+ * whole reason `lib/assistant-turn.ts` had to grow a streamed status line.
+ * Flash answers these in a fraction of that, and the work is tool calls over
+ * figures the app has already fetched and formatted rather than reasoning the
+ * model has to do unaided. Pro stays in the chain right behind it, so anything
+ * Flash cannot carry still gets answered; the debug panel's dropdown is how
+ * you put Pro back in front for one browser. Note it also drops the
+ * thinking-budget special case in `toGeminiBody` — Pro is the model that
+ * cannot be told not to think and comes back empty when a request budgets it
+ * nothing.
  */
 export function geminiModel(): string {
-  return process.env.GEMINI_MODEL ?? "gemini-pro-latest";
+  return process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 }
 
 /**
@@ -140,9 +152,9 @@ export function geminiFastModel(): string {
  * `GEMINI_MODEL` always leads, whether or not it appears in the list.
  */
 const DEFAULT_MODEL_CHAIN = [
-  "gemini-pro-latest",
-  "gemini-3.6-flash",
   "gemini-flash-latest",
+  "gemini-3.6-flash",
+  "gemini-pro-latest",
   "gemini-3.5-flash",
 ];
 

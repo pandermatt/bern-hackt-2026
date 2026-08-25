@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { getDashboard } from "@/app/actions/transactions";
 import { BreakdownList } from "@/components/breakdown-list";
+import { DragonBuddy } from "@/components/dragon-buddy";
 import { MonthlyTrend } from "@/components/monthly-trend";
 import { ScrollDebug } from "@/components/scroll-debug";
 import { SummaryCards } from "@/components/summary-cards";
@@ -13,6 +14,8 @@ import { TransactionFilters } from "@/components/transaction-filters";
 import { TransactionList } from "@/components/transaction-list";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { formatMoney } from "@/lib/insights";
+import { dragonForLedger, ledgerVerdict } from "@/lib/nudges";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +40,37 @@ export default async function Dashboard({
   if (!dashboard) return redirect({ href: "/login", locale });
 
   const { facets, view, filters, monthly, stack, totals, merchants } = dashboard;
+
+  /* The dragon's read on what is in view, decided once in `lib/nudges.ts`.
+     `facets` is deliberately unfiltered — see the note on the type — so it is
+     what can tell "this account has no statements" apart from "these filters
+     kept nothing", which are two different things to say and two different
+     things to do about it. */
+  const verdict = ledgerVerdict({
+    count: totals.count,
+    hasStatements: Boolean(facets.first),
+    netMinor: totals.net,
+  });
+  const dragonLine =
+    verdict === "empty"
+      ? t("dragonEmpty")
+      : verdict === "no-matches"
+        ? t("dragonNoMatches")
+        : verdict === "negative"
+          ? t("dragonNegative")
+          : verdict === "positive"
+            ? t("dragonPositive")
+            : t("dragonEven");
+  /* `formatMoney` is unsigned, which is what this line wants: the words above
+     already carry the direction, and the note is a magnitude. */
+  const dragonNote =
+    verdict === "negative"
+      ? t("dragonNoteNegative", { amount: formatMoney(totals.net) })
+      : verdict === "positive"
+        ? t("dragonNotePositive", { amount: formatMoney(totals.net) })
+        : verdict === "even"
+          ? t("dragonNoteCount", { count: totals.count })
+          : undefined;
 
   return (
     <>
@@ -71,6 +105,13 @@ export default async function Dashboard({
         {/* No `space-y` — every section below carries the ledger's own `pt-6`
             on its heading, so the whole page runs on one rhythm instead of two
             stacked ones. The bare blocks get theirs explicitly. */}
+        {/* Under the heading rather than among the sections, the same slot the
+            other three pages use — it is a read on the whole view, and inside
+            a Section it would look like one more block of figures. */}
+        <div className="mb-6">
+          <DragonBuddy mood={dragonForLedger(verdict)} line={dragonLine} note={dragonNote} />
+        </div>
+
         <div>
           <SummaryCards totals={totals} forecast={dashboard.forecast} />
 
