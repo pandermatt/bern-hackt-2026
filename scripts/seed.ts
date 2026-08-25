@@ -164,11 +164,11 @@ async function main() {
       const account = income ? row.target_label : row.source_label;
 
       const rule = classify(slug, label);
-      // Transfers are labelled by the account they land in, not a merchant, and
-      // are overridden to "Transfer" below — they are not a mapping gap. Nor is
-      // an explicit MERCHANTS entry that classifies to "Other" (TWINT_P2P):
-      // only a keyword fallback landing on "Other" means a merchant is missing
-      // from the table.
+      // Transfers are labelled by the account they land in, not a merchant,
+      // and are overridden to "Cash & Transfers" below — they are not a
+      // mapping gap. Nor is an explicit MERCHANTS entry: only a keyword
+      // fallback landing on "Other" means a merchant is missing from the
+      // table.
       if (
         row.type !== "transfer" &&
         !(slug in MERCHANTS) &&
@@ -195,7 +195,7 @@ async function main() {
         // CHF 7,037.75 and make the salary figure meaningless.
         category:
           row.type === "transfer"
-            ? "Transfer"
+            ? "Cash & Transfers"
             : income && rule.category !== "Salary"
               ? "Refund"
               : rule.category,

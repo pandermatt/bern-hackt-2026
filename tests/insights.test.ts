@@ -97,7 +97,7 @@ describe("summarize", () => {
     // as spending would double every purchase already on that card.
     const totals = summarize([
       row(),
-      row({ kind: "transfer", amountMinor: -135530, category: "Transfer" }),
+      row({ kind: "transfer", amountMinor: -135530, category: "Cash & Transfers" }),
     ]);
 
     expect(totals.expense).toBe(1000);
@@ -325,7 +325,7 @@ describe("stackByCategory", () => {
   it("ignores income and transfers", () => {
     const stack = stackByCategory([
       row({ kind: "income", category: "Salary", amountMinor: 500_000 }),
-      row({ kind: "transfer", category: "Transfer", amountMinor: -50_000 }),
+      row({ kind: "transfer", category: "Cash & Transfers", amountMinor: -50_000 }),
       spend("Housing", "2025-03-14", 1_000),
     ]);
 
@@ -878,7 +878,7 @@ describe("applyFilters", () => {
   });
 
   it("hides transfers unless they are asked for", () => {
-    const rows = [row(), row({ kind: "transfer", category: "Transfer" })];
+    const rows = [row(), row({ kind: "transfer", category: "Cash & Transfers" })];
 
     expect(applyFilters(rows, NO_FILTERS)).toHaveLength(1);
     expect(

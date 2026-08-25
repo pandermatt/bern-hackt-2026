@@ -106,12 +106,15 @@ Rules:
 - The list cannot be extended. If the exact fit is missing, pick the nearest
   category that IS on the list — a pharmacy is Health & Insurance, a hairdresser
   is Other, a car park is Transport, a streaming service is Subscriptions.
-- Answer "${UNFILED}" whenever the name does not say what was bought: a person's
-  name, a bare payment app, a cash withdrawal, an abbreviation you do not
-  recognise. A wrong guess is worse than no guess — it moves somebody's budget.
-- "Salary" is money coming in from an employer, "Refund" is money coming back
-  from a shop, "Transfer" is money moving between the account holder's own
-  accounts.
+- "Cash & Transfers" is money that moved without buying anything: an ATM or
+  bank machine, a TWINT or Revolut payment to a person, anything written as
+  "Sent to" a name or a set of initials, and money moved between the account
+  holder's own accounts.
+- Answer "${UNFILED}" whenever the name does not say what was bought and is not
+  one of the above: a bare payment app, an abbreviation you do not recognise. A
+  wrong guess is worse than no guess — it moves somebody's budget.
+- "Salary" is money coming in from an employer and "Refund" is money coming
+  back from a shop.
 - Answer for every name you are given, exactly as it was written.
 
 Answer with JSON and nothing else:

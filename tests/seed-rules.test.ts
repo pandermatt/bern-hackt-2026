@@ -4,7 +4,13 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { toRecords } from "@/scripts/lib/csv";
-import { classify, MERCHANTS, naturalKey, toMinor } from "@/scripts/lib/statement";
+import {
+  classify,
+  classifyFreeText,
+  MERCHANTS,
+  naturalKey,
+  toMinor,
+} from "@/scripts/lib/statement";
 
 /*
  * The regression guard on the shipped statements. These assertions are what
@@ -90,8 +96,7 @@ describe("the merchant table", () => {
       const income = row.type === "income";
       const slug = income ? row.source_id : row.target_id;
       const label = income ? row.source_label : row.target_label;
-      // An explicit MERCHANTS entry that classifies to "Other" (TWINT_P2P,
-      // person-to-person payments) is a deliberate call, not a gap — only a
+      // An explicit MERCHANTS entry is a deliberate call, not a gap — only a
       // fallback landing on "Other" means the table is missing a merchant.
       if (!(slug in MERCHANTS) && classify(slug, label).category === "Other") {
         unmapped.add(`${slug} (${label})`);
@@ -99,6 +104,39 @@ describe("the merchant table", () => {
     }
 
     expect([...unmapped]).toEqual([]);
+  });
+
+  it("files cash and money handed to a person under one category", () => {
+    // Not `Other`: no *spending* category is honest for these, which is the
+    // reason they have a category of their own rather than a bucket shared
+    // with every merchant the rules could not place.
+    expect(classify("TWINT_P2P", "TWINT").category).toBe("Cash & Transfers");
+    // The merchant is still called "Cash withdrawal"; only its category moved.
+    expect(classify("Cash_Withdrawal", "Cash withdrawal").category).toBe(
+      "Cash & Transfers",
+    );
+  });
+
+  it("reads a free-text withdrawal or hand-over the same way", () => {
+    // How the uploaded statements spell it: a Revolut "Sent to" a set of
+    // initials, an ATM line, and the TWINT Privatzahlung that arrives here
+    // without the word TWINT, which `cleanLabel` strips as ceremony.
+    for (const label of [
+      "*Sent to R.M.",
+      "Sent to R.H.",
+      "Bargeldbezug Geldautomat Bern",
+      "Cash withdrawal at Atm179",
+      "Privatzahlung",
+    ]) {
+      expect(classifyFreeText(label).category, label).toBe("Cash & Transfers");
+    }
+  });
+
+  it("leaves a TWINT payment to a shop with the shop", () => {
+    // The word TWINT says how the money moved, not who was paid — a blanket
+    // rule on it would file every Coop lunch as a cash withdrawal.
+    expect(classifyFreeText("Belastung TWINT: COOP-2848 ZH SIHLCITY FOOD ZURICH").category)
+      .toBe("Food & Drink");
   });
 
   it("folds the alternate spellings onto one canonical name", () => {

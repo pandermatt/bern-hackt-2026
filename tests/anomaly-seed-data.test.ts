@@ -64,7 +64,7 @@ function importSeedData(): TransactionInput[] {
         merchant: row.type === "transfer" ? "Credit card payment" : rule.name,
         category:
           row.type === "transfer"
-            ? "Transfer"
+            ? "Cash & Transfers"
             : income && rule.category !== "Salary"
               ? "Refund"
               : rule.category,

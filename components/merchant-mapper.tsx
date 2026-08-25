@@ -13,10 +13,14 @@ import {
 } from "@/app/actions/merchant-overrides";
 import { MerchantAvatar } from "@/components/merchant-avatar";
 import { formatMoney } from "@/lib/insights";
+import { merchantBatches } from "@/lib/merchant-batches";
 import { useCategoryLabel } from "@/lib/use-category-label";
 
 /** How many rows show before the list asks to be unfolded. */
 const PREVIEW = 12;
+
+/** How long a just-filled row keeps its green after the run has finished. */
+const DONE_HIGHLIGHT_MS = 2_000;
 
 type Field = { category: string; domain: string };
 
@@ -81,7 +85,18 @@ export function MerchantMapper({
   const categoryLabel = useCategoryLabel();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [asking, startAsking] = useTransition();
+  /* Plain state, not a transition. A transition commits its updates when it
+     settles, so every step of the loop below would land at once, at the end —
+     the same trap `useAssistantChat` documents and the reason its status line
+     is plain state too. A progress bar that only draws when the work is over
+     is not a progress bar. */
+  const [asking, setAsking] = useState(false);
+  /** Batches finished, and how many there are. */
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  /** The merchants a request is in flight about, right now. */
+  const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set());
+  /** The merchants this run has filled in, kept until shortly after it ends. */
+  const [justFiled, setJustFiled] = useState<ReadonlySet<string>>(new Set());
   const [expanded, setExpanded] = useState(false);
   const [fields, setFields] = useState<Record<string, Field>>(() =>
     Object.fromEntries(
@@ -132,41 +147,91 @@ export function MerchantMapper({
    * rows nobody has answered, and quietly overruling an answer is not what the
    * button says it does.
    */
-  function autoFile() {
-    startAsking(async () => {
-      const result = await suggestCategoriesForUnfiled();
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
+  async function autoFile() {
+    // The same slicing the server does, so the rows lit up while a request is
+    // out are the rows that request is about. What comes back names them
+    // again, which is what settles it if the two lists have drifted.
+    const open = mapping.merchants
+      .filter(
+        (row) =>
+          (fieldsRef.current[row.merchant]?.category ?? row.category) ===
+          mapping.unfiled,
+      )
+      .map((row) => row.merchant);
+    const batches = merchantBatches(open);
+
+    setAsking(true);
+    setJustFiled(new Set());
+    setProgress({ done: 0, total: open.length });
+
+    let filed = 0;
+
+    try {
+      /*
+       * One batch at a time, and a pool of three was tried and taken out
+       * again: Next runs a client's server actions one after another, so the
+       * three requests queued behind each other exactly as a loop would and
+       * bought nothing but a second way to read the code.
+       */
+      for (const [index, batch] of batches.entries()) {
+        setInFlight(new Set(batch));
+        const result = await suggestCategoriesForUnfiled({ batch: index });
+
+        if (!result.ok) {
+          // A refusal is about the whole run — no key, no session — so there
+          // is nothing to gain by asking again for the next batch.
+          toast.error(result.error);
+          return;
+        }
+
+        /* Read through the ref, not the closure: each round trip lands in a
+           later render than the one this function was created in. Counted
+           here rather than inside a functional updater, because an updater
+           does not run until the re-render — the toast would read a zero. */
+        const base = fieldsRef.current;
+        const next = { ...base };
+        const landed: string[] = [];
+
+        for (const [merchant, category] of Object.entries(result.suggestions)) {
+          const current = base[merchant]?.category ?? byName.get(merchant)?.category;
+          // Only the rows nobody has answered. A merchant already filed —
+          // saved, or chosen in this form a moment ago — keeps what it has.
+          if (current !== mapping.unfiled) continue;
+          next[merchant] = {
+            category,
+            // Whatever domain the row carries; this button is about categories.
+            domain: base[merchant]?.domain ?? byName.get(merchant)?.domain ?? "",
+          };
+          landed.push(merchant);
+        }
+
+        if (landed.length > 0) {
+          // The ref moves with the state, so the next batch reads what this
+          // one wrote rather than the render it started from.
+          fieldsRef.current = next;
+          setFields(next);
+          setJustFiled((previous) => new Set([...previous, ...landed]));
+          filed += landed.length;
+        }
+
+        // Merchants, not batches: "10 of 24" is a sentence about the list the
+        // reader is looking at, where "batch 1 of 3" is one about the wire.
+        setProgress((previous) => ({
+          done: Math.min(previous.total, previous.done + result.asked.length),
+          total: previous.total,
+        }));
       }
 
-      /* Read through the ref, not the closure: this runs after a network round
-         trip, and the `fields` this function captured is the one from the
-         render it was created in. Counted here rather than inside a functional
-         updater, because an updater does not run until the re-render — the
-         toast would be reading a zero either way. */
-      const base = fieldsRef.current;
-      const next = { ...base };
-      let filed = 0;
-
-      for (const [merchant, category] of Object.entries(result.suggestions)) {
-        const current = base[merchant]?.category ?? byName.get(merchant)?.category;
-        // Only the rows nobody has answered. A merchant already filed — saved,
-        // or chosen in this form a moment ago — keeps what it was given.
-        if (current !== mapping.unfiled) continue;
-        next[merchant] = {
-          category,
-          // Whatever domain the row carries; this button is about categories.
-          domain: base[merchant]?.domain ?? byName.get(merchant)?.domain ?? "",
-        };
-        filed++;
-      }
-
-      if (filed > 0) setFields(next);
       toast[filed > 0 ? "success" : "info"](
         filed > 0 ? t("autoFiled", { count: filed }) : t("autoFiledNone"),
       );
-    });
+    } finally {
+      setAsking(false);
+      setInFlight(new Set());
+      // The green stays a moment after the bar has gone, so the last rows to
+      // be filled are still saying so when the reader looks up.
+      window.setTimeout(() => setJustFiled(new Set()), DONE_HIGHLIGHT_MS);
+    }
   }
 
   function save() {
@@ -240,10 +305,21 @@ export function MerchantMapper({
               domain: row.domain,
             };
 
+            const waiting = inFlight.has(row.merchant);
+            const landed = justFiled.has(row.merchant);
+
             return (
               <li
                 key={row.merchant}
-                className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3 sm:px-5"
+                /* The ledger's own row washes, for the same reason it uses
+                   them: a tint says which rows something is happening to
+                   without moving anything. Accent while a request is out about
+                   this row, then the positive green once it came back with a
+                   category. */
+                className={`flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3 transition-colors duration-300 sm:px-5 ${
+                  waiting ? "bg-accent-soft" : landed ? "bg-positive-soft" : ""
+                }`}
+                aria-busy={waiting || undefined}
               >
                 <div className="flex min-w-0 flex-1 basis-[13rem] items-center gap-2.5">
                   {/* Keyed on the saved domain, and versioned by it: the mark is
@@ -324,6 +400,32 @@ export function MerchantMapper({
             );
           })}
         </ul>
+
+        {asking && progress.total > 0 && (
+          <div className="border-t border-surface px-4 py-3 sm:px-5">
+            {/* The track is `--surface`, not `--surface-muted`: on this grey
+                panel a muted track is filled with its own ground and
+                disappears. The same pair the scan's bar uses. */}
+            <div
+              className="h-2 w-full overflow-hidden rounded-full bg-surface"
+              role="progressbar"
+              aria-valuenow={progress.done}
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-label={t("autoProgressLabel")}
+            >
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
+                style={{
+                  width: `${Math.round((progress.done / progress.total) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="mt-2 font-mono text-[12px] tabular-nums text-text-muted">
+              {t("autoProgress", { done: progress.done, total: progress.total })}
+            </p>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-surface px-4 py-3 sm:px-5">
           {mapping.merchants.length > PREVIEW && (

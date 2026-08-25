@@ -804,6 +804,18 @@ Unchanged from the template this app grew out of, and still exactly true.
     reference.
   - **A merchant that already carries a decision is left alone**, saved or
     merely chosen in the form a moment ago.
+  - **The client walks the batches, and that is what the progress bar
+    reports.** `lib/merchant-batches.ts` is the slicing both sides share, so
+    the rows lit up while a request is out are the rows that request is about;
+    the reply names them again for a client whose list has drifted. Sizing
+    those batches for the *bar* (about five steps, whatever the list) was tried
+    and measured: a request costs three to ten seconds almost regardless of how
+    many names are in it, and **Next runs one client's server actions one at a
+    time**, so nine merchants took twenty-one seconds in five steps where one
+    request takes eight. A pool of three concurrent calls was tried against the
+    same wall and bought nothing. So the batch is a token size (ten, well
+    inside the reply cap), a short list is one request, and a long one gets
+    steps because it genuinely has them.
 - **The header's tab group is the app's top-level pages; the right-hand pill
   cluster is account chrome.** `HeaderNav` carries Dashboard, Budget and
   Auffälligkeiten — the last moved out of the pill cluster, where it read as a
@@ -841,7 +853,8 @@ Unchanged from the template this app grew out of, and still exactly true.
   Decisions baked into the converted rows rather than the code: `REVERTED`
   lines are dropped (they never settled), Card Refunds are typed `income` so
   the Refund rule catches them, Revolut's "Metal plan fee" (amount 0, fee 180)
-  is a CHF 180 `Revolut` fee line, the ATM line is `Cash withdrawal` → Other,
+  is a CHF 180 `Revolut` fee line, the ATM line is `Cash withdrawal` →
+  `Cash & Transfers`,
   and TWINT lines naming a private person (name and phone number) were
   sanitized to "Belastung TWINT: Privatzahlung" before committing.
 - **A `naturalKey` collision is disambiguated in the data, not the code.** Two
@@ -914,7 +927,34 @@ Unchanged from the template this app grew out of, and still exactly true.
   filing it under "Subscriptions" would have been dishonest. The const is
   consumed as a type, as a validation set in `tests/demo-data.test.ts`, and
   as the assistant's fixed-expense name-set — an additive entry breaks
-  nothing, and category strings render raw in the UI.
+  nothing, and category strings render raw in the UI when the `Categories`
+  catalog has no label for them.
+- **`Cash & Transfers` is everything that moved without being spent**, and it
+  replaced the old `Transfer` category rather than sitting beside it. Cash out
+  of a machine, a TWINT Privatzahlung, a Revolut `*Sent to R.M.`, and the
+  credit-card settlements that shuttle between the account holder's own
+  accounts all land in it; `TWINT_P2P` and `Cash_Withdrawal` moved off `Other`
+  to get there, because no *spending* category is honest for them and that is
+  an argument for a name, not for a bucket shared with every merchant the rules
+  could not place. Four things:
+  - **No totals moved with it.** `lib/insights.ts` excludes an own-account
+    movement by its `kind`, never by its category.
+  - **`CASH_WITHDRAWAL_SPIKE` needs `kind !== "transfer"`, and that is
+    load-bearing.** The rule matches the category by *substring*, so the merge
+    made a CHF 6'000 credit-card settlement read as a cash withdrawal against a
+    median TWINT of twenty francs — a spike, on one of the four rules
+    `canEscalateToAlert` co-signs, which is a red "this may not have been you"
+    about somebody paying their own credit card. `tests/anomaly-engine.test.ts`
+    pins it, and `tests/anomaly-seed-data.test.ts` would have caught it anyway:
+    the shipped year has to stay alert-free.
+  - The keyword rule sits **first** in `KEYWORDS`, because these lines say how
+    the money left rather than what it bought, and it covers the free-text
+    spellings an uploaded statement uses: `*Sent to R.M.`, `Bargeldbezug`,
+    `Geldautomat`, an ATM, and the bare `Privatzahlung` a TWINT line arrives as
+    once `cleanLabel` has stripped the word TWINT as ceremony.
+  - **Never key it on the word TWINT.** That word is on every Coop lunch paid
+    by phone; `tests/seed-rules.test.ts` pins one of those staying under
+    `Food & Drink`.
 - **EUR lines are not converted.** All 13 carry `exchange_rate = 1.0` and
   `base_amount == amount`, so the source asserts 1 EUR = 1 CHF. Store what the
   file says; keep `currency` and `originalAmountMinor` so a real rate can be

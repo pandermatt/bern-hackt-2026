@@ -26,7 +26,20 @@ export const CATEGORIES = [
   "Other",
   "Salary",
   "Refund",
-  "Transfer",
+  /*
+   * Everything that moved without being spent on anything: cash out of a
+   * machine, a TWINT Privatzahlung, a Revolut "Sent to R.M.", and the
+   * credit-card payments that shuttle between the account holder's own
+   * accounts.
+   *
+   * It absorbed the old `Transfer` category rather than sitting beside it. The
+   * two were the same claim — "this is not a purchase" — split across a name
+   * about *where* the money went and a name about *how* it left, and a reader
+   * filing a merchant had to guess which. Note the arithmetic never depended
+   * on either: `lib/insights.ts` excludes an own-account movement by its
+   * `kind`, not by its category, so nothing about the totals moved with this.
+   */
+  "Cash & Transfers",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
@@ -233,12 +246,12 @@ export const MERCHANTS: Record<string, Rule> = {
     name: "Stadt Zürich Sportamt",
     category: "Sports & Leisure",
   },
-  // Person-to-person TWINT payments. "Other" here is a deliberate
-  // classification, not a mapping gap — the counterparty is a private
-  // individual, so no spending category is honest. The seed's unmapped
-  // warning and the merchant-table test both treat an explicit entry as
-  // covered.
-  TWINT_P2P: { name: "TWINT", category: "Other" },
+  // Person-to-person TWINT payments. Not a spending category and never was —
+  // the counterparty is a private individual — but no longer `Other` either:
+  // "Cash withdrawal" is where money handed to a person belongs, beside the
+  // ATM lines it behaves exactly like. The seed's unmapped warning and the
+  // merchant-table test both treat an explicit entry as covered.
+  TWINT_P2P: { name: "TWINT", category: "Cash & Transfers" },
   Mountain_Vision: {
     name: "Mountain Vision (Laax)",
     category: "Sports & Leisure",
@@ -407,7 +420,7 @@ export const MERCHANTS: Record<string, Rule> = {
   M_Way: { name: "m-way", category: "Sports & Leisure" },
   Two_B_Wild: { name: "2 B Wild", category: "Sports & Leisure" },
   Revolut: { name: "Revolut", category: "Taxes & Fees" },
-  Cash_Withdrawal: { name: "Cash withdrawal", category: "Other" },
+  Cash_Withdrawal: { name: "Cash withdrawal", category: "Cash & Transfers" },
   Barber_Parado: { name: "The Barber Parado", category: "Other" },
   Wassermann: { name: "Wassermann & Company", category: "Other" },
   Bormuth: { name: "Bormuth", category: "Other" },
@@ -423,6 +436,18 @@ export const MERCHANTS: Record<string, Rule> = {
  * lowercased label.
  */
 const KEYWORDS: [RegExp, Category][] = [
+  /*
+   * First, because these are about *how* the money left rather than what it
+   * bought, and a person's name or an ATM code can spell anything. "Sent to
+   * R.M." is how a Revolut statement writes money handed to somebody;
+   * `cleanLabel` strips the word TWINT as ceremony, so a Privatzahlung
+   * arrives here as just that word. The importers file `kind: "transfer"`
+   * rows into the same category directly, without asking the rules.
+   */
+  [
+    /bargeldbezug|geldautomat|bancomat|\batm\b|cash withdrawal|withdrawal|privatzahlung|\bsen[dt] to\b/,
+    "Cash & Transfers",
+  ],
   [/restaurant|pizzeria|ristorante|kantine|coffee|bar\b/, "Food & Drink"],
   [/airlines|airways|hotel|hostel|airbnb|resort/, "Travel"],
   [/sbb|cff|tarifverbund|tankstelle|taxi|parking/, "Transport"],

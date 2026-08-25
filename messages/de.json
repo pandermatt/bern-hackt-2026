@@ -760,6 +760,8 @@
     "saved": "Händler gespeichert.",
     "autoFile": "Automatisch zuordnen",
     "autoFiling": "Wird gefragt …",
+    "autoProgress": "{done} von {total} Händlern gefragt",
+    "autoProgressLabel": "Fortschritt der automatischen Zuordnung",
     "autoFiled": "{count, plural, one {# Händler zugeordnet} other {# Händler zugeordnet}} — prüfen und speichern.",
     "autoFiledNone": "Nichts Neues zuzuordnen.",
     "showAll": "Alle {count} anzeigen",
@@ -771,7 +773,8 @@
     "unknownCategory": "„{category}“ ist keine Kategorie.",
     "notADomain": "„{domain}“ ist keine Domain. Versuchen Sie es mit uzh.ch.",
     "saveFailed": "Zuordnung konnte nicht gespeichert werden. Versuchen Sie es erneut.",
-    "noSuggestions": "Es liess sich keiner automatisch zuordnen. Versuchen Sie es erneut oder wählen Sie die Kategorien selbst."
+    "noSuggestions": "Es liess sich keiner automatisch zuordnen. Versuchen Sie es erneut oder wählen Sie die Kategorien selbst.",
+    "notConfigured": "Die automatische Zuordnung ist auf diesem Server nicht aktiviert. Wählen Sie die Kategorien selbst."
   },
   "Profile": {
     "yourName": "Ihr Name",
@@ -1047,7 +1050,7 @@
     "Other": "Übriges",
     "Salary": "Lohn",
     "Refund": "Rückerstattung",
-    "Transfer": "Übertrag"
+    "Cash & Transfers": "Bargeld & Überträge"
   },
   "Metadata": {
     "siteTitle": "Persönliche Finanz-Insights",

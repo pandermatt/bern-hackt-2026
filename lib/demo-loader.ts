@@ -62,7 +62,7 @@ export async function loadDemoCsvForUser(userId: number): Promise<{ count: numbe
         merchant: row.type === "transfer" ? "Credit card payment" : rule.name,
         category:
           row.type === "transfer"
-            ? "Transfer"
+            ? "Cash & Transfers"
             : income && rule.category !== "Salary"
               ? "Refund"
               : rule.category,

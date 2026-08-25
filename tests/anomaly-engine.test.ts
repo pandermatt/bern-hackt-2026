@@ -274,6 +274,43 @@ describe("consolidateInsights", () => {
   });
 });
 
+describe("cash withdrawals", () => {
+  it("never counts a movement between the owner's own accounts", () => {
+    // `Cash & Transfers` absorbed the old `Transfer` category, and the rule
+    // matches that category by substring — so without the `kind` guard a
+    // credit-card settlement reads as a cash withdrawal against a median TWINT
+    // of a few francs. This is one of the four rules `canEscalateToAlert` will
+    // co-sign, which makes the false positive a red "this may not have been
+    // you" about somebody paying their own credit card.
+    const cash = (id: number, day: number, amountMinor: number): TransactionInput => ({
+      id,
+      bookedOn: `2026-03-${String(day).padStart(2, "0")}`,
+      kind: "expense",
+      amountMinor,
+      currency: "CHF",
+      account: "Privatkonto",
+      merchant: "TWINT",
+      category: "Cash & Transfers",
+      description: "Privatzahlung",
+    });
+
+    const txs: TransactionInput[] = [
+      ...[1, 2, 3, 4, 5, 6].map((n) => cash(100 + n, n, -4000)),
+      {
+        ...cash(200, 8, -600_000),
+        kind: "transfer",
+        merchant: "Credit card payment",
+        description: "Kreditkarten-Abrechnung",
+      },
+    ];
+
+    const spikes = analyzeTransactionAnomalies(txs).filter(
+      (finding) => finding.rule_id === "CASH_WITHDRAWAL_SPIKE",
+    );
+    expect(spikes).toEqual([]);
+  });
+});
+
 describe("the alert gate", () => {
   /*
    * `alert` is the only classification the deterministic layer does not assign
@@ -318,7 +355,7 @@ describe("the alert gate", () => {
         currency: "CHF",
         account: "Privatkonto",
         merchant: known[i % known.length],
-        category: "Transfer",
+        category: "Cash & Transfers",
         description: "transfer",
       });
     }
@@ -332,7 +369,7 @@ describe("the alert gate", () => {
       currency: "CHF",
       account: "Privatkonto",
       merchant: "Stefan Meier",
-      category: "Transfer",
+      category: "Cash & Transfers",
       description: "transfer",
     });
 

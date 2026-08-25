@@ -760,6 +760,8 @@
     "saved": "Merchants saved.",
     "autoFile": "Auto-categorise",
     "autoFiling": "Asking…",
+    "autoProgress": "Asking about {done} of {total} merchants",
+    "autoProgressLabel": "Auto-categorising progress",
     "autoFiled": "{count, plural, one {Filed # merchant} other {Filed # merchants}} — check them and save.",
     "autoFiledNone": "Nothing new to file.",
     "showAll": "Show all {count}",
@@ -771,7 +773,8 @@
     "unknownCategory": "“{category}” is not a category.",
     "notADomain": "“{domain}” is not a domain. Try something like uzh.ch.",
     "saveFailed": "Could not save that mapping. Try again.",
-    "noSuggestions": "Could not file any of them automatically. Try again, or pick the categories yourself."
+    "noSuggestions": "Could not file any of them automatically. Try again, or pick the categories yourself.",
+    "notConfigured": "Automatic filing is not switched on for this server. Pick the categories yourself."
   },
   "Profile": {
     "yourName": "Your name",
@@ -1047,7 +1050,7 @@
     "Other": "Other",
     "Salary": "Salary",
     "Refund": "Refund",
-    "Transfer": "Transfer"
+    "Cash & Transfers": "Cash & Transfers"
   },
   "Metadata": {
     "siteTitle": "Personal Finance Insights",

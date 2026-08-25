@@ -8,7 +8,9 @@ import { z } from "zod";
 import { db } from "@/db";
 import { merchantOverrides, transactions } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { merchantBatches } from "@/lib/merchant-batches";
 import { merchantDomain } from "@/lib/merchant-brands";
+import { geminiApiKey } from "@/lib/llm/gemini";
 import { suggestMerchantCategories } from "@/lib/llm/suggest-merchant-categories";
 import {
   isCategory,
@@ -247,7 +249,16 @@ export async function saveMerchantOverrides(
 }
 
 export type SuggestCategoriesResult =
-  | { ok: true; suggestions: Record<string, string> }
+  | {
+      ok: true;
+      /** Merchant → category, for the merchants in this batch the model placed. */
+      suggestions: Record<string, string>;
+      /** The names this batch actually asked about, so the client can mark
+       *  exactly those done rather than the ones it guessed were in it. */
+      asked: string[];
+      /** How many batches the whole run has. Same arithmetic on both sides. */
+      batches: number;
+    }
   | { ok: false; error: string };
 
 /**
@@ -269,14 +280,30 @@ export type SuggestCategoriesResult =
  * chose is an answer, and asking a model to second-guess it is not what the
  * button says it does.
  *
+ * **One batch per call, chosen by index.** The client walks the batches so it
+ * can draw a progress bar over real completed work and light up the rows a
+ * request is actually about — an index only narrows this account's own list, so
+ * it costs none of the property above: the browser still cannot put a word of
+ * its own into the prompt. `lib/merchant-batches.ts` is the slicing both sides
+ * share, and the answer names what it asked about so a client whose list has
+ * moved on marks the right rows anyway.
+ *
  * The `{ ok }` envelope on a read, unlike every other read in the app: this one
  * reaches the network and can fail in ways a person needs to be told about in
  * a toast — no key configured, or nothing came back — where a signed-out
  * `getMerchantMapping` can simply answer `null`.
  */
-export async function suggestCategoriesForUnfiled(): Promise<SuggestCategoriesResult> {
+export async function suggestCategoriesForUnfiled(input?: {
+  /** Zero-based. Out of range answers an empty batch rather than an error. */
+  batch?: number;
+}): Promise<SuggestCategoriesResult> {
   const user = await getCurrentUser();
   if (!user) return mappingError("notSignedIn");
+
+  // Checked here rather than left to the model call, which answers a missing
+  // key with an empty map — indistinguishable from "the model had nothing to
+  // say", and the two need different sentences.
+  if (!geminiApiKey()) return mappingError("notConfigured");
 
   const mapping = await getMerchantMapping();
   if (!mapping) return mappingError("notSignedIn");
@@ -285,10 +312,22 @@ export async function suggestCategoriesForUnfiled(): Promise<SuggestCategoriesRe
     .filter((row) => row.category === UNFILED)
     .map((row) => row.merchant);
 
-  if (unfiled.length === 0) return { ok: true, suggestions: {} };
+  const batches = merchantBatches(unfiled);
+  const index = Math.max(0, Math.trunc(input?.batch ?? 0));
+  const asked = batches[index] ?? [];
+  if (asked.length === 0) {
+    return { ok: true, suggestions: {}, asked: [], batches: batches.length };
+  }
 
-  const suggestions = await suggestMerchantCategories(unfiled);
-  if (suggestions.size === 0) return mappingError("noSuggestions");
+  // An empty answer is not an error at this grain: one batch the model could
+  // not place should not end a run that is otherwise working. The client
+  // counts what came back and says so at the end.
+  const suggestions = await suggestMerchantCategories(asked);
 
-  return { ok: true, suggestions: Object.fromEntries(suggestions) };
+  return {
+    ok: true,
+    suggestions: Object.fromEntries(suggestions),
+    asked,
+    batches: batches.length,
+  };
 }

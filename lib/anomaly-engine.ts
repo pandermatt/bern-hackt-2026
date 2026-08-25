@@ -1691,11 +1691,23 @@ export function analyzeTransactionAnomalies(
      ------------------------------------------------------------------------- */
   const cashTxs = sorted.filter(
     (t) =>
-      t.category.toLowerCase().includes("cash") ||
-      t.category.toLowerCase().includes("atm") ||
-      t.merchant.toLowerCase().includes("atm") ||
-      t.merchant.toLowerCase().includes("bancomat") ||
-      t.merchant.toLowerCase().includes("postomat"),
+      /*
+       * Never an own-account movement, and this is load-bearing rather than
+       * tidy: the category test below is a substring match, and once
+       * `Cash & Transfers` absorbed the old `Transfer` category a credit-card
+       * settlement started reading as a cash withdrawal — thousands of francs
+       * against a median TWINT of twenty, which is a spike by any measure. This
+       * rule is one of the four `canEscalateToAlert` will co-sign, so that
+       * false positive was a red "this may not have been you" about somebody
+       * paying their own credit card. `kind` is the app's own definition of
+       * money between your own accounts; the category no longer is.
+       */
+      t.kind !== "transfer" &&
+      (t.category.toLowerCase().includes("cash") ||
+        t.category.toLowerCase().includes("atm") ||
+        t.merchant.toLowerCase().includes("atm") ||
+        t.merchant.toLowerCase().includes("bancomat") ||
+        t.merchant.toLowerCase().includes("postomat")),
   );
 
   if (cashTxs.length >= 5) {

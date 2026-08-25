@@ -143,7 +143,7 @@ describe("filters", () => {
         bookedOn: "2025-01-23",
         kind: "transfer",
         merchant: "Credit card payment",
-        category: "Transfer",
+        category: "Cash & Transfers",
         amountMinor: -135530,
       }),
     ]);
@@ -179,10 +179,11 @@ describe("filters", () => {
 
     // The dropdowns must not narrow themselves into a dead end, and the
     // year's shape is the point of the chart even when viewing one category.
+    // Alphabetical, which is what `facetsOf` sorts them into.
     expect(dashboard?.facets.categories).toEqual([
+      "Cash & Transfers",
       "Housing",
       "Salary",
-      "Transfer",
     ]);
     expect(dashboard?.monthly[0].income).toBe(746400);
     // The totals, though, follow the filter.

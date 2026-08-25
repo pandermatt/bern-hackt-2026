@@ -454,7 +454,7 @@ export function generateYearlyTransactions(
         originalAmountMinor: kkExpensesThisMonth,
         account: "Privatkonto",
         merchant: "Credit card payment",
-        category: "Transfer",
+        category: "Cash & Transfers",
         description: `Kreditkarten-Abrechnung ${w.month}/${w.year}`,
         createdAt: new Date(),
       });
