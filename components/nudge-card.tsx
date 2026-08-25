@@ -1,4 +1,4 @@
-import { ArrowRight, PiggyBank, TrendingUp } from "lucide-react";
+import { ArrowRight, PiggyBank, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { AnomalyIcon } from "@/components/anomaly-icon";
@@ -72,10 +72,15 @@ export function NudgeCard({ nudge }: { nudge: NudgeSpec }) {
   const tChat = useTranslations("Chat");
   const tMonths = useTranslations("Months");
 
-  const warning = nudge.tone === "warning";
-  const tint = warning
-    ? "bg-danger-soft text-danger"
-    : "bg-positive-soft text-positive";
+  /* Three tones, three tints. The chore's is `--brand`, the colour
+     `/anomalies` already paints an out-of-date scan in — red here would put an
+     overspend and a housekeeping job in the same voice. */
+  const tint =
+    nudge.tone === "warning"
+      ? "bg-danger-soft text-danger"
+      : nudge.tone === "chore"
+        ? "bg-brand-soft text-brand-ink"
+        : "bg-positive-soft text-positive";
 
   if (nudge.kind === "free-money") {
     return (
@@ -100,13 +105,31 @@ export function NudgeCard({ nudge }: { nudge: NudgeSpec }) {
   let icon;
   let title;
   let body;
-  let href;
+  /** A pathname, or the object form when the destination carries a query. */
+  let href: React.ComponentProps<typeof Link>["href"];
 
   if (nudge.kind === "over-budget") {
     icon = <TrendingUp className="size-4" aria-hidden />;
     title = t("overBudgetTitle", { category: nudge.category });
     body = t("overBudgetBody", { amount: formatMoney(nudge.overMinor) });
     href = "/budget";
+  } else if (nudge.kind === "stale-scan") {
+    // The same glyph the outdated banner on `/anomalies` carries.
+    icon = <TriangleAlert className="size-4" aria-hidden />;
+    title = t("staleScanTitle");
+    body = t("staleScanBody");
+    // The anchor the anomalies page links to twice, on the Data group's
+    // heading rather than mid-panel.
+    href = "/account#anomaly-scan";
+  } else if (nudge.kind === "unfiled-merchants") {
+    icon = <Sparkles className="size-4" aria-hidden />;
+    title = t("unfiledMerchantsTitle", { count: nudge.count });
+    body = t("unfiledMerchantsBody");
+    /* The panel is folded by default, so a bare `#merchants` would land on a
+       closed box and the reader would have to find the thing this card just
+       offered. `?merchants=open` is read on the server and unfolds it — URL
+       state, like every other view this app can link to. */
+    href = { pathname: "/account", query: { merchants: "open" }, hash: "merchants" };
   } else {
     icon = <AnomalyIcon name={nudge.icon} className="size-4" />;
     // Already in the reader's language — the engine stores locale-neutral

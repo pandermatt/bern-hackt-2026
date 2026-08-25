@@ -21,8 +21,18 @@ import type { BudgetRow, SavingsPot } from "@/lib/insights";
  *   by nothing.
  */
 
-/** Warnings are things that already happened; a tip is an opportunity. */
-export type NudgeTone = "warning" | "tip";
+/**
+ * Warnings are things that already happened; a chore is something the app
+ * needs from the reader before it can go on telling them the truth; a tip is
+ * an opportunity.
+ *
+ * The middle one earns its own name rather than borrowing "warning": a scan
+ * that has gone stale is not a fact about somebody's money, and dressing it in
+ * the same red as an overspend would make the red mean less. It wears
+ * `--brand` on the card, which is what `/anomalies` already paints that exact
+ * state in.
+ */
+export type NudgeTone = "warning" | "chore" | "tip";
 
 export type NudgeSpec =
   | {
@@ -53,6 +63,18 @@ export type NudgeSpec =
       kind: "free-money";
       month: string;
       amountMinor: number;
+    }
+  | {
+      id: string;
+      tone: "tip";
+      kind: "unfiled-merchants";
+      /** How many merchants have no category on them. */
+      count: number;
+    }
+  | {
+      id: string;
+      tone: "chore";
+      kind: "stale-scan";
     };
 
 /**
@@ -154,6 +176,17 @@ export function isOverBudget(row: BudgetRow): boolean {
  */
 export const FREE_MONEY_MIN_MINOR = 10_000;
 
+/**
+ * How many unfiled merchants it takes before the dragon mentions them.
+ *
+ * More than ten, because under that it is quicker to pick the categories than
+ * to read a nudge about picking them — and this competes for one of only three
+ * slots with things that are actually wrong. Past a dozen it is a chore nobody
+ * starts unaided, which is exactly when the auto-file button on `/account` is
+ * worth pointing at.
+ */
+export const UNFILED_MERCHANTS_FLOOR = 10;
+
 export type NudgeInput = {
   budget: BudgetRow[];
   anomalies: {
@@ -169,6 +202,17 @@ export type NudgeInput = {
     /** Pooled across every ended month, less what the pots already hold. */
     freeMinor: number;
   };
+  /**
+   * Merchants the importer could not place and nobody has filed since — the
+   * count `/account`'s merchant panel shows on its folded summary.
+   */
+  unfiledMerchants: number;
+  /**
+   * The last scan ran over statements that have since changed — a content
+   * comparison, never a timestamp one; see `fingerprintOf`. False while a scan
+   * is in flight, since that is about to stop being true.
+   */
+  staleScan: boolean;
 };
 
 /**
@@ -220,7 +264,34 @@ export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
         ]
       : [];
 
-  return [...over, ...flagged, ...tips].slice(0, limit);
+  /*
+   * After the money, before nothing. A pile of unfiled merchants is not wrong
+   * the way an overspend is — it is a chore, and one the account holder cannot
+   * see the cost of: an unfiled merchant sits in `Other`, where it silently
+   * skews the donut and every budget it should have counted against. The floor
+   * is what keeps it off the page until it is worth a slot.
+   */
+  if (input.unfiledMerchants > UNFILED_MERCHANTS_FLOOR) {
+    tips.push({
+      id: "unfiled-merchants",
+      tone: "tip",
+      kind: "unfiled-merchants",
+      count: input.unfiledMerchants,
+    });
+  }
+
+  /*
+   * Above the tips and below the warnings, and it is the reason the two lists
+   * above it may be short: `/home` passes no anomaly nudges at all while a
+   * scan is out of date, because a stale finding describes transactions that
+   * no longer exist. Without this card the deck would simply go quiet about
+   * them and never say why.
+   */
+  const chores: NudgeSpec[] = input.staleScan
+    ? [{ id: "stale-scan", tone: "chore", kind: "stale-scan" }]
+    : [];
+
+  return [...over, ...flagged, ...chores, ...tips].slice(0, limit);
 }
 
 /**
@@ -366,7 +437,14 @@ export function dragonForAnomalies(verdict: AnomalyVerdict): DragonMood {
 
 export function dragonFor(nudges: NudgeSpec[], pots: SavingsPot[] = []): DragonMood {
   if (nudges.some((nudge) => nudge.tone === "warning")) return "thinking";
+  // The same pose `/anomalies` wears for the same state, so the mascot does
+  // not change its mind about an out-of-date scan between two pages.
+  if (nudges.some((nudge) => nudge.kind === "stale-scan")) return "zoom";
   if (nudges.some((nudge) => nudge.kind === "free-money")) return "coin";
+  // A job he can offer to do, which is what the pose is for. It outranks the
+  // finished goal below for the same reason free money does: a state with a
+  // next step beats a state without one.
+  if (nudges.some((nudge) => nudge.kind === "unfiled-merchants")) return "idea";
   // Not "just filled" — nothing here knows when it filled — but "a goal is
   // complete", which is the part worth celebrating anyway.
   if (pots.some((pot) => pot.targetMinor > 0 && pot.savedMinor >= pot.targetMinor)) {

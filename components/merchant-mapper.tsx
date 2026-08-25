@@ -1,13 +1,14 @@
 "use client";
 
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import {
   saveMerchantOverrides,
+  suggestCategoriesForUnfiled,
   type MerchantMapping,
 } from "@/app/actions/merchant-overrides";
 import { MerchantAvatar } from "@/components/merchant-avatar";
@@ -61,13 +62,26 @@ type Field = { category: string; domain: string };
  * JS-driven alternative (`0fr → 1fr`, as the nudge deck does it) would trade
  * that whole list working without JS for a 300ms slide.
  */
-export function MerchantMapper({ mapping }: { mapping: MerchantMapping }) {
+export function MerchantMapper({
+  mapping,
+  defaultOpen = false,
+}: {
+  mapping: MerchantMapping;
+  /**
+   * Arrives open rather than folded — what `/account?merchants=open` asks for,
+   * which is how `/home`'s nudge lands the reader on the list it just offered
+   * to fill in. Uncontrolled after that: React writes the attribute once, and
+   * the disclosure is the reader's from then on.
+   */
+  defaultOpen?: boolean;
+}) {
   const t = useTranslations("MerchantMapping");
   // Category names are data, stored in English; they are translated where they
   // are shown and nowhere else, so the option's *value* stays the stored key.
   const categoryLabel = useCategoryLabel();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [asking, startAsking] = useTransition();
   const [expanded, setExpanded] = useState(false);
   const [fields, setFields] = useState<Record<string, Field>>(() =>
     Object.fromEntries(
@@ -77,6 +91,17 @@ export function MerchantMapper({ mapping }: { mapping: MerchantMapping }) {
       ]),
     ),
   );
+
+  /* The fields as of the last render, for `autoFile` to read after its await.
+     A ref rather than the closure, which is a snapshot of one render. */
+  const fieldsRef = useRef(fields);
+  useEffect(() => {
+    fieldsRef.current = fields;
+  }, [fields]);
+
+  /** The saved row behind each merchant, for a name the form has no field for
+   *  yet — a merchant that arrived in the mapping after this form mounted. */
+  const byName = new Map(mapping.merchants.map((row) => [row.merchant, row]));
 
   const dirty = mapping.merchants.some((row) => {
     const field = fields[row.merchant];
@@ -91,6 +116,57 @@ export function MerchantMapper({ mapping }: { mapping: MerchantMapping }) {
       ...previous,
       [merchant]: { ...previous[merchant], ...patch },
     }));
+  }
+
+  /**
+   * Fills in the merchants nobody has filed yet, from the model's reading of
+   * their names.
+   *
+   * **Into the form, not into the database.** The selects change, the "unsaved
+   * changes" hint lights up and Save does what it always did — so the answers
+   * are reviewed by the person whose money they re-file before they reach
+   * anything. The action is deliberately argument-less; see its own note.
+   *
+   * A merchant that already carries a decision is left alone, whether that
+   * decision is saved or still sitting in this form: the suggestion is for the
+   * rows nobody has answered, and quietly overruling an answer is not what the
+   * button says it does.
+   */
+  function autoFile() {
+    startAsking(async () => {
+      const result = await suggestCategoriesForUnfiled();
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+
+      /* Read through the ref, not the closure: this runs after a network round
+         trip, and the `fields` this function captured is the one from the
+         render it was created in. Counted here rather than inside a functional
+         updater, because an updater does not run until the re-render — the
+         toast would be reading a zero either way. */
+      const base = fieldsRef.current;
+      const next = { ...base };
+      let filed = 0;
+
+      for (const [merchant, category] of Object.entries(result.suggestions)) {
+        const current = base[merchant]?.category ?? byName.get(merchant)?.category;
+        // Only the rows nobody has answered. A merchant already filed — saved,
+        // or chosen in this form a moment ago — keeps what it was given.
+        if (current !== mapping.unfiled) continue;
+        next[merchant] = {
+          category,
+          // Whatever domain the row carries; this button is about categories.
+          domain: base[merchant]?.domain ?? byName.get(merchant)?.domain ?? "",
+        };
+        filed++;
+      }
+
+      if (filed > 0) setFields(next);
+      toast[filed > 0 ? "success" : "info"](
+        filed > 0 ? t("autoFiled", { count: filed }) : t("autoFiledNone"),
+      );
+    });
   }
 
   function save() {
@@ -132,7 +208,7 @@ export function MerchantMapper({ mapping }: { mapping: MerchantMapping }) {
   ).length;
 
   return (
-    <details className="group">
+    <details className="group" open={defaultOpen || undefined}>
       {/* `list-none` plus the webkit rule removes the native triangle — the
           chevron on the right is the app's own affordance, and two markers on
           one row read as two controls. */}
@@ -270,10 +346,28 @@ export function MerchantMapper({ mapping }: { mapping: MerchantMapping }) {
               {t("unsavedChanges")}
             </span>
           )}
+          {/* Beside Save rather than at the top of the list: it is one more way
+              to fill the same fields, and it hands its answers to the same
+              button. Secondary colours, because Save is what commits them —
+              `bg-surface` on the grey panel, per the rule the "show all"
+              button above follows. */}
+          <button
+            type="button"
+            onClick={autoFile}
+            disabled={pending || asking || undecided === 0}
+            className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-default disabled:opacity-50"
+          >
+            {asking ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Sparkles className="size-3.5" aria-hidden />
+            )}
+            {asking ? t("autoFiling") : t("autoFile")}
+          </button>
           <button
             type="button"
             onClick={save}
-            disabled={pending || !dirty}
+            disabled={pending || asking || !dirty}
             className="flex h-9 cursor-pointer items-center gap-2 rounded-md bg-accent px-4 text-[13.5px] font-medium text-[var(--primary-foreground)] transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-50"
           >
             {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}

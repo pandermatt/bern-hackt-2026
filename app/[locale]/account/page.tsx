@@ -60,8 +60,15 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/account"
  * The `h1` is the dashboard's 30/36px, not the 22px it was: at 22px the page
  * was headed by something smaller than its own section headings.
  */
-export default async function AccountPage({ params }: PageProps<"/[locale]/account">) {
+export default async function AccountPage({
+  params,
+  searchParams,
+}: PageProps<"/[locale]/account">) {
   const { locale } = await params;
+  // The literal string, the way `showResolved` and `includeTransfers` are
+  // read. `/home`'s merchant nudge links here with it, because the panel is
+  // folded by default and a link that lands on a closed box has not arrived.
+  const { merchants: merchantsParam } = await searchParams;
   // `getTranslations`, not `useTranslations`: this component is async, and a
   // hook cannot be called across an await.
   const t = await getTranslations({ locale, namespace: "Account" });
@@ -148,16 +155,22 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
           </Section>
         </div>
 
-        <Section
-          id="merchants"
-          heading={t("merchants")}
-          meta={t("merchantsNote")}
-          panelClassName={SETTINGS_GROUP}
-        >
-          <MerchantMapper
-            mapping={mapping ?? { merchants: [], categories: [], unfiled: "Other" }}
-          />
-        </Section>
+        {/* The anchor sits on the group rather than on the panel, so a link
+            lands on the heading and not mid-list; `scroll-mt-20` clears the
+            h-16 header. Same shape as `#anomaly-scan` above. */}
+        <div id="merchants" className="scroll-mt-20">
+          <Section
+            id="merchants"
+            heading={t("merchants")}
+            meta={t("merchantsNote")}
+            panelClassName={SETTINGS_GROUP}
+          >
+            <MerchantMapper
+              mapping={mapping ?? { merchants: [], categories: [], unfiled: "Other" }}
+              defaultOpen={merchantsParam === "open"}
+            />
+          </Section>
+        </div>
 
         <Section
           id="danger-zone"

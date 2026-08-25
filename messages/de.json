@@ -126,6 +126,10 @@
     "showLess": "Weniger anzeigen",
     "overBudgetTitle": "Budget überschritten bei {category}",
     "overBudgetBody": "{amount} über dem von Ihnen gesetzten Limit.",
+    "staleScanTitle": "Ihre Auffälligkeiten sind veraltet",
+    "staleScanBody": "Seit dem letzten Scan haben sich die Auszüge geändert. Führen Sie ihn erneut aus.",
+    "unfiledMerchantsTitle": "{count} Händler ohne Kategorie",
+    "unfiledMerchantsBody": "Sie zählen alle als Übriges. Batzi ordnet sie auf einen Schlag zu.",
     "freeMoneyTitle": "{amount} noch nicht zugewiesen",
     "freeMoneyBody": "{month} schloss mit Überschuss ab. Legen Sie es in einen Sparziel-Topf."
   },
@@ -754,6 +758,10 @@
     "unsavedChanges": "Nicht gespeicherte Änderungen",
     "save": "Händler speichern",
     "saved": "Händler gespeichert.",
+    "autoFile": "Automatisch zuordnen",
+    "autoFiling": "Wird gefragt …",
+    "autoFiled": "{count, plural, one {# Händler zugeordnet} other {# Händler zugeordnet}} — prüfen und speichern.",
+    "autoFiledNone": "Nichts Neues zuzuordnen.",
     "showAll": "Alle {count} anzeigen",
     "showFewer": "Weniger anzeigen"
   },
@@ -762,7 +770,8 @@
     "malformed": "Diese Zuordnung sieht fehlerhaft aus.",
     "unknownCategory": "„{category}“ ist keine Kategorie.",
     "notADomain": "„{domain}“ ist keine Domain. Versuchen Sie es mit uzh.ch.",
-    "saveFailed": "Zuordnung konnte nicht gespeichert werden. Versuchen Sie es erneut."
+    "saveFailed": "Zuordnung konnte nicht gespeichert werden. Versuchen Sie es erneut.",
+    "noSuggestions": "Es liess sich keiner automatisch zuordnen. Versuchen Sie es erneut oder wählen Sie die Kategorien selbst."
   },
   "Profile": {
     "yourName": "Ihr Name",

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { BudgetRow, SavingsPot } from "@/lib/insights";
-import { dragonFor, isOverBudget, rankNudges, type NudgeInput } from "@/lib/nudges";
+import {
+  dragonFor,
+  isOverBudget,
+  rankNudges,
+  UNFILED_MERCHANTS_FLOOR,
+  type NudgeInput,
+} from "@/lib/nudges";
 
 function row(overrides: Partial<BudgetRow> = {}): BudgetRow {
   return {
@@ -34,6 +40,8 @@ function input(overrides: Partial<NudgeInput> = {}): NudgeInput {
     budget: [],
     anomalies: [],
     savings: { month: "2025-03", monthEnded: true, freeMinor: 0 },
+    unfiledMerchants: 0,
+    staleScan: false,
     ...overrides,
   };
 }
@@ -143,6 +151,60 @@ describe("rankNudges", () => {
     expect(nudges.every((n) => n.tone === "warning")).toBe(true);
   });
 
+  it("asks for a re-scan when the last one has gone stale", () => {
+    const [nudge] = rankNudges(input({ staleScan: true }));
+    expect(nudge).toMatchObject({ kind: "stale-scan", tone: "chore" });
+  });
+
+  it("puts the stale scan under the warnings and over the tips", () => {
+    const nudges = rankNudges(
+      input({
+        budget: [row({ category: "Housing", limitMinor: 100000, usedMinor: 160000 })],
+        staleScan: true,
+        savings: { month: "2025-03", monthEnded: true, freeMinor: 143631 },
+      }),
+    );
+    expect(nudges.map((n) => n.tone)).toEqual(["warning", "chore", "tip"]);
+  });
+
+  it("says nothing about a handful of unfiled merchants", () => {
+    // Ten is quicker to file by hand than to read a card about, and the deck
+    // has three slots.
+    expect(rankNudges(input({ unfiledMerchants: UNFILED_MERCHANTS_FLOOR }))).toEqual(
+      [],
+    );
+  });
+
+  it("offers to file them once there are more than ten", () => {
+    const [nudge] = rankNudges(input({ unfiledMerchants: 14 }));
+    expect(nudge).toMatchObject({
+      kind: "unfiled-merchants",
+      tone: "tip",
+      count: 14,
+    });
+  });
+
+  it("puts the money before the filing", () => {
+    const nudges = rankNudges(
+      input({
+        savings: { month: "2025-03", monthEnded: true, freeMinor: 143631 },
+        unfiledMerchants: 14,
+      }),
+    );
+    expect(nudges.map((n) => n.kind)).toEqual(["free-money", "unfiled-merchants"]);
+  });
+
+  it("keeps both tips behind anything that is actually wrong", () => {
+    const nudges = rankNudges(
+      input({
+        budget: [row({ category: "Housing", limitMinor: 100000, usedMinor: 160000 })],
+        savings: { month: "2025-03", monthEnded: true, freeMinor: 143631 },
+        unfiledMerchants: 14,
+      }),
+    );
+    expect(nudges[0].tone).toBe("warning");
+  });
+
   it("carries the anomaly's already-translated words through untouched", () => {
     const [nudge] = rankNudges(input({ anomalies: [finding("REPEAT_CHARGE")] }));
     expect(nudge).toMatchObject({
@@ -180,6 +242,14 @@ describe("dragonFor", () => {
       input({ budget: [row({ limitMinor: 100000, usedMinor: 160000 })] }),
     );
     expect(dragonFor(nudges, [pot({ savedMinor: 500000 })])).toBe("thinking");
+  });
+
+  it("goes looking when the scan is behind", () => {
+    expect(dragonFor(rankNudges(input({ staleScan: true })))).toBe("zoom");
+  });
+
+  it("has an idea when there are merchants to file", () => {
+    expect(dragonFor(rankNudges(input({ unfiledMerchants: 14 })))).toBe("idea");
   });
 
   it("is simply happy when there is nothing to report", () => {

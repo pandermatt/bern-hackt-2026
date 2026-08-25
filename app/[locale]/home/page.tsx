@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { getAnomalyOverview } from "@/app/actions/anomalies";
 import { getBudgetOverview } from "@/app/actions/budget";
+import { getMerchantMapping } from "@/app/actions/merchant-overrides";
 import { getSavingsOverview } from "@/app/actions/savings";
 import { HomeChat } from "@/components/home-chat";
 import { NudgeCard } from "@/components/nudge-card";
@@ -48,7 +49,7 @@ export default async function HomePage({
   // synchronous in-process driver that is well under a millisecond, and
   // `/budget` already does two — but this is the place to look first if the
   // page ever feels slow.
-  const [savings, budget, anomalies] = await Promise.all([
+  const [savings, budget, anomalies, merchants] = await Promise.all([
     getSavingsOverview(),
     getBudgetOverview(),
     // `true` — hide the rules with nothing left open. A finding that has been
@@ -56,6 +57,12 @@ export default async function HomePage({
     // reads its mood off these nudges, so a fully worked-through scan would
     // otherwise keep the dragon worried about work that is already done.
     getAnomalyOverview(true),
+    // A fourth read, and the cheapest of them: one grouped scan of the rows
+    // filed under `Other` plus this account's overrides. Reusing the mapper's
+    // own read rather than counting separately is what keeps "unfiled" one
+    // definition — the panel's summary and the dragon's nudge are the same
+    // number by construction.
+    getMerchantMapping(),
   ]);
   if (!savings || !budget || !anomalies)
     return redirect({ href: "/login", locale });
@@ -71,6 +78,16 @@ export default async function HomePage({
       monthEnded: savings.monthEnded,
       freeMinor: savings.freeMinor,
     },
+    // Merchants with no decision on them. A signed-out read answers `null`,
+    // which the redirect above has already ruled out.
+    unfiledMerchants: (merchants?.merchants ?? []).filter(
+      (row) => row.category === merchants?.unfiled,
+    ).length,
+    // Which is also why `anomalies` above is empty in this state: the deck
+    // says the scan is behind instead of quoting findings that describe
+    // statements which have since changed. Not while one is running — that is
+    // about to stop being true.
+    staleScan: anomalies.outdated && !anomalies.running,
   });
   const dragon = dragonFor(nudges, savings.pots);
 

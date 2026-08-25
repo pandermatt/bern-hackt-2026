@@ -9,6 +9,7 @@ import { db } from "@/db";
 import { merchantOverrides, transactions } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { merchantDomain } from "@/lib/merchant-brands";
+import { suggestMerchantCategories } from "@/lib/llm/suggest-merchant-categories";
 import {
   isCategory,
   merchantOverridesFor,
@@ -123,11 +124,14 @@ export type SaveMerchantOverridesResult =
  * Errors are phrased here, not in the component — the client raises whatever
  * string it gets straight into a toast, so it has to arrive translated. The
  * same shape `app/actions/budget.ts` uses.
+ *
+ * Typed as the failure arm alone rather than as one of the result unions, so
+ * both the save and the suggestion can return it.
  */
 async function mappingError(
   key: string,
   values?: Record<string, string>,
-): Promise<SaveMerchantOverridesResult> {
+): Promise<{ ok: false; error: string }> {
   const t = await getTranslations("MerchantMappingErrors");
   return { ok: false, error: t(key, values) };
 }
@@ -240,4 +244,51 @@ export async function saveMerchantOverrides(
   revalidatePath("/[locale]/budget", "page");
   revalidatePath("/[locale]/account", "page");
   return { ok: true };
+}
+
+export type SuggestCategoriesResult =
+  | { ok: true; suggestions: Record<string, string> }
+  | { ok: false; error: string };
+
+/**
+ * Asks the model to file the merchants this account has not filed yet.
+ *
+ * **It takes no arguments, and that is the point.** Every export of a
+ * `"use server"` module is an endpoint the browser can call with arguments of
+ * its choosing, and this one spends the deployment's model budget — a version
+ * that accepted a list of names would be a free text box wired to the API key.
+ * The names come from `getMerchantMapping` instead, so the prompt can only ever
+ * contain merchants that are already on this account's own statements.
+ *
+ * **Nothing is written.** The answers go back to the form, where the selects
+ * show them and the person presses Save. Re-filing how somebody's money is
+ * categorised moves the donut, the budget and the ledger; it is not a change to
+ * make while they are looking the other way.
+ *
+ * Only merchants with no decision on them are asked about. A category somebody
+ * chose is an answer, and asking a model to second-guess it is not what the
+ * button says it does.
+ *
+ * The `{ ok }` envelope on a read, unlike every other read in the app: this one
+ * reaches the network and can fail in ways a person needs to be told about in
+ * a toast — no key configured, or nothing came back — where a signed-out
+ * `getMerchantMapping` can simply answer `null`.
+ */
+export async function suggestCategoriesForUnfiled(): Promise<SuggestCategoriesResult> {
+  const user = await getCurrentUser();
+  if (!user) return mappingError("notSignedIn");
+
+  const mapping = await getMerchantMapping();
+  if (!mapping) return mappingError("notSignedIn");
+
+  const unfiled = mapping.merchants
+    .filter((row) => row.category === UNFILED)
+    .map((row) => row.merchant);
+
+  if (unfiled.length === 0) return { ok: true, suggestions: {} };
+
+  const suggestions = await suggestMerchantCategories(unfiled);
+  if (suggestions.size === 0) return mappingError("noSuggestions");
+
+  return { ok: true, suggestions: Object.fromEntries(suggestions) };
 }

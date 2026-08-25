@@ -449,9 +449,9 @@ Unchanged from the template this app grew out of, and still exactly true.
   `<caption>` on a bare `sr-only` table — both bugs at once — and were
   converted to the wrapper-div-plus-`aria-label` shape; every hidden table
   now follows both rules.
-- **Every model call goes through `lib/llm/gemini.ts`.** The three callers —
+- **Every model call goes through `lib/llm/gemini.ts`.** The four callers —
   the chat loop in `app/actions/chat.ts`, the anomaly narratives, the goal-icon
-  pick — keep writing prompts as `{ role, content }`; that module turns them
+  pick, the merchant auto-filing — keep writing prompts as `{ role, content }`; that module turns them
   into Gemini's `contents` / `systemInstruction` / `generationConfig` and turns
   the answer back into one string. Two things it owns are easy to get wrong by
   hand: **thinking tokens are billed against `maxOutputTokens`**, so the budget
@@ -640,7 +640,18 @@ Unchanged from the template this app grew out of, and still exactly true.
   SQL because that null rule is not SQL's, and because it is worth testing.
 - **Nudges are ranked in `lib/nudges.ts`, which is pure.** No DB import, no
   i18n call — anomaly nudges arrive already translated from
-  `app/actions/anomalies.ts` and this module only orders them. `isOverBudget`
+  `app/actions/anomalies.ts` and this module only orders them. **Three tones,
+  not two**: a `warning` is a fact about the money, a `chore` is something the
+  app needs before it can keep telling the truth, a `tip` is an opportunity,
+  and they rank in that order. The chore today is `stale-scan` — and it is the
+  reason the deck can be short, since `/home` passes *no* anomaly nudges while
+  a scan is out of date; without the card the page would go quiet about
+  findings and never say why. It wears `--brand` rather than `--danger`,
+  because that is the colour `/anomalies` already paints the same state, and
+  red for a housekeeping job makes red mean less. The other new kind is
+  `unfiled-merchants`, above nothing and below the money, gated on
+  `UNFILED_MERCHANTS_FLOOR` (more than ten): under that it is quicker to file
+  them than to read a card about filing them, and the deck has three slots. `isOverBudget`
   lives there too: the comparison used to be inline in both `budget-editor` and
   `budget-radar` and exported from neither. Capped at three, warnings before
   the tip, because an entry page is not an inbox — and that cap is now also
@@ -769,6 +780,30 @@ Unchanged from the template this app grew out of, and still exactly true.
   the form's live fields rather than from the saved mapping, so filing a
   merchant moves it immediately and the "unsaved changes" hint beside Save is
   what says it has not landed yet.
+- **"Auto-categorise" proposes into the form; it never writes.**
+  `lib/llm/suggest-merchant-categories.ts` asks for a category per unfiled
+  merchant and `suggestCategoriesForUnfiled` hands the answers back to the
+  selects, where the person reviews them and presses the same Save as always.
+  Re-filing somebody's merchants moves the donut, the budget and the ledger,
+  which is not a change to make while they are looking the other way — the same
+  "the model proposes, deterministic code co-signs" split as
+  `canEscalateToAlert`. Four things hold it together:
+  - **The action takes no arguments.** Every export of a `"use server"` module
+    is an endpoint the browser can call with what it likes, and this one spends
+    the deployment's model budget; a version accepting a list of names would be
+    a free text box wired to the API key. The names come from
+    `getMerchantMapping` instead, so the prompt can only contain merchants that
+    are already on this account's statements.
+  - **`CATEGORIES` is the allowlist**, minus `Opening balance`, exactly as the
+    mapper's own select offers it — so an accepted answer is by construction
+    one the form has an option for and the ledger can colour. Anything else is
+    dropped rather than repaired, and `Other` is dropped too: it is the state
+    every one of those rows is already in.
+  - **Only merchant names go over the wire** — never amounts, line counts or
+    `Transaction.description`, which on a real statement is a payment
+    reference.
+  - **A merchant that already carries a decision is left alone**, saved or
+    merely chosen in the form a moment ago.
 - **The header's tab group is the app's top-level pages; the right-hand pill
   cluster is account chrome.** `HeaderNav` carries Dashboard, Budget and
   Auffälligkeiten — the last moved out of the pill cluster, where it read as a

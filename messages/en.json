@@ -126,6 +126,10 @@
     "showLess": "Show less",
     "overBudgetTitle": "Over budget in {category}",
     "overBudgetBody": "{amount} past the limit you set.",
+    "staleScanTitle": "Your findings are out of date",
+    "staleScanBody": "The statements have changed since the last scan. Run it again.",
+    "unfiledMerchantsTitle": "{count} merchants without a category",
+    "unfiledMerchantsBody": "They all count as Other. Let Batzi sort them in one go.",
     "freeMoneyTitle": "{amount} still unassigned",
     "freeMoneyBody": "{month} came out ahead. Put it in a savings pot."
   },
@@ -754,6 +758,10 @@
     "unsavedChanges": "Unsaved changes",
     "save": "Save merchants",
     "saved": "Merchants saved.",
+    "autoFile": "Auto-categorise",
+    "autoFiling": "Asking…",
+    "autoFiled": "{count, plural, one {Filed # merchant} other {Filed # merchants}} — check them and save.",
+    "autoFiledNone": "Nothing new to file.",
     "showAll": "Show all {count}",
     "showFewer": "Show fewer"
   },
@@ -762,7 +770,8 @@
     "malformed": "That mapping looks malformed.",
     "unknownCategory": "“{category}” is not a category.",
     "notADomain": "“{domain}” is not a domain. Try something like uzh.ch.",
-    "saveFailed": "Could not save that mapping. Try again."
+    "saveFailed": "Could not save that mapping. Try again.",
+    "noSuggestions": "Could not file any of them automatically. Try again, or pick the categories yourself."
   },
   "Profile": {
     "yourName": "Your name",
