@@ -441,6 +441,18 @@ Unchanged from the template this app grew out of, and still exactly true.
   `lib/assistant.ts`'s parsers were written for when the endpoint was an 8B
   model that could not call tools at all. Those tolerant parsers stay as the
   net for a model that narrates its call instead of making one.
+- **No model call is made against one model.** `callGemini` walks
+  `modelChain()` — Gemini answers `503 UNAVAILABLE` under load often enough
+  that a single model is a single point of failure for the whole assistant, and
+  it retires model ids from under a running deployment (`gemini-2.5-flash` now
+  404s with "no longer available to new users"). So 404, 429 and 5xx move to
+  the next model; 400, 401 and 403 do not, because they would fail identically
+  all the way down. Every chain has an **overall deadline** beside the
+  per-attempt timeout — four fallbacks at six seconds each is forty seconds of
+  a form doing nothing — and the body is rebuilt per model, since the thinking
+  control is spelled from the model id. The chat debug panel's dropdown picks
+  which model leads, stored in an `httpOnly` cookie and validated against
+  `geminiModelChoices()` on the way back in.
 - **The assistant draws again, and never from its own numbers.**
   `display_chart` names a *source* and the app assembles the pie from the same
   aggregate that answered the tool call, so the caption and the picture cannot

@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { getLocale, getTranslations } from "next-intl/server";
 
 import { getAnomalyOverview } from "@/app/actions/anomalies";
@@ -73,16 +74,30 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { monthHasEnded } from "@/lib/clock";
 import {
+  callGemini,
   geminiApiKey,
   geminiEndpoint,
   geminiFinishReason,
-  geminiHeaders,
-  geminiModel,
+  geminiModelChoices,
   geminiText,
   geminiUsage,
+  modelChain,
   toGeminiBody,
+  type GeminiAttempt,
   type GeminiResponse,
 } from "@/lib/llm/gemini";
+import { ASSISTANT_MODEL_COOKIE } from "@/lib/site";
+
+/**
+ * The model this browser asked the debug panel for, if it named one this
+ * server still recognizes. Validated against the known choices rather than
+ * trusted: the cookie is `httpOnly`, but a model id reaches a URL, and an
+ * unknown one would only ever 404 anyway.
+ */
+async function preferredModel(): Promise<string | undefined> {
+  const chosen = (await cookies()).get(ASSISTANT_MODEL_COOKIE)?.value;
+  return chosen && geminiModelChoices().includes(chosen) ? chosen : undefined;
+}
 
 /** Unset (or unparseable, or 0) means "no cap": the request then carries no
  * output cap at all and the model's own default applies. The thinking budget
@@ -96,6 +111,9 @@ function assistantMaxTokens(): number | undefined {
  * an answer so a fetch-happy model cannot loop forever. Five, not four: a
  * goals-then-proposal answer legitimately takes three tool rounds. */
 const MAX_ROUNDS = 5;
+
+/** How long one round may take in total, however many models it tries. */
+const ROUND_DEADLINE_MS = 90_000;
 
 /**
  * The history, made usable rather than policed. The client ships its whole
@@ -165,7 +183,12 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
   }
 
   const turnStarted = Date.now();
-  const model = geminiModel();
+  // The chain, not one name: a 503 on the first model is answered by trying
+  // the next rather than by ending the turn. The head of it is what the debug
+  // panel's dropdown chose, and what the log calls "the model" before any
+  // request has been made.
+  const chain = modelChain(await preferredModel());
+  const model = chain[0];
   const maxTokens = assistantMaxTokens();
 
   const history = normalizeHistory(rawHistory);
@@ -204,7 +227,7 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       id: happyPath,
       question: question.content,
       history,
-      model,
+      chain,
       maxTokens,
       key,
       record,
@@ -285,10 +308,25 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
     return { reply: t("partialReply"), proposal, chart };
   };
 
+  // Every failed try, named with the model that failed and whether another one
+  // is coming. A turn that limps home on the third model should say so.
+  const recordAttempt = (attempt: GeminiAttempt, note: string, messageCount: number) => {
+    if (!attempt.error) return;
+    record(Date.now() - attempt.ms, {
+      status: "error",
+      model: attempt.model,
+      httpStatus: attempt.status,
+      error: attempt.error,
+      note: `${note} · ${attempt.model}${attempt.retrying ? " · falling back" : ""}`,
+      messageCount,
+      request: truncateSnapshot(attempt.request),
+    });
+  };
+
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const offerTools = round < MAX_ROUNDS;
-    const body = toGeminiBody({
-      model,
+    const buildBody = (target: string) => toGeminiBody({
+      model: target,
       messages,
       // MAX_TOKENS caps the visible answer; the +80 is the budget for the
       // FOLLOWUP: lines parsed out of it. Tool rounds get a higher floor —
@@ -305,69 +343,48 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
       ...(offerTools ? { tools: TOOL_DEFINITIONS } : {}),
     });
     const startedAt = Date.now();
-    const request = truncateSnapshot(JSON.stringify(body, null, 2));
     const messageCount = messages.length;
 
-    let response: Response;
-    let raw: string;
-    try {
-      response = await fetch(geminiEndpoint(model), {
-        method: "POST",
-        headers: geminiHeaders(key),
-        body: JSON.stringify(body),
-        // Longer than the 30s the 8B endpoint got: a reasoning model thinks
-        // before it answers, and a tool round pays that twice over.
-        signal: AbortSignal.timeout(60_000),
-      });
-      raw = await response.text();
-    } catch (cause) {
-      record(startedAt, {
-        status: "error",
-        error:
-          cause instanceof Error && cause.name === "TimeoutError"
-            ? "Request timed out after 60s."
-            : "Fetch failed — endpoint unreachable.",
-        note: `round ${round}`,
-        messageCount,
-        request,
-      });
+    // Longer than the 30s the 8B endpoint got: a reasoning model thinks
+    // before it answers, and a tool round pays that twice over.
+    const call = await callGemini({
+      models: chain,
+      key,
+      body: buildBody,
+      timeoutMs: 60_000,
+      // A ceiling on the round as a whole, fallbacks included. Without it a
+      // chain of four could hold one round for four minutes, and the loop runs
+      // up to five of them.
+      extraSignal: AbortSignal.timeout(ROUND_DEADLINE_MS),
+      onAttempt: (attempt) => recordAttempt(attempt, `round ${round}`, messageCount),
+    });
+    const request = truncateSnapshot(call.request);
+
+    if (!call.ok) {
+      // Every model in the chain failed; the last one's status is the one
+      // worth reporting.
       return (
         (await salvage()) ??
         failure(
-          "Could not reach the Gemini API — check the connection and try again.",
+          call.status === undefined
+            ? "Could not reach the Gemini API — check the connection and try again."
+            : // Gemini rejects a bad or unauthorized key with either code.
+              call.status === 401 || call.status === 403
+              ? "The model endpoint rejected the API key — check GEMINI_API_KEY."
+              : `The model endpoint answered ${call.status} — try again in a moment.`,
         )
       );
     }
 
-    const snapshot = truncateSnapshot(raw);
-    if (!response.ok) {
-      record(startedAt, {
-        status: "error",
-        httpStatus: response.status,
-        error: `Upstream answered ${response.status}.`,
-        note: `round ${round}`,
-        messageCount,
-        request,
-        response: snapshot,
-      });
-      return (
-        (await salvage()) ??
-        failure(
-          // Gemini rejects a bad or unauthorized key with either code.
-          response.status === 401 || response.status === 403
-            ? "The model endpoint rejected the API key — check GEMINI_API_KEY."
-            : `The model endpoint answered ${response.status} — try again in a moment.`,
-        )
-      );
-    }
-
+    const snapshot = truncateSnapshot(call.raw);
     let data: GeminiResponse;
     try {
-      data = JSON.parse(raw);
+      data = JSON.parse(call.raw);
     } catch {
       record(startedAt, {
         status: "error",
-        httpStatus: response.status,
+        model: call.model,
+        httpStatus: call.status,
         error: "Upstream body was not JSON.",
         note: `round ${round}`,
         messageCount,
@@ -424,7 +441,8 @@ export async function askAssistant(rawHistory: unknown): Promise<AssistantTurn> 
 
     record(startedAt, {
       status: "ok",
-      httpStatus: response.status,
+      model: call.model,
+      httpStatus: call.status,
       note:
         calls.length > 0
           ? `round ${round} · fetched ${calls.join(", ")}${routed ? " (routed)" : ""}${period ? ` · ${period.label}` : ""}`
@@ -800,7 +818,7 @@ async function answerHappyPath({
   id,
   question,
   history,
-  model,
+  chain,
   maxTokens,
   key,
   record,
@@ -808,7 +826,7 @@ async function answerHappyPath({
   id: HappyPathId;
   question: string;
   history: { role: "user" | "assistant"; content: string }[];
-  model: string;
+  chain: string[];
   maxTokens: number | undefined;
   key: string | undefined;
   record: (
@@ -930,7 +948,7 @@ async function answerHappyPath({
     id,
     question,
     text,
-    model,
+    chain,
     maxTokens,
     key,
     record,
@@ -952,7 +970,7 @@ async function paraphrase({
   id,
   question,
   text,
-  model,
+  chain,
   maxTokens,
   key,
   record,
@@ -960,7 +978,7 @@ async function paraphrase({
   id: HappyPathId;
   question: string;
   text: string;
-  model: string;
+  chain: string[];
   maxTokens: number | undefined;
   key: string;
   record: (
@@ -968,71 +986,58 @@ async function paraphrase({
     patch: Partial<AssistantLogEntry> & { status: AssistantLogEntry["status"] },
   ) => void;
 }): Promise<string | undefined> {
-  const body = toGeminiBody({
-    model,
-    messages: [
-      {
-        role: "system",
-        content: paraphrasePromptFor(languageName(await getLocale())),
-      },
-      { role: "user", content: `${question}\n\n${text}` },
-    ],
-    // No tool round to budget for, and no FOLLOWUP lines to parse out — the
-    // chips fall back to the starters. A paraphrase of a fixed summary is a
-    // short completion; +40 is the slack for a longer language's wording.
-    ...(maxTokens !== undefined ? { maxTokens: maxTokens + 40 } : {}),
-  });
+  const locale = languageName(await getLocale());
+  const buildBody = (target: string) =>
+    toGeminiBody({
+      model: target,
+      messages: [
+        { role: "system", content: paraphrasePromptFor(locale) },
+        { role: "user", content: `${question}\n\n${text}` },
+      ],
+      // No tool round to budget for, and no FOLLOWUP lines to parse out — the
+      // chips fall back to the starters. A paraphrase of a fixed summary is a
+      // short completion; +40 is the slack for a longer language's wording.
+      ...(maxTokens !== undefined ? { maxTokens: maxTokens + 40 } : {}),
+    });
   const startedAt = Date.now();
-  const request = truncateSnapshot(JSON.stringify(body, null, 2));
 
-  let response: Response;
-  let raw: string;
-  try {
-    response = await fetch(geminiEndpoint(model), {
-      method: "POST",
-      headers: geminiHeaders(key),
-      body: JSON.stringify(body),
-      // Shorter than the loop's 60s on purpose: the fallback here is instant
-      // and already correct, so a slow endpoint should cost the wording
-      // rather than the answer.
-      signal: AbortSignal.timeout(30_000),
-    });
-    raw = await response.text();
-  } catch (cause) {
-    record(startedAt, {
-      status: "error",
-      error:
-        cause instanceof Error && cause.name === "TimeoutError"
-          ? "Paraphrase timed out after 30s."
-          : "Paraphrase fetch failed — endpoint unreachable.",
-      note: `happy path · ${id} · summary served`,
-      messageCount: 2,
-      request,
-    });
-    return undefined;
-  }
+  // Shorter than the loop's 60s on purpose: the fallback here is instant and
+  // already correct, so a slow endpoint should cost the wording rather than
+  // the answer. It still walks the chain — a 503 on the first model is no
+  // reason to serve the plainer sentence.
+  const call = await callGemini({
+    models: chain,
+    key,
+    body: buildBody,
+    timeoutMs: 30_000,
+    // Same ceiling logic as the loop's, tighter: the summary is already a
+    // correct answer, so the wording is not worth a long walk down the chain.
+    extraSignal: AbortSignal.timeout(45_000),
+    onAttempt: (attempt) => {
+      if (!attempt.error) return;
+      record(Date.now() - attempt.ms, {
+        status: "error",
+        model: attempt.model,
+        httpStatus: attempt.status,
+        error: attempt.error,
+        note: `happy path · ${id} · ${attempt.model}${attempt.retrying ? " · falling back" : " · summary served"}`,
+        messageCount: 2,
+        request: truncateSnapshot(attempt.request),
+      });
+    },
+  });
+  const request = truncateSnapshot(call.request);
+  if (!call.ok) return undefined;
 
-  const snapshot = truncateSnapshot(raw);
-  if (!response.ok) {
-    record(startedAt, {
-      status: "error",
-      httpStatus: response.status,
-      error: `Upstream answered ${response.status}.`,
-      note: `happy path · ${id} · summary served`,
-      messageCount: 2,
-      request,
-      response: snapshot,
-    });
-    return undefined;
-  }
-
+  const snapshot = truncateSnapshot(call.raw);
   let data: GeminiResponse;
   try {
-    data = JSON.parse(raw);
+    data = JSON.parse(call.raw);
   } catch {
     record(startedAt, {
       status: "error",
-      httpStatus: response.status,
+      model: call.model,
+      httpStatus: call.status,
       error: "Upstream body was not JSON.",
       note: `happy path · ${id} · summary served`,
       messageCount: 2,
@@ -1057,7 +1062,8 @@ async function paraphrase({
   if (tooShort || invented) {
     record(startedAt, {
       status: "error",
-      httpStatus: response.status,
+      model: call.model,
+      httpStatus: call.status,
       error: tooShort
         ? "Paraphrase was too short to be an answer."
         : "Paraphrase stated an amount the summary did not.",
@@ -1072,7 +1078,8 @@ async function paraphrase({
 
   record(startedAt, {
     status: "ok",
-    httpStatus: response.status,
+    model: call.model,
+    httpStatus: call.status,
     note: `happy path · ${id} · paraphrased`,
     messageCount: 2,
     request,
@@ -1089,11 +1096,40 @@ async function paraphrase({
 export async function getAssistantConfig(): Promise<AssistantConfigView | null> {
   const user = await getCurrentUser();
   if (!user) return null;
+  const chain = modelChain(await preferredModel());
   return {
-    url: geminiEndpoint(geminiModel()),
-    model: geminiModel(),
+    url: geminiEndpoint(chain[0]),
+    model: chain[0],
+    // The dropdown's options, in the order a turn would try them.
+    choices: chain,
     maxTokens: assistantMaxTokens(),
   };
+}
+
+/**
+ * Point this browser's turns at another model, from the debug panel.
+ *
+ * A cookie rather than an env var or a stored setting: it is a knob for
+ * whoever is demonstrating the app, on the machine they are demonstrating it
+ * from, and Gemini's capacity moves faster than a redeploy. An unknown name is
+ * ignored rather than rejected — `geminiModelChoices` is the allowlist, and
+ * clearing the cookie is how you go back to the configured default.
+ */
+export async function setAssistantModel(model: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) return;
+  const jar = await cookies();
+  if (!geminiModelChoices().includes(model)) {
+    jar.delete(ASSISTANT_MODEL_COOKIE);
+    return;
+  }
+  jar.set(ASSISTANT_MODEL_COOKIE, model, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
 }
 
 /** The current user's recent assistant calls, newest first. */

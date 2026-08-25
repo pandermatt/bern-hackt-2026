@@ -128,6 +128,69 @@ export function geminiFastModel(): string {
   return process.env.GEMINI_FAST_MODEL ?? "gemini-flash-latest";
 }
 
+/**
+ * The models the assistant may fall back to, in order, and the ones the debug
+ * panel offers. Gemini answers `503 UNAVAILABLE — this model is currently
+ * experiencing high demand` often enough that a single model is a single point
+ * of failure for the whole feature; a turn that 503s on the first name simply
+ * asks the next one.
+ *
+ * Overridable with `GEMINI_MODELS` (comma-separated) so a deployment can
+ * re-order or shorten the chain without a release. The configured
+ * `GEMINI_MODEL` always leads, whether or not it appears in the list.
+ */
+const DEFAULT_MODEL_CHAIN = [
+  "gemini-pro-latest",
+  "gemini-3.6-flash",
+  "gemini-flash-latest",
+  "gemini-3.5-flash",
+];
+
+export function geminiModelChoices(): string[] {
+  const configured = (process.env.GEMINI_MODELS ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const chain = configured.length > 0 ? configured : DEFAULT_MODEL_CHAIN;
+  // The default leads, and nothing appears twice — the fallback order is also
+  // the dropdown's order, so a duplicate would be a duplicate React key.
+  return [...new Set([geminiModel(), ...chain])];
+}
+
+/**
+ * The order this turn should try. A model the caller picked (the debug
+ * panel's dropdown) leads; everything else follows as fallback.
+ */
+export function modelChain(preferred?: string): string[] {
+  const choices = geminiModelChoices();
+  if (!preferred) return choices;
+  return [...new Set([preferred, ...choices])];
+}
+
+/**
+ * Whether another model is worth trying.
+ *
+ * Capacity (429, 5xx) and transport failures are, obviously. So is **404** —
+ * it means this model id is gone, and Google retires them from under a running
+ * deployment: `gemini-2.5-flash` and `gemini-2.5-pro` now answer
+ * "no longer available to new users" rather than a completion. A pinned
+ * `GEMINI_MODEL` that retires should cost the first request of each turn, not
+ * the assistant.
+ *
+ * A rejected key (401/403) or a malformed request (400) would fail identically
+ * on every model in the chain, so those are reported as-is.
+ */
+export function isRetryableStatus(status: number): boolean {
+  return (
+    status === 404 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
+}
+
 export function geminiEndpoint(model: string): string {
   const base = process.env.GEMINI_URL ?? DEFAULT_BASE_URL;
   return `${base.replace(/\/$/, "")}/models/${model}:generateContent`;
@@ -249,6 +312,121 @@ export function toGeminiBody({
       ? { tools: [{ functionDeclarations: toFunctionDeclarations(tools) }] }
       : {}),
   };
+}
+
+/** One try against one model, for the caller's log. */
+export type GeminiAttempt = {
+  model: string;
+  /** Absent when the request never completed (timeout, transport failure). */
+  status?: number;
+  ms: number;
+  error?: string;
+  /** True when another model in the chain is about to be tried. */
+  retrying: boolean;
+  /** The body as sent, pretty-printed. Never carries the key — that is a
+   * header — so it is safe to store in the debug log. */
+  request: string;
+};
+
+export type GeminiCall =
+  | { ok: true; model: string; status: number; raw: string; request: string }
+  | {
+      ok: false;
+      model: string;
+      status?: number;
+      raw?: string;
+      request: string;
+      timedOut: boolean;
+    };
+
+/**
+ * One request, tried down the model chain.
+ *
+ * Gemini returns `503 UNAVAILABLE` under load often enough that a single model
+ * is a single point of failure — on a live deployment that is the whole
+ * assistant answering "try again in a moment". A capacity failure, a timeout
+ * or a transport error therefore moves to the next model rather than ending
+ * the turn; a rejected key or a malformed request does not, since it would
+ * fail identically all the way down.
+ *
+ * The body is rebuilt per model on purpose: the thinking control is spelled
+ * from the model id, so a body built for Pro is rejected by a Gemini 3 model
+ * and vice versa.
+ */
+export async function callGemini({
+  models,
+  key,
+  body,
+  timeoutMs,
+  extraSignal,
+  onAttempt,
+}: {
+  models: string[];
+  key: string;
+  body: (model: string) => Record<string, unknown>;
+  timeoutMs: number;
+  /** Folded in beside the timeout — the anomaly scan's overall deadline. */
+  extraSignal?: AbortSignal;
+  onAttempt?: (attempt: GeminiAttempt) => void;
+}): Promise<GeminiCall> {
+  const chain = models.length > 0 ? models : [geminiModel()];
+  let last: GeminiCall | undefined;
+
+  for (const [index, model] of chain.entries()) {
+    const hasFallback = index < chain.length - 1;
+    const request = JSON.stringify(body(model), null, 2);
+    const startedAt = Date.now();
+
+    let response: Response;
+    let raw: string;
+    try {
+      response = await fetch(geminiEndpoint(model), {
+        method: "POST",
+        headers: geminiHeaders(key),
+        body: JSON.stringify(body(model)),
+        signal: extraSignal
+          ? AbortSignal.any([AbortSignal.timeout(timeoutMs), extraSignal])
+          : AbortSignal.timeout(timeoutMs),
+      });
+      raw = await response.text();
+    } catch (cause) {
+      const timedOut = cause instanceof Error && cause.name === "TimeoutError";
+      // An aborted overall deadline is the caller giving up, not this model
+      // being unwell — stop rather than spending the remaining chain on it.
+      const abandoned = extraSignal?.aborted ?? false;
+      const retrying = hasFallback && !abandoned;
+      onAttempt?.({
+        model,
+        ms: Date.now() - startedAt,
+        error: timedOut
+          ? `Request timed out after ${Math.round(timeoutMs / 1000)}s.`
+          : "Fetch failed — endpoint unreachable.",
+        retrying,
+        request,
+      });
+      last = { ok: false, model, request, timedOut };
+      if (!retrying) return last;
+      continue;
+    }
+
+    const retrying = hasFallback && isRetryableStatus(response.status);
+    onAttempt?.({
+      model,
+      status: response.status,
+      ms: Date.now() - startedAt,
+      error: response.ok ? undefined : `Upstream answered ${response.status}.`,
+      retrying,
+      request,
+    });
+
+    if (response.ok) {
+      return { ok: true, model, status: response.status, raw, request };
+    }
+    last = { ok: false, model, status: response.status, raw, request, timedOut: false };
+    if (!retrying) return last;
+  }
+
+  return last as GeminiCall;
 }
 
 /**

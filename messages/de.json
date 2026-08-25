@@ -880,6 +880,8 @@
     "intro": "Anfragen an den Modell-Endpunkt, neueste zuerst.",
     "endpoint": "Endpunkt",
     "modelLabel": "Modell",
+    "fallbackLabel": "Ausweichmodelle",
+    "noFallback": "keine — es gibt nur dieses Modell",
     "tokenCap": "Token-Limit",
     "noCap": "kein Limit",
     "refresh": "Protokoll aktualisieren",

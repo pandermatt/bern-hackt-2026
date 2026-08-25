@@ -10,11 +10,10 @@ import {
 } from "@/lib/anomaly-engine";
 import { defaultLocale, type AppLocale } from "@/i18n/routing";
 import {
+  callGemini,
   geminiApiKey,
-  geminiEndpoint,
-  geminiHeaders,
-  geminiModel,
   geminiText,
+  modelChain,
   toGeminiBody,
   type GeminiResponse,
 } from "@/lib/llm/gemini";
@@ -648,7 +647,7 @@ type BatchResult = {
 async function requestBatch(
   batch: Candidate[],
   key: string,
-  model: string,
+  models: string[],
   contextOf: AnalyzeOptions["contextOf"],
   deadline: AbortSignal,
   locale: AppLocale,
@@ -656,12 +655,15 @@ async function requestBatch(
   const payload = JSON.stringify(batch.map((c) => project(c, contextOf)));
 
   try {
-    const response = await fetch(geminiEndpoint(model), {
-      method: "POST",
-      headers: geminiHeaders(key),
-      body: JSON.stringify(
+    // Down the chain rather than one model: a batch that meets a 503 falls
+    // back to deterministic wording, and there is no reason to spend a whole
+    // batch on the first model being busy.
+    const call = await callGemini({
+      models,
+      key,
+      body: (target) =>
         toGeminiBody({
-          model,
+          model: target,
           messages: [
             { role: "system", content: systemPrompt(locale) },
             { role: "user", content: buildUserPrompt(payload) },
@@ -672,21 +674,20 @@ async function requestBatch(
           // rewriting rather than creativity.
           temperature: 0.1,
         }),
-      ),
-      signal: AbortSignal.any([
-        AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        deadline,
-      ]),
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      extraSignal: deadline,
+      onAttempt: (attempt) => {
+        if (attempt.error) {
+          console.error(`LLM API failed on ${attempt.model}: ${attempt.error}`);
+        }
+      },
     });
 
-    if (!response.ok) {
-      console.error(`LLM API failed with status ${response.status}.`);
-      return null;
-    }
+    if (!call.ok) return null;
 
     let content: string;
     try {
-      content = geminiText((await response.json()) as GeminiResponse);
+      content = geminiText(JSON.parse(call.raw) as GeminiResponse);
     } catch (error) {
       console.error("LLM API returned an unreadable envelope.", error);
       return null;
@@ -762,7 +763,7 @@ export async function analyzeTransactionInsights(
     return candidates;
   }
 
-  const model = geminiModel();
+  const models = modelChain();
   const { contextOf, onProgress, locale = defaultLocale } = options;
 
   const crowded = selectForNarration(candidates);
@@ -783,7 +784,7 @@ export async function analyzeTransactionInsights(
   for (const [index, batch] of batches.entries()) {
     const result = deadline.aborted
       ? null
-      : await requestBatch(batch, key, model, contextOf, deadline, locale);
+      : await requestBatch(batch, key, models, contextOf, deadline, locale);
 
     if (result === null) {
       // This batch keeps its deterministic findings. The others are unaffected.

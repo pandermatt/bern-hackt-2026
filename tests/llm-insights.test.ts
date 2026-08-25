@@ -33,11 +33,14 @@ function mockLlm(...replies: LlmReply[]) {
     return {
       ok: true,
       status: 200,
-      json: async () => ({
-        candidates: [
-          { content: { parts: [{ text: JSON.stringify(reply) }] } },
-        ],
-      }),
+      // `text`, not `json`: the shared client reads the body once as text so
+      // an unparseable one can be shown verbatim.
+      text: async () =>
+        JSON.stringify({
+          candidates: [
+            { content: { parts: [{ text: JSON.stringify(reply) }] } },
+          ],
+        }),
     };
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -105,9 +108,10 @@ describe("analyzeTransactionInsights", () => {
         ok: true,
         status: 200,
         // A response truncated at the output cap looks exactly like this.
-        json: async () => ({
-          candidates: [{ content: { parts: [{ text: '{"insights":[' }] } }],
-        }),
+        text: async () =>
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: '{"insights":[' }] } }],
+          }),
       })),
     );
 

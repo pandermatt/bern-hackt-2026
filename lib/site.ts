@@ -30,3 +30,11 @@ export const site = {
 } as const;
 
 export const SESSION_COOKIE = `${site.slug}_session`;
+
+/**
+ * Which model the assistant should try first, chosen in the chat debug panel.
+ * A preference rather than a secret, but `httpOnly` all the same: only the
+ * server reads it, and the value it carries is validated against the known
+ * choices before any request is built from it.
+ */
+export const ASSISTANT_MODEL_COOKIE = `${site.slug}_assistant_model`;

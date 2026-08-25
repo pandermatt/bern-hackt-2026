@@ -880,6 +880,8 @@
     "intro": "Requests to the model endpoint, newest first.",
     "endpoint": "Endpoint",
     "modelLabel": "Model",
+    "fallbackLabel": "Falls back to",
+    "noFallback": "nothing — this is the only model",
     "tokenCap": "Token cap",
     "noCap": "no cap",
     "refresh": "Refresh log",
