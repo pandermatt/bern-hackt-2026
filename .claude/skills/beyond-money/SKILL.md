@@ -654,8 +654,14 @@ Unchanged from the template this app grew out of, and still exactly true.
   them than to read a card about filing them, and the deck has three slots. `isOverBudget`
   lives there too: the comparison used to be inline in both `budget-editor` and
   `budget-radar` and exported from neither. Capped at three, warnings before
-  the tip, because an entry page is not an inbox — and that cap is now also
-  what keeps the deck legible, since a deck of eight is a pile.
+  chores before tips, because an entry page is not an inbox — and **at most one
+  card of each kind**. The cap alone let one kind take the whole deck: three
+  categories over budget filled all three slots with the same sentence about
+  three different categories, which reads as one problem repeated and hides
+  everything else the page had to say. Nothing is lost by it — the full lists
+  live on `/budget` and `/anomalies`, the cards link there, and the over-budget
+  spec carries `others` so whichever one survives can say how many more there
+  are.
 - **The nudges are what the dragon is saying, so one component owns both.**
   `components/nudge-stack.tsx` holds the deck, the toggle *and* the mascot —
   hence the `speaker` prop. The mascot is **centred under the deck**, with the

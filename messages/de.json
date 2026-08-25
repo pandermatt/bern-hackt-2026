@@ -130,6 +130,7 @@
     "showLess": "Weniger anzeigen",
     "overBudgetTitle": "Budget überschritten bei {category}",
     "overBudgetBody": "{amount} über dem von Ihnen gesetzten Limit.",
+    "overBudgetBodyMore": "{amount} über dem Limit, und {count, plural, one {# weitere Kategorie ist es auch} other {# weitere Kategorien sind es auch}}.",
     "staleScanTitle": "Ihre Auffälligkeiten sind veraltet",
     "staleScanBody": "Seit dem letzten Scan haben sich die Auszüge geändert. Führen Sie ihn erneut aus.",
     "unfiledMerchantsTitle": "{count} Händler ohne Kategorie",

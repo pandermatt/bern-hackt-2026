@@ -117,7 +117,7 @@ describe("rankNudges", () => {
     expect(nudge).toMatchObject({ kind: "free-money", amountMinor: 10_000 });
   });
 
-  it("puts the worst overspend first", () => {
+  it("reports the worst overspend, and says how many others there are", () => {
     const nudges = rankNudges(
       input({
         budget: [
@@ -127,28 +127,47 @@ describe("rankNudges", () => {
         ],
       }),
     );
-    expect(nudges.map((n) => n.id)).toEqual([
-      "over-budget:Housing",
-      "over-budget:Food",
-    ]);
-    expect(nudges[0]).toMatchObject({ overMinor: 60000 });
+
+    // One card, not one per category: three of the same sentence about three
+    // different categories reads as one problem repeated, and it used to fill
+    // the whole deck.
+    expect(nudges.map((n) => n.id)).toEqual(["over-budget:Housing"]);
+    expect(nudges[0]).toMatchObject({ overMinor: 60000, others: 1 });
   });
 
-  it("ranks warnings above the tip and caps the list", () => {
+  it("keeps at most one card of each kind", () => {
     const nudges = rankNudges(
       input({
         budget: [
           row({ category: "Food", limitMinor: 20000, usedMinor: 25000 }),
           row({ category: "Housing", limitMinor: 100000, usedMinor: 160000 }),
         ],
-        anomalies: [finding("REPEAT_CHARGE")],
-        savings: { month: "2025-03", monthEnded: true, freeMinor: 143631 },
+        anomalies: [finding("REPEAT_CHARGE"), finding("AMOUNT_SPIKE")],
+        staleScan: true,
       }),
     );
-    // Four candidates, three slots — and the tip is the one that loses, because
-    // an opportunity keeps until tomorrow and an overspend does not.
+
+    expect(nudges.map((n) => n.kind)).toEqual([
+      "over-budget",
+      "anomaly",
+      "stale-scan",
+    ]);
+  });
+
+  it("ranks warnings above the tip, and caps the list at three", () => {
+    const nudges = rankNudges(
+      input({
+        budget: [row({ category: "Housing", limitMinor: 100000, usedMinor: 160000 })],
+        anomalies: [finding("REPEAT_CHARGE")],
+        staleScan: true,
+        savings: { month: "2025-03", monthEnded: true, freeMinor: 143631 },
+        unfiledMerchants: 14,
+      }),
+    );
+    // Five kinds, three slots — and the tips are what lose, because an
+    // opportunity keeps until tomorrow and an overspend does not.
     expect(nudges).toHaveLength(3);
-    expect(nudges.every((n) => n.tone === "warning")).toBe(true);
+    expect(nudges.map((n) => n.tone)).toEqual(["warning", "warning", "chore"]);
   });
 
   it("asks for a re-scan when the last one has gone stale", () => {

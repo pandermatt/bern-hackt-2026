@@ -44,6 +44,13 @@ export type NudgeSpec =
       overMinor: number;
       /** The category's palette slot, so the row wears its dashboard colour. */
       slot: number;
+      /**
+       * How many *other* categories are also over. Only one over-budget card
+       * reaches the deck (see `rankNudges`), so this is what keeps the other
+       * two from being silently dropped — and it is true of whichever one
+       * survives, since it counts the rest either way.
+       */
+      others: number;
     }
   | {
       id: string;
@@ -216,11 +223,19 @@ export type NudgeInput = {
 };
 
 /**
- * Warnings before tips, worst overspend first, then a single opportunity.
+ * Warnings, then chores, then tips — and **at most one of each kind**.
  *
- * Capped, because this is an entry page and not an inbox: four rows of things
- * that are wrong is a page nobody opens twice. The full lists live on
- * `/anomalies` and `/budget`, and the nudges link there.
+ * Capped at three, because this is an entry page and not an inbox: four rows of
+ * things that are wrong is a page nobody opens twice. But a cap alone let one
+ * kind take the whole deck — three categories over budget filled all three
+ * slots with the same sentence about three different categories, which reads as
+ * one problem repeated rather than as three, and hid everything else the page
+ * had to say. One of each kind is what makes the deck a summary of the account
+ * rather than the top of one list.
+ *
+ * Nothing is lost by it: the full lists live on `/budget` and `/anomalies` and
+ * the cards link there, and the over-budget card carries `others` so it can say
+ * how many more there are.
  */
 export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
   const over: NudgeSpec[] = input.budget
@@ -232,8 +247,12 @@ export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
       category: row.category,
       overMinor: row.usedMinor - (row.limitMinor ?? 0),
       slot: row.slot,
+      others: 0,
     }))
-    .sort((a, b) => b.overMinor - a.overMinor);
+    .sort((a, b) => b.overMinor - a.overMinor)
+    // Every one of them is true about the rest, so whichever survives the
+    // one-per-kind filter below can say it.
+    .map((nudge, _index, all) => ({ ...nudge, others: all.length - 1 }));
 
   const flagged: NudgeSpec[] = input.anomalies.map((group) => ({
     id: `anomaly:${group.ruleId}`,
@@ -291,7 +310,14 @@ export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
     ? [{ id: "stale-scan", tone: "chore", kind: "stale-scan" }]
     : [];
 
-  return [...over, ...flagged, ...chores, ...tips].slice(0, limit);
+  const seen = new Set<NudgeSpec["kind"]>();
+  return [...over, ...flagged, ...chores, ...tips]
+    .filter((nudge) => {
+      if (seen.has(nudge.kind)) return false;
+      seen.add(nudge.kind);
+      return true;
+    })
+    .slice(0, limit);
 }
 
 /**

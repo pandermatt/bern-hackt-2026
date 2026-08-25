@@ -111,7 +111,16 @@ export function NudgeCard({ nudge }: { nudge: NudgeSpec }) {
   if (nudge.kind === "over-budget") {
     icon = <TrendingUp className="size-4" aria-hidden />;
     title = t("overBudgetTitle", { category: nudge.category });
-    body = t("overBudgetBody", { amount: formatMoney(nudge.overMinor) });
+    // Only one over-budget card reaches the deck, so this one says how many
+    // others there are rather than letting them go unmentioned — the link
+    // below is where the rest of them are.
+    body =
+      nudge.others > 0
+        ? t("overBudgetBodyMore", {
+            amount: formatMoney(nudge.overMinor),
+            count: nudge.others,
+          })
+        : t("overBudgetBody", { amount: formatMoney(nudge.overMinor) });
     href = "/budget";
   } else if (nudge.kind === "stale-scan") {
     // The same glyph the outdated banner on `/anomalies` carries.

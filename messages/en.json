@@ -130,6 +130,7 @@
     "showLess": "Show less",
     "overBudgetTitle": "Over budget in {category}",
     "overBudgetBody": "{amount} past the limit you set.",
+    "overBudgetBodyMore": "{amount} past the limit, and {count, plural, one {# other category is over too} other {# other categories are over too}}.",
     "staleScanTitle": "Your findings are out of date",
     "staleScanBody": "The statements have changed since the last scan. Run it again.",
     "unfiledMerchantsTitle": "{count} merchants without a category",
