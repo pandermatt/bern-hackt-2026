@@ -109,16 +109,13 @@ export function Landing() {
             and the assistant are what nobody else has, so they take the hero
             and the figures wait until they have an account to be about.
            ───────────────────────────────────────────────────────────── */}
-        {/* Full-bleed, and it needs no trick to be: this slot is a sibling of
-            the hero's `max-w-5xl px-5 sm:px-8` column, not a child of it, so it
-            simply inherits the `w-full` section. (A `w-screen` with negative
-            margins was tried and is the wrong tool here — it resolves against
-            the viewport while its left edge starts at the column's, so the band
-            ends up both overflowing and off-centre.)
-
-            `LandingDragon` carries its own inner column, so the copy stays at a
-            readable measure while the block itself is free to span the page. */}
-        <div className="mt-12">
+        {/* This slot is a sibling of the hero's `max-w-5xl px-5 sm:px-8`
+            column, not a child of it, so it inherits the `w-full` section.
+            `LandingDragon` does the rest itself: the same `max-w-5xl` column
+            and the same gutter, so its card lines up with the headline above
+            it, plus its own inner measure for the conversation. Nothing to
+            add out here. */}
+        <div className="mt-20 sm:mt-28">
           <LandingDragon />
         </div>
       </section>

@@ -97,6 +97,8 @@ describe("the landing copy", () => {
   it("names the rest of the dragon block in every locale", () => {
     for (const locale of routing.locales) {
       for (const key of [
+        "askEyebrow",
+        "askTitle",
         "askIntro",
         "askThinking",
         "askThreadLabel",
