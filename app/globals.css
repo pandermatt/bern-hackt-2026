@@ -721,26 +721,6 @@
   animation: unallocated-pulse 1.8s ease-in-out infinite;
 }
 
-/* The dragon breathing. A slow vertical drift, nothing else — the mascot now
-   appears on three pages rather than one, and anything faster than this reads
-   as a notification demanding to be dealt with rather than a character that
-   happens to be there. Between two visible states, so it is safe under the
-   "never animate the page shell in" rule: with JavaScript off, or before
-   hydration, the dragon is simply sitting still in the right place. */
-@keyframes dragon-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-.dragon-bob {
-  animation: dragon-bob 4.5s ease-in-out infinite;
-}
-
 /* The full chart ramp as a moving sweep, for decoration and only decoration.
 
    Every other use of these ten hues has to survive being told apart — which is

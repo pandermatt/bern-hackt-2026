@@ -98,7 +98,7 @@ export function DragonBuddy({
         alt={t(mood)}
         width={512}
         height={512}
-        className="dragon-bob h-16 w-16 shrink-0 drop-shadow-sm sm:h-20 sm:w-20"
+        className="h-16 w-16 shrink-0 drop-shadow-sm sm:h-20 sm:w-20"
       />
     </div>
   );
