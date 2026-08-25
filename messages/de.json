@@ -743,6 +743,8 @@
     "deleteAccountNote": "Entfernt Ihr Konto und alle darin enthaltenen Transaktionen unwiderruflich."
   },
   "MerchantMapping": {
+    "summary": "{count, plural, one {# Händler ohne Kategorie} other {# Händler ohne Kategorie}}",
+    "summaryAllFiled": "{count, plural, one {# Händler, zugeordnet} other {# Händler, alle zugeordnet}}",
     "empty": "Alle Händler in Ihren Kontoauszügen wurden erkannt — unter Übriges liegt nichts.",
     "lines": "{count, plural, one {# Zeile} other {# Zeilen}}",
     "leaveUnfiled": "{category} (unverändert)",
@@ -844,7 +846,24 @@
     "title": "Konto wirklich löschen?",
     "description": "Damit werden Ihr Konto, Ihre Sitzungen und alle importierten Transaktionen unwiderruflich entfernt. Das lässt sich nicht rückgängig machen.",
     "cancel": "Abbrechen",
-    "confirm": "Konto löschen"
+    "confirm": "Konto löschen",
+    "clearLabel": "Transaktionen löschen",
+    "clearNote": "Entfernt Auszugszeilen und die Auffälligkeiten, die sie beschreiben. Ihre Budgets, Sparziele und Händlerregeln bleiben.",
+    "clearScope": "Welches Konto geleert wird",
+    "clearAll": "Alle Konten ({count})",
+    "clearOne": "{account} ({count})",
+    "clearTrigger": "Löschen",
+    "clearTitleAll": "Wirklich alle Transaktionen löschen?",
+    "clearTitleOne": "{account} wirklich leeren?",
+    "clearBodyAll": "{count, plural, one {# Transaktion wird samt allen Auffälligkeiten dazu aus diesem Konto entfernt.} other {# Transaktionen werden samt allen Auffälligkeiten dazu aus diesem Konto entfernt.}} Ihre Budgets, Sparziele und Händlerregeln bleiben. Das lässt sich nicht rückgängig machen.",
+    "clearBodyOne": "{count, plural, one {# Transaktion auf {account} wird samt allen Auffälligkeiten dazu entfernt.} other {# Transaktionen auf {account} werden samt allen Auffälligkeiten dazu entfernt.}} Alles auf Ihren anderen Konten bleibt, ebenso Ihre Budgets, Sparziele und Händlerregeln. Das lässt sich nicht rückgängig machen.",
+    "clearConfirm": "Transaktionen löschen",
+    "cleared": "{count, plural, one {# Transaktion gelöscht} other {# Transaktionen gelöscht}}"
+  },
+  "DangerZoneErrors": {
+    "notSignedIn": "Melden Sie sich an, um Transaktionen zu löschen.",
+    "unknownAccount": "Auf diesem Konto liegt nichts mehr.",
+    "clearFailed": "Diese Transaktionen konnten nicht gelöscht werden. Versuchen Sie es erneut."
   },
   "Chat": {
     "title": "Fragen Sie Batzi",

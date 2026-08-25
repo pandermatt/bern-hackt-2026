@@ -40,8 +40,13 @@ export const sessions = sqliteTable("sessions", {
 
 /**
  * One line from a bank statement, already normalized: signed minor units, a
- * canonical merchant name, and a rule-assigned category. This table is
- * read-only in the UI — rows only ever arrive through `npm run seed`.
+ * canonical merchant name, and a rule-assigned category.
+ *
+ * Nothing in the UI edits a line. Rows arrive through `npm run seed`, the demo
+ * loader, the generator or a CSV upload, and the only way one leaves is the
+ * danger zone's `clearTransactions`, which takes a whole account's worth at
+ * once. What the account holder decides *about* a line — its category, its
+ * logo — is stored beside it in `merchant_overrides` and applied on read.
  */
 export const transactions = sqliteTable(
   "transactions",

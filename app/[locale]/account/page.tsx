@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 
 import { getAnomalyScanState } from "@/app/actions/anomalies";
 import { getMerchantMapping } from "@/app/actions/merchant-overrides";
+import { getTransactionAccounts } from "@/app/actions/transactions";
 import { AnomalyScanControls } from "@/components/anomaly-scan-controls";
+import { ClearTransactions } from "@/components/clear-transactions";
 import { CsvUpload } from "@/components/csv-upload";
 import { DangerZone } from "@/components/danger-zone";
 import { DemoDataControls } from "@/components/demo-data-controls";
@@ -53,7 +55,7 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/account"
  *   table of merchants rather than a setting with a control beside it — and
  *   because it reaches the ledger, the charts and the budget, which nothing
  *   else on this page does.
- * - **Danger zone** — deleting the account.
+ * - **Danger zone** — clearing the statements, then deleting the account.
  *
  * The `h1` is the dashboard's 30/36px, not the 22px it was: at 22px the page
  * was headed by something smaller than its own section headings.
@@ -75,6 +77,10 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
   // ruled out; the fallback keeps the group rendering its own empty line
   // rather than making the page's shape depend on it.
   const mapping = await getMerchantMapping();
+
+  // Names and row counts, not rows: what the clear control has to say before
+  // it is pressed is how much would go, and from where.
+  const accounts = await getTransactionAccounts();
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
@@ -160,7 +166,11 @@ export default async function AccountPage({ params }: PageProps<"/[locale]/accou
         >
           {/* Red label, grey panel: the group is the same shape as the
               three above it, and the destructive row carries the warning in
-              its own colour rather than in a differently-coloured card. */}
+              its own colour rather than in a differently-coloured card.
+              The two rows are in ascending order of what they take: the
+              statements, then the login and the statements with it. */}
+          <ClearTransactions accounts={accounts} />
+
           <SettingsRow
             label={<span className="text-danger">{t("deleteAccount")}</span>}
             note={t("deleteAccountNote")}

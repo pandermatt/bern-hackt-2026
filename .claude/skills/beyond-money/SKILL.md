@@ -7,8 +7,9 @@ description: House rules for this Next.js + Drizzle + better-sqlite3 personal-fi
 
 A multi-user personal-finance dashboard over imported bank statements.
 Next.js 16 App Router, Drizzle ORM over better-sqlite3, shadcn/ui on the
-PostFinance palette. Read-only: transactions arrive through `npm run seed`,
-never through the UI.
+PostFinance palette. Transactions are never *edited* through the UI — they
+arrive through `npm run seed`, the demo loader, the generator or a CSV upload,
+and leave only through the danger zone's `clearTransactions`.
 
 ## Database
 
@@ -173,9 +174,10 @@ Unchanged from the template this app grew out of, and still exactly true.
 - **Every transaction query is scoped by `userId`**
   (`eq(transactions.userId, user.id)`). Never write one without that filter.
 - **Reads return data directly, not `{ ok }`.** That envelope exists so a
-  client can raise a `sonner` toast on a failed *mutation*, and there are no
-  transaction mutations. `app/actions/auth.ts` has its own contract
-  (`AuthState`); keep it there.
+  client can raise a `sonner` toast on a failed *mutation*, and the only
+  transaction mutation is `clearTransactions` (below), which lives in its own
+  module rather than in this reads file. `app/actions/auth.ts` has its own
+  contract (`AuthState`); keep it there.
 - **One fetch, then aggregate in JavaScript.** `getDashboard` pulls the
   account's rows once and hands them to `lib/insights.ts`. Twenty months of
   statements is ~930 rows through a synchronous in-process driver — a full scan is under a
@@ -199,8 +201,8 @@ Unchanged from the template this app grew out of, and still exactly true.
   the budget page is checked against the months that exist and falls back to
   the default rather than rendering an empty page.
 - **Mutations use the `{ ok }` envelope; reads return data directly.**
-  `saveBudgets`, the three actions in `app/actions/savings.ts` and
-  `setAnomalyResolved` are the app's only mutations — that envelope is what the
+  `saveBudgets`, the three actions in `app/actions/savings.ts`,
+  `setAnomalyResolved` and `clearTransactions` are the app's only mutations — that envelope is what the
   client raises a `sonner` toast off. Each runs its deletes and upserts inside
   one `db.transaction`, so a half-saved budget, a half-allocated month or a
   finding resolved without its natural key is not a state the page can land in.
@@ -213,6 +215,25 @@ Unchanged from the template this app grew out of, and still exactly true.
   the ones this account owns, so a guessed id cannot fund someone else's pot.
   The running total in `SavingsAllocator` is a convenience, not the check —
   verified by replaying the action's own POST with a tampered amount.
+- **`clearTransactions` is the only thing that deletes statements without
+  putting any back**, and it is reachable only from the danger zone.
+  `app/actions/clear-transactions.ts` takes an optional `account` — one of
+  `transactions.account`, the *bank* account a line was booked to, not the
+  login — and omitting it means all of them. Three things about it:
+  - It drops the findings pointing at the doomed lines and **does not call
+    `rebindAnomalies`**. That function exists because an importer reissues
+    every id; nothing is reissued here, so the surviving rows keep their ids
+    and their findings with them. There is nothing to re-point, only orphans
+    to drop.
+  - **The scan runs go only when the account is left with nothing at all.**
+    A run is a statement about statements: with none left, the fingerprint
+    comparison in `getAnomalyScanState` would report a permanently outdated
+    scan over an empty account. Clearing one account of several leaves the
+    runs, because outdated is then exactly what the scan is.
+  - **Budgets, savings goals, allocations and merchant rules stay.** They are
+    decisions the account holder made rather than statements, and they survive
+    every other kind of re-import; the dialog says so, because "clear
+    transactions" quietly taking them would be a different button.
 
 ## Rendering
 
@@ -736,6 +757,18 @@ Unchanged from the template this app grew out of, and still exactly true.
   deep on one control — and the `#anomaly-scan` anchor `/anomalies` links to
   twice lives on the Data group, so the link lands on a heading rather than
   mid-panel.
+- **The Merchants group ships folded, as a native `<details>`.** It is one row
+  per unrecognised merchant with two controls each, which on a real statement
+  is most of the page, so `MerchantMapper` renders a `<summary>` carrying the
+  count of merchants still filed under `Other` and nothing else until it is
+  opened. `<details>` rather than React state: it arrives folded from the
+  server with no hydration, opens with JS off, and brings its own keyboard and
+  screen-reader behaviour. It does not animate, and should not — the element
+  hides its content with `display: none`, which does not interpolate, and the
+  `0fr → 1fr` alternative would cost the JS-off case. The count is derived from
+  the form's live fields rather than from the saved mapping, so filing a
+  merchant moves it immediately and the "unsaved changes" hint beside Save is
+  what says it has not landed yet.
 - **The header's tab group is the app's top-level pages; the right-hand pill
   cluster is account chrome.** `HeaderNav` carries Dashboard, Budget and
   Auffälligkeiten — the last moved out of the pill cluster, where it read as a

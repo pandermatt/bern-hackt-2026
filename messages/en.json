@@ -743,6 +743,8 @@
     "deleteAccountNote": "Permanently removes your account and every transaction in it."
   },
   "MerchantMapping": {
+    "summary": "{count, plural, one {# merchant without a category} other {# merchants without a category}}",
+    "summaryAllFiled": "{count, plural, one {# merchant, filed} other {# merchants, all filed}}",
     "empty": "Every merchant in your statements was recognised — nothing is filed under Other.",
     "lines": "{count, plural, one {# line} other {# lines}}",
     "leaveUnfiled": "{category} (unchanged)",
@@ -844,7 +846,24 @@
     "title": "Delete your account?",
     "description": "This permanently removes your account, your sessions and every transaction imported into it. It cannot be undone.",
     "cancel": "Cancel",
-    "confirm": "Delete account"
+    "confirm": "Delete account",
+    "clearLabel": "Clear transactions",
+    "clearNote": "Removes statement lines and the findings that describe them. Your budgets, savings goals and merchant rules stay.",
+    "clearScope": "Which account to clear",
+    "clearAll": "All accounts ({count})",
+    "clearOne": "{account} ({count})",
+    "clearTrigger": "Clear",
+    "clearTitleAll": "Clear every transaction?",
+    "clearTitleOne": "Clear {account}?",
+    "clearBodyAll": "{count, plural, one {# transaction, and every finding about it, is removed from this account.} other {# transactions, and every finding about them, are removed from this account.}} Your budgets, savings goals and merchant rules stay. It cannot be undone.",
+    "clearBodyOne": "{count, plural, one {# transaction booked to {account}, and every finding about it, is removed.} other {# transactions booked to {account}, and every finding about them, are removed.}} Everything on your other accounts stays, along with your budgets, savings goals and merchant rules. It cannot be undone.",
+    "clearConfirm": "Clear transactions",
+    "cleared": "{count, plural, one {# transaction cleared} other {# transactions cleared}}"
+  },
+  "DangerZoneErrors": {
+    "notSignedIn": "Sign in to clear transactions.",
+    "unknownAccount": "There is nothing on that account any more.",
+    "clearFailed": "Could not clear those transactions. Try again."
   },
   "Chat": {
     "title": "Ask Batzi",

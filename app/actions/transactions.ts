@@ -512,3 +512,35 @@ export async function getTransactionCount(): Promise<number> {
 
   return row?.total ?? 0;
 }
+
+/**
+ * Every account the statements name, with how many lines each holds.
+ *
+ * What the danger zone's "clear transactions" control offers, and the count is
+ * the point of it: what a person needs before pressing that is how much is
+ * about to go. The ledger's own account picker labels the same names with
+ * their *balance* instead, because there the question is what the account is
+ * worth rather than how many rows stand behind it.
+ *
+ * The one read in this module that aggregates in SQL rather than in
+ * JavaScript. The rule the dashboard follows — pull the account's rows once
+ * and hand them to `lib/insights.ts` — is about five aggregates over one fetch;
+ * this is two columns for a settings row, and the generator can put 25k rows in
+ * an account, which is a lot to load to count two groups.
+ *
+ * A read, so it returns its data rather than the `{ ok }` envelope, and signed
+ * out is an empty list rather than an error — see `getTransactionCount`.
+ */
+export type TransactionAccount = { account: string; count: number };
+
+export async function getTransactionAccounts(): Promise<TransactionAccount[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  return db
+    .select({ account: transactions.account, count: count() })
+    .from(transactions)
+    .where(eq(transactions.userId, user.id))
+    .groupBy(transactions.account)
+    .orderBy(asc(transactions.account));
+}
