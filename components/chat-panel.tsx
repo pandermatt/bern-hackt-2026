@@ -7,9 +7,12 @@ import { useEffect, useRef, useState, useTransition } from "react";
 
 import { askAssistant } from "@/app/actions/chat";
 import { applyAllocationAdds } from "@/app/actions/savings";
+import { ChatEChart } from "@/components/chat-echart";
+import { ChatPie } from "@/components/chat-pie";
 import {
   SUGGESTION_KEYS,
   type AllocationProposal,
+  type ChartSpec,
   type ChatRole,
 } from "@/lib/assistant";
 import { formatMoney } from "@/lib/insights";
@@ -48,6 +51,8 @@ export const CHAT_PILL = `${CHAT_PILL_SHAPE} border-line bg-surface text-text ho
 export type PanelMessage = {
   role: ChatRole;
   content: string;
+  /** The chart under the bubble, when the turn produced one. */
+  chart?: ChartSpec;
   /** A validated surplus split, rendered as a card with an Apply button. */
   proposal?: AllocationProposal;
   /** Apply state lives on the message, not the panel: the panel unmounts
@@ -118,6 +123,7 @@ export function useAssistantChat(): AssistantChat {
           {
             role: "assistant",
             content: turn.reply,
+            chart: turn.chart,
             proposal: turn.proposal,
             error: turn.error,
           },
@@ -297,6 +303,15 @@ export function ChatPanel({
               }`}
             >
               {message.content}
+              {message.chart && (
+                <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
+                  {message.chart.kind === "echarts" ? (
+                    <ChatEChart chart={message.chart} />
+                  ) : (
+                    <ChatPie chart={message.chart} />
+                  )}
+                </div>
+              )}
               {message.proposal && (
                 <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
                   <p className="text-[12px] font-semibold text-text">

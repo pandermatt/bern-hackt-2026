@@ -6,6 +6,12 @@ import type { Transaction } from "@/db/schema";
 import {
   anomaliesToolResult,
   buildAllocationProposal,
+  composeEChart,
+  parseChartRequest,
+  runTool,
+  sanitizeEChartsOption,
+  shouldDefaultChart,
+  wantsNonPieChart,
   defaultAllocationSplit,
   defaultPeriod,
   detectSubscriptions,
@@ -753,5 +759,248 @@ describe("defaultAllocationSplit", () => {
     const { proposal } = buildAllocationProposal(defaultAllocationSplit(view), view);
     expect(proposal?.addTotalMinor).toBe(100_000);
     expect(proposal?.items.map((i) => i.name)).toEqual(["Ferien", "Auto"]);
+  });
+});
+
+/* =========================================================================
+   CHARTS
+
+   The model chooses what a chart is ABOUT; the app builds it from the same
+   aggregates that answered the tool call. These cover the choosing (what a
+   question asks for, what survived a call's arguments), the building, and the
+   one place a model-authored payload reaches the renderer.
+   ========================================================================= */
+
+describe("shouldDefaultChart", () => {
+  it("attaches a default chart to money-composition questions", () => {
+    expect(shouldDefaultChart("How am I doing with spending?")).toBe(true);
+    expect(shouldDefaultChart("Who are my top merchants?")).toBe(true);
+    expect(shouldDefaultChart("Give me an overview of my finances")).toBe(true);
+    expect(shouldDefaultChart("How is my income split?")).toBe(true);
+  });
+
+  it("does not chart row-level, count, or scalar questions", () => {
+    expect(shouldDefaultChart("What was my single largest expense?")).toBe(false);
+    expect(shouldDefaultChart("How many transactions did I make in March?")).toBe(false);
+    expect(shouldDefaultChart("How much did I save this year?")).toBe(false);
+    expect(shouldDefaultChart("Hi there")).toBe(false);
+  });
+
+  it("leaves the advice questions alone — a pie is not an answer there", () => {
+    expect(shouldDefaultChart("Is something shady going on in my account?")).toBe(false);
+    expect(shouldDefaultChart("What subscriptions am I paying for?")).toBe(false);
+    expect(shouldDefaultChart("Where could I save money?")).toBe(false);
+    expect(
+      shouldDefaultChart("How should I split last month's surplus across my goals?"),
+    ).toBe(false);
+  });
+});
+
+describe("wantsNonPieChart", () => {
+  it("detects an explicit bar/line chart request", () => {
+    expect(wantsNonPieChart("Show me a bar chart of spending per month")).toBe("bar");
+    expect(wantsNonPieChart("plot it as a line")).toBe("line");
+    expect(wantsNonPieChart("Zeig mir ein Balkendiagramm pro Monat")).toBe("bar");
+  });
+
+  it("does not fire on incidental words or when a pie is asked for", () => {
+    expect(wantsNonPieChart("What's my bottom line this year?")).toBeUndefined();
+    expect(wantsNonPieChart("How much did I spend at the coffee bar?")).toBeUndefined();
+    expect(
+      wantsNonPieChart("Show my categories as a pie, not a bar chart"),
+    ).toBeUndefined();
+  });
+});
+
+describe("parseChartRequest", () => {
+  it("reads the presentation choices out of a call", () => {
+    expect(
+      parseChartRequest('{"display_chart": {"source": "merchants", "top_n": 3}}'),
+    ).toMatchObject({ source: "merchants", topN: 3 });
+    expect(
+      parseChartRequest('{"display_chart": {"source": "spending", "title": "My year"}}'),
+    ).toMatchObject({ source: "categories", title: "My year" });
+  });
+
+  it("leaves every field undefined when the arguments did not survive", () => {
+    expect(parseChartRequest("display_chart")).toEqual({
+      source: undefined,
+      topN: undefined,
+      title: undefined,
+    });
+  });
+});
+
+describe("the pie the app assembles", () => {
+  const slice = (key: string, amount: number) => ({
+    key,
+    amount,
+    count: 1,
+    share: 0,
+  });
+  const dashboard = {
+    facets: { accounts: [], first: "2025-01-01", last: "2025-12-31" },
+    totals: { expense: 1_000_000, income: 0, salary: 0, refunds: 0, net: 0, expenseCount: 0 },
+    categories: [
+      slice("Housing", 500_000),
+      slice("Travel", 200_000),
+      slice("Clothing", 150_000),
+      slice("Groceries", 100_000),
+      slice("Gaming", 30_000),
+      slice("Other", 20_000),
+    ],
+    merchants: [slice("Coop", 60_000), slice("Migros", 40_000)],
+    monthly: [
+      { month: "2025-01", label: "Jan", income: 500_000, expense: 300_000, net: 200_000 },
+      { month: "2025-02", label: "Feb", income: 500_000, expense: 400_000, net: 100_000 },
+    ],
+  } as unknown as Dashboard;
+
+  it("folds everything past top_n into one 'Other' slice", () => {
+    const { chart } = runTool("display_chart", dashboard, undefined, {
+      source: "categories",
+      topN: 3,
+    });
+    expect(chart?.slices.map((s) => s.label)).toEqual([
+      "Housing",
+      "Travel",
+      "Clothing",
+      "Other",
+    ]);
+    // Shares are of the chart's own total, so they still add to 100.
+    const total = chart?.slices.reduce((sum, s) => sum + s.share, 0) ?? 0;
+    expect(total).toBeCloseTo(100, 5);
+    expect(chart?.totalMinor).toBe(1_000_000);
+  });
+
+  it("clamps top_n to the 2–8 the schema promises", () => {
+    const many = runTool("display_chart", dashboard, undefined, {
+      source: "categories",
+      topN: 99,
+    }).chart;
+    // Six categories, all shown: the clamp is above what there is to fold.
+    expect(many?.slices).toHaveLength(6);
+    const few = runTool("display_chart", dashboard, undefined, {
+      source: "categories",
+      topN: 0,
+    }).chart;
+    expect(few?.slices.map((s) => s.label)).toEqual(["Housing", "Travel", "Other"]);
+  });
+
+  it("hands the model the same figures the chart draws", () => {
+    const { result, chart } = runTool("display_chart", dashboard, undefined, {
+      source: "merchants",
+    });
+    const payload = result as {
+      total_chf: string;
+      slices: { name: string; amount_chf: string }[];
+    };
+    expect(payload.total_chf).toBe("1'000.00");
+    expect(payload.slices.map((s) => s.name)).toEqual(
+      chart?.slices.map((s) => s.label),
+    );
+  });
+
+  it("comes along with the data tools, so a caption always has its picture", () => {
+    expect(runTool("get_spending_by_category", dashboard).chart?.kind).toBe("pie");
+    expect(runTool("get_top_merchants", dashboard).chart?.kind).toBe("pie");
+    expect(runTool("get_monthly_series", dashboard).chart).toBeUndefined();
+  });
+});
+
+describe("composeEChart", () => {
+  const dashboard = {
+    facets: { accounts: [], first: "2025-01-01", last: "2025-12-31" },
+    totals: {},
+    categories: [{ key: "Travel", amount: 200_000, count: 1, share: 0 }],
+    merchants: [{ key: "Coop", amount: 60_000, count: 1, share: 0 }],
+    monthly: [
+      { month: "2025-01", label: "Jan", income: 500_000, expense: 300_000, net: 200_000 },
+    ],
+  } as unknown as Dashboard;
+
+  it("ranks merchants and categories, biggest bar on top", () => {
+    const chart = composeEChart("bar", "top merchants as a bar chart", dashboard);
+    expect(chart?.kind).toBe("echarts");
+    expect(chart?.option).toMatchObject({
+      series: [{ type: "bar", data: [600] }],
+    });
+  });
+
+  it("falls back to the monthly in/out series, in francs", () => {
+    const chart = composeEChart("line", "show me a line chart", dashboard);
+    expect(chart?.option).toMatchObject({
+      series: [
+        { name: "Out", type: "line", data: [3000] },
+        { name: "In", type: "line", data: [5000] },
+      ],
+    });
+  });
+});
+
+describe("sanitizeEChartsOption", () => {
+  const series = [{ type: "bar", data: [1, 2] }];
+
+  it("keeps an ordinary option", () => {
+    const option = sanitizeEChartsOption({
+      xAxis: { type: "category", data: ["a", "b"] },
+      series,
+    });
+    expect(option).toBeDefined();
+    expect(option).toHaveProperty("series");
+  });
+
+  it("parses the JSON string the tool actually declares", () => {
+    const option = sanitizeEChartsOption(
+      JSON.stringify({ xAxis: { type: "value" }, series }),
+    );
+    expect(option).toHaveProperty("series");
+    // Still a string, still not a chart.
+    expect(sanitizeEChartsOption('{"xAxis": {}}')).toBeUndefined();
+    expect(sanitizeEChartsOption("{not json")).toBeUndefined();
+  });
+
+  it("strips graphic, image, tooltip, and toolbox everywhere", () => {
+    const option = sanitizeEChartsOption({
+      graphic: [{ type: "image" }],
+      tooltip: { formatter: "x" },
+      toolbox: { feature: {} },
+      series: [{ type: "bar", data: [1], itemStyle: { color: { image: "http://evil" } } }],
+    }) as Record<string, unknown>;
+    expect(option).toBeDefined();
+    expect(JSON.stringify(option)).not.toMatch(/graphic|image|tooltip|toolbox|evil/);
+  });
+
+  it("drops image:// and path:// string values (SSRF/beacon vector)", () => {
+    const option = sanitizeEChartsOption({
+      series: [
+        {
+          type: "scatter",
+          symbol: "image://https://attacker.example/beacon.png?leak=1",
+          data: [[1, 1]],
+        },
+      ],
+    }) as Record<string, unknown>;
+    expect(option).toBeDefined();
+    expect(JSON.stringify(option)).not.toMatch(/attacker\.example|image:\/\//);
+    // A per-datum symbol and markPoint symbol carry the same value — also gone.
+    const nested = sanitizeEChartsOption({
+      series: [
+        {
+          type: "line",
+          data: [{ value: 1, symbol: "image://https://x.test/p.png" }],
+          markPoint: { data: [{ symbol: "path://M0,0" }] },
+        },
+      ],
+    }) as Record<string, unknown>;
+    expect(JSON.stringify(nested)).not.toMatch(/x\.test|image:\/\/|path:\/\//);
+  });
+
+  it("rejects non-objects, series-less options, and oversized payloads", () => {
+    expect(sanitizeEChartsOption("SELECT")).toBeUndefined();
+    expect(sanitizeEChartsOption({ xAxis: {} })).toBeUndefined();
+    expect(
+      sanitizeEChartsOption({ series, blob: "x".repeat(30_000) }),
+    ).toBeUndefined();
   });
 });

@@ -368,7 +368,7 @@ export const savingsGoals = sqliteTable(
      * `GOAL_ICONS` in `lib/goal-icon.ts`.
      *
      * Only ever written for a goal whose name the keyword rules could not
-     * place, where `lib/llm/suggest-goal-icon.ts` asked Apertus instead. A
+     * place, where `lib/llm/suggest-goal-icon.ts` asked the model instead. A
      * matched name needs nothing stored: the rules will reach the same answer
      * on every render, for free.
      *

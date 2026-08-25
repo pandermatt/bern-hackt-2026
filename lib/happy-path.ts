@@ -414,7 +414,9 @@ export function categorySummary(
         payments: slice.count,
       }),
     ),
-    note: phrase("categoriesNote"),
+    // No note pointing at the dashboard's donut: this answer now carries a pie
+    // of its own, built from the same slices, and sending the reader to a
+    // second drawing of the split reads as a dead end beside it.
   };
 }
 

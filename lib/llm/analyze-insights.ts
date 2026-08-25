@@ -9,6 +9,15 @@ import {
   type AnomalySeverity,
 } from "@/lib/anomaly-engine";
 import { defaultLocale, type AppLocale } from "@/i18n/routing";
+import {
+  geminiApiKey,
+  geminiEndpoint,
+  geminiHeaders,
+  geminiModel,
+  geminiText,
+  toGeminiBody,
+  type GeminiResponse,
+} from "@/lib/llm/gemini";
 
 /*
  * The narrative layer.
@@ -24,7 +33,7 @@ import { defaultLocale, type AppLocale } from "@/i18n/routing";
  * paraphrase, at the cost of a network round trip and a chance to get a number
  * wrong. And classification stays deterministic: `canEscalateToAlert` in the
  * engine decides what turns red, because "this may not have been you" is not a
- * sentence to let an 8B model reach on its own.
+ * sentence to let a language model reach on its own.
  *
  * Everything except `title` and `description` is restored from the
  * deterministic findings after the model has spoken. A failure at any point
@@ -37,10 +46,6 @@ const LANGUAGE_NAMES: Record<AppLocale, string> = {
   de: "German (Swiss usage: never the letter ß, always ss)",
   en: "English",
 };
-
-const APERTUS_URL =
-  process.env.APERTUS_URL ??
-  "https://llm.stoney-cloud.com/v1/chat/completions";
 
 /**
  * Findings per request.
@@ -59,8 +64,8 @@ const MAX_BATCH_CHARS = 6000;
 /** Metrics sent per finding. The tail of a long blob is rarely the interesting part. */
 const MAX_METRIC_KEYS = 6;
 
-/** Per-request timeout. */
-const REQUEST_TIMEOUT_MS = 30_000;
+/** Per-request timeout. Generous because the model thinks before it writes. */
+const REQUEST_TIMEOUT_MS = 45_000;
 
 /**
  * Ceiling on the whole LLM phase, across every batch.
@@ -70,7 +75,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * one scan indefinitely. When this trips the remaining batches fall back
  * deterministically and the scan finishes.
  */
-const TOTAL_DEADLINE_MS = 120_000;
+const TOTAL_DEADLINE_MS = 180_000;
 
 /** The whole of what the model may write. */
 const llmInsightSchema = z.object({
@@ -651,24 +656,23 @@ async function requestBatch(
   const payload = JSON.stringify(batch.map((c) => project(c, contextOf)));
 
   try {
-    const response = await fetch(APERTUS_URL, {
+    const response = await fetch(geminiEndpoint(model), {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt(locale) },
-          { role: "user", content: buildUserPrompt(payload) },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 1500,
-        // Low temperature is intentional. We want deterministic factual
-        // rewriting rather than creativity.
-        temperature: 0.1,
-      }),
+      headers: geminiHeaders(key),
+      body: JSON.stringify(
+        toGeminiBody({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt(locale) },
+            { role: "user", content: buildUserPrompt(payload) },
+          ],
+          json: true,
+          maxTokens: 1500,
+          // Low temperature is intentional. We want deterministic factual
+          // rewriting rather than creativity.
+          temperature: 0.1,
+        }),
+      ),
       signal: AbortSignal.any([
         AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         deadline,
@@ -682,10 +686,7 @@ async function requestBatch(
 
     let content: string;
     try {
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      content = data.choices?.[0]?.message?.content ?? "";
+      content = geminiText((await response.json()) as GeminiResponse);
     } catch (error) {
       console.error("LLM API returned an unreadable envelope.", error);
       return null;
@@ -753,15 +754,15 @@ export async function analyzeTransactionInsights(
 ): Promise<AnomalyInsight[]> {
   if (candidates.length === 0) return [];
 
-  const key = process.env.APERTUS_KEY;
+  const key = geminiApiKey();
   if (!key) {
     console.warn(
-      "APERTUS_KEY is not set. Skipping LLM interpretation and falling back to deterministic insights.",
+      "GEMINI_API_KEY is not set. Skipping LLM interpretation and falling back to deterministic insights.",
     );
     return candidates;
   }
 
-  const model = process.env.MODEL ?? "apertus-ai/Apertus-v1.5-8B";
+  const model = geminiModel();
   const { contextOf, onProgress, locale = defaultLocale } = options;
 
   const crowded = selectForNarration(candidates);

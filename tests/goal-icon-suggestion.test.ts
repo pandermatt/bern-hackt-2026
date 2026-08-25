@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GOAL_ICONS } from "@/lib/goal-icon";
 import { suggestGoalIcon } from "@/lib/llm/suggest-goal-icon";
 
-/** Stands in for the Apertus endpoint, answering with one icon name. */
+/** Stands in for the Gemini endpoint, answering with one icon name. */
 function mockLlm(content: string) {
   // Typed through the generic rather than by declaring parameters the stub does
   // not use: a `vi.fn` with no arguments records its calls as `[]`, and the
@@ -12,7 +12,7 @@ function mockLlm(content: string) {
     async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ choices: [{ message: { content } }] }),
+      json: async () => ({ candidates: [{ content: { parts: [{ text: content }] } }] }),
     }),
   );
   vi.stubGlobal("fetch", fetchMock);
@@ -20,16 +20,16 @@ function mockLlm(content: string) {
 }
 
 describe("suggestGoalIcon", () => {
-  const originalKey = process.env.APERTUS_KEY;
+  const originalKey = process.env.GEMINI_API_KEY;
 
   beforeEach(() => {
-    process.env.APERTUS_KEY = "test_key";
+    process.env.GEMINI_API_KEY = "test_key";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    if (originalKey === undefined) delete process.env.APERTUS_KEY;
-    else process.env.APERTUS_KEY = originalKey;
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
   });
 
   it("takes a name that is in the catalogue", async () => {
@@ -42,9 +42,9 @@ describe("suggestGoalIcon", () => {
     await suggestGoalIcon("Hundewelpe");
 
     const body = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as {
-      messages: { role: string; content: string }[];
+      systemInstruction: { parts: { text: string }[] };
     };
-    const prompt = body.messages[0].content;
+    const prompt = body.systemInstruction.parts[0].text;
 
     // The allowlist is the render table, not a copy of it — so there is no
     // second list that can drift out of step with what `GOAL_ICONS` holds.
@@ -60,7 +60,7 @@ describe("suggestGoalIcon", () => {
   });
 
   it("never asks without a key", async () => {
-    delete process.env.APERTUS_KEY;
+    delete process.env.GEMINI_API_KEY;
     const fetchMock = mockLlm(JSON.stringify({ icon: "Dog" }));
 
     await expect(suggestGoalIcon("Hundewelpe")).resolves.toBeNull();

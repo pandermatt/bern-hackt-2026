@@ -239,17 +239,21 @@ Unchanged from the template this app grew out of, and still exactly true.
   English; there is still no picker, because it is a second field to fill in for
   something the name already says.
 - **`GOAL_ICONS` is the render table *and* the model's allowlist**, and that is
-  the point of it. `lib/llm/suggest-goal-icon.ts` asks Apertus only for a name
+  the point of it. `lib/llm/suggest-goal-icon.ts` asks the model only for a name
   the keyword rules cannot place, offers it the map's own keys, and drops
   anything else rather than repairing it — the same two-key discipline as
   `canEscalateToAlert`. The answer is stored in `savings_goals.icon` (nullable,
   validated on read), so it costs one request per goal, never one per render. No
   key, a timeout or an invented word all mean the same thing: a piggy bank.
-- **The 8B model needs the list one name per line.** Run together as prose it
+- **The model needs the list one name per line.** Measured against the 8B model
+  this replaced, and the difference was not subtle: run together as prose it
   answered "Kite" for a kitesurf board and "Coat" for a winter jacket. As a
   scannable list with worked examples of picking the nearest *listed* thing, 15
   of 16 Swiss-German goal names came back usable. Keep the shape if you touch
-  that prompt.
+  that prompt. This is also the one call that uses `geminiFastModel()` rather
+  than the assistant's own — it sits in a form someone is waiting on, with a
+  six-second budget and a 32-token answer, and Flash is the model that can be
+  told not to think at all.
 - **A lucide glyph is a nested `<svg>`, not a pasted path.** It carries its own
   `viewBox="0 0 24 24"`, so `x`/`y`/`size` place it in the pot's coordinates and
   every icon is square — the `max(width, height)` fitting this used to need went
@@ -424,6 +428,29 @@ Unchanged from the template this app grew out of, and still exactly true.
   `<caption>` on a bare `sr-only` table — both bugs at once — and were
   converted to the wrapper-div-plus-`aria-label` shape; every hidden table
   now follows both rules.
+- **Every model call goes through `lib/llm/gemini.ts`.** The three callers —
+  the chat loop in `app/actions/chat.ts`, the anomaly narratives, the goal-icon
+  pick — keep writing prompts as `{ role, content }`; that module turns them
+  into Gemini's `contents` / `systemInstruction` / `generationConfig` and turns
+  the answer back into one string. Two things it owns are easy to get wrong by
+  hand: **thinking tokens are billed against `maxOutputTokens`**, so the budget
+  is added on top of `MAX_TOKENS` rather than taken out of it (Gemini Pro
+  cannot switch thinking off at all — a request that budgets nothing for it
+  comes back empty with `finishReason: "MAX_TOKENS"`), and a `functionCall`
+  part is rendered back out as `{"<tool>": {…args…}}`, which is the text shape
+  `lib/assistant.ts`'s parsers were written for when the endpoint was an 8B
+  model that could not call tools at all. Those tolerant parsers stay as the
+  net for a model that narrates its call instead of making one.
+- **The assistant draws again, and never from its own numbers.**
+  `display_chart` names a *source* and the app assembles the pie from the same
+  aggregate that answered the tool call, so the caption and the picture cannot
+  disagree. `display_echart` is the escape hatch for a shape a pie cannot carry
+  — the model composes an ECharts option and `sanitizeEChartsOption` is what
+  stands between that payload and the renderer (JSON only, size- and
+  depth-capped, `graphic`/`image`/`tooltip`/`toolbox` stripped, and
+  `image://` / `path://` string *values* dropped, because ECharts fetches those
+  from the viewer's browser). Don't weaken it, and don't let a chart carry a
+  figure no tool returned.
 - **The assistant lives on `/home` and nowhere else, and its state lives in
   the shell.** `components/chat-panel.tsx` exports `useAssistantChat()` beside
   `<ChatPanel>`; `HomeChat` is the one shell around it, inline and already
@@ -681,9 +708,9 @@ Unchanged from the template this app grew out of, and still exactly true.
 - **On a grey panel, a chart's separators are `--surface-muted`, and a bar
   track is `--surface`.** `useChartTokens()` exposes both. Anything filled with
   its own ground disappears — that is why the donut's wedge borders moved off
-  `--surface` and the merchant bars' tracks moved onto it. (The chat once had
-  its own pie on `--surface`; the assistant no longer draws, so the dashboard
-  charts are the rule's only consumers.)
+  `--surface` and the merchant bars' tracks moved onto it. (The chat's own pie
+  is the exception that proves it: `components/chat-pie.tsx` sits inside a
+  `bg-surface` box in the bubble, so its wedge borders stay `--surface`.)
 - **Never animate the page shell in.** Motion applies `initial` styles during
   SSR, so an entrance animation on a container ships it at `opacity: 0` and the
   page stays blank until hydration — or forever, if JS fails. `animate-pulse` in
