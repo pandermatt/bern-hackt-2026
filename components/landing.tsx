@@ -1,21 +1,47 @@
 import {
   ArrowRight,
+  Bell,
   CheckCircle2,
   ChevronRight,
   Lock,
   MessageSquare,
   ShieldCheck,
-  Sparkles,
+  TriangleAlert,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { LandingDragon } from "@/components/landing-dragon";
 import { Link } from "@/i18n/navigation";
+import { DRAGON_SRC, type DragonMood } from "@/lib/nudges";
 
-const FAQ_KEYS = ["faq1", "faq2", "faq3", "faq4", "faq5", "faq6"] as const;
+/**
+ * The questions, and the face Batzi answers each one with.
+ *
+ * Four, down from six: "how are transactions categorized" and "why is the scan
+ * a button" were answers about the app's internals, and this section is the
+ * last thing between a visitor and the sign-up button — what belongs here is
+ * what they are actually deciding about. The four that stayed were all
+ * rewritten; the old first answer still claimed importing your own export was
+ * not built, which stopped being true when `/account` grew the CSV uploader.
+ *
+ * The moods are chosen, not decorative. Shaking his head at the e-banking
+ * question and waving goodbye at the delete one is the answer said twice — and
+ * a picture is read before a paragraph is.
+ */
+const FAQS = [
+  // First, because it is the thing here nobody else does — the rest of the list
+  // is what a visitor needs reassuring about, and this is what they came for.
+  { key: "faqAnomaly", mood: "detective" },
+  { key: "faqBank", mood: "no" },
+  { key: "faqData", mood: "reading" },
+  { key: "faqBatzi", mood: "zoom" },
+  { key: "faqDelete", mood: "bye" },
+] as const satisfies readonly { key: string; mood: DragonMood }[];
 
 export function Landing() {
   const t = useTranslations("Landing");
+  // The alt lines live in their own namespace — see `Dragon` in the catalogs.
+  const tDragon = useTranslations("Dragon");
 
   return (
     <div className="w-full flex-1 flex flex-col bg-bg text-text selection:bg-brand/30 selection:text-text">
@@ -55,7 +81,10 @@ export function Landing() {
           {/* Quick trust highlights */}
           <div className="mt-10 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-text-subtle font-medium">
             <div className="flex items-center gap-1.5">
-              <ShieldCheck className="size-4 text-accent" />
+              {/* `TriangleAlert`, the same glyph `/anomalies` wears in the nav
+                  — the highlight names that feature, so it should be findable
+                  by its picture once someone is inside. */}
+              <TriangleAlert className="size-4 text-accent" />
               <span>{t('trust1')}</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -63,7 +92,9 @@ export function Landing() {
               <span>{t('trust2')}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Sparkles className="size-4 text-accent" />
+              {/* `Bell`, the glyph `components/push-notifications.tsx` uses on
+                  the control this line is about. */}
+              <Bell className="size-4 text-accent" />
               <span>{t('trust3')}</span>
             </div>
           </div>
@@ -78,7 +109,16 @@ export function Landing() {
             and the assistant are what nobody else has, so they take the hero
             and the figures wait until they have an account to be about.
            ───────────────────────────────────────────────────────────── */}
-        <div className="mx-auto mt-12 w-full max-w-3xl px-5 sm:px-8">
+        {/* Full-bleed, and it needs no trick to be: this slot is a sibling of
+            the hero's `max-w-5xl px-5 sm:px-8` column, not a child of it, so it
+            simply inherits the `w-full` section. (A `w-screen` with negative
+            margins was tried and is the wrong tool here — it resolves against
+            the viewport while its left edge starts at the column's, so the band
+            ends up both overflowing and off-centre.)
+
+            `LandingDragon` carries its own inner column, so the copy stays at a
+            readable measure while the block itself is free to span the page. */}
+        <div className="mt-12">
           <LandingDragon />
         </div>
       </section>
@@ -153,25 +193,71 @@ export function Landing() {
          ───────────────────────────────────────────────────────────── */}
       <section className="w-full py-16 sm:py-24 bg-surface">
         <div className="mx-auto w-full max-w-5xl px-5 sm:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle mb-2">
-            {t("faqEyebrow")}
-          </p>
+          {/* No eyebrow over this one. "Frequently Asked Questions" is already
+              the most self-explanatory heading on the page, and a kicker above
+              it can only restate it. */}
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-text mb-10">
             {t("faqTitle")}
           </h2>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {FAQ_KEYS.map((key) => (
-              <div
-                key={key}
-                className="rounded-xl border border-line/80 bg-surface-hover/50 p-6"
-              >
-                <h3 className="text-sm font-semibold text-text">
+          {/* One column, not the two-across grid this was. Each entry is now an
+              exchange rather than a card of prose — the question asked, then
+              Batzi answering it — and an exchange squeezed into a half-width
+              card puts the mascot beside four words and the answer under it.
+
+              It runs the full `max-w-5xl` the section is already bounded by,
+              rather than a narrower reading column inside it, so the exchanges
+              line up with the heading above them and with every other section
+              on the page.
+
+              The arrangement is the app's own, from `components/dragon-buddy.tsx`:
+              the words lead and the speaker follows, so the reader gets the
+              sentence first and the picture as the thing that said it. The
+              bubble keeps its own `bg-surface` because this section's ground is
+              `bg-surface` too — that is why it is the one place here that fills
+              with `--bg` instead, the reverse of the usual pairing. */}
+          <div className="flex flex-col gap-8">
+            {FAQS.map(({ key, mood }) => (
+              <div key={key}>
+                <h3 className="text-[15px] font-semibold text-text sm:text-base">
                   {t(`${key}Question`)}
                 </h3>
-                <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                  {t(`${key}Answer`)}
-                </p>
+
+                {/* `items-end`, not centred. These answers are paragraphs, not
+                    the one-liners `DragonBuddy` carries, and on a phone the
+                    German ones run seven lines — a centred speaker ends up
+                    alongside the middle of its own paragraph. Sitting it on the
+                    baseline also puts the trail level with `rounded-br-sm`,
+                    which is the corner standing in for the tail. */}
+                <div className="mt-3 flex items-end gap-1.5 sm:gap-3">
+                  <p className="min-w-0 flex-1 rounded-2xl rounded-br-sm border border-line/80 bg-bg px-4 py-3 text-[13px] leading-relaxed text-text-muted sm:text-sm">
+                    {t(`${key}Answer`)}
+                  </p>
+
+                  {/* The trail across to the speaker, shrinking as it goes —
+                      anchored to its own slot rather than to the mascot's head,
+                      for the reason `DragonBuddy` gives: the head sits in a
+                      different place in every pose. */}
+                  <span aria-hidden className="mb-3 flex shrink-0 items-center gap-1">
+                    {/* The far nub goes below `sm`. The mascot and the trail
+                        together cost ~100px of a 375px screen, and every pixel
+                        of that comes out of the text column. */}
+                    <span className="hidden size-2.5 rounded-full border border-line bg-bg sm:block" />
+                    <span className="size-1.5 rounded-full border border-line bg-bg" />
+                  </span>
+
+                  {/* A plain `<img>`, like `merchant-avatar.tsx` and every other
+                      mascot in the app: a small same-origin asset already at its
+                      final size. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={DRAGON_SRC[mood]}
+                    alt={tDragon(mood)}
+                    width={512}
+                    height={512}
+                    className="h-12 w-12 shrink-0 drop-shadow-sm sm:h-20 sm:w-20"
+                  />
+                </div>
               </div>
             ))}
           </div>

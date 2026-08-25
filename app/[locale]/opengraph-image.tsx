@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { ImageResponse } from "next/og";
 import { getTranslations } from "next-intl/server";
 
@@ -39,12 +42,34 @@ const INK_MUTED = "#6E6E73";
 /* Satori renders SVG reliably through an <img> data URI, so the mark is
    embedded rather than written as JSX elements. No fill parameter, unlike the
    single-path signet this replaced: the colours belong to the artwork. */
-function dragonUri() {
+function signetUri() {
   const paths = SIGNET_PATHS.map(
     (path) => `<path d="${path.d}" fill="${path.fill}"/>`,
   ).join("");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${SIGNET_VIEWBOX}">${paths}</svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Batzi, inlined.
+ *
+ * **`22-coin.png`, and the `.png` is the point.** Every mascot pose ships as
+ * WebP (`lib/nudges.ts` maps all thirty-five), which Satori cannot decode —
+ * so that one pose has a PNG twin beside it in `public/dragons`, regenerated
+ * with `magick res/icons/512/22-coin-512.webp public/dragons/22-coin.png` if
+ * the artwork ever changes. It is a compatibility copy for this file, not a
+ * second asset set: nothing else reads it, and no other pose needs one.
+ *
+ * Read off disk rather than fetched from `site.url`. The card renders without
+ * a guaranteed origin — at build time there is no server, and `proxy.ts` does
+ * not run for the request that draws it.
+ *
+ * The pose is the coin one because the mascot is called Batzi, after the
+ * Batzen he is holding in it.
+ */
+async function mascotUri() {
+  const png = await readFile(join(process.cwd(), "public/dragons/22-coin.png"));
+  return `data:image/png;base64,${png.toString("base64")}`;
 }
 
 /* Deliberately a static string and not `generateImageMetadata`, which would be
@@ -56,6 +81,7 @@ export const alt = `${site.name} — ${site.tagline}`;
 export default async function OpengraphImage({ params }: PageProps<"/[locale]">) {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Metadata" });
+  const mascot = await mascotUri();
 
   return new ImageResponse(
     (
@@ -68,19 +94,29 @@ export default async function OpengraphImage({ params }: PageProps<"/[locale]">)
           background: WHITE,
         }}
       >
-        {/* The dragon, oversized and just running off the right edge. How far
-            it may bleed is bounded on both sides: the artwork's own left margin
-            has to clear the copy column, which ends at x=820, and the card's
-            edge has to fall in the tail flames rather than through the head.
-            At this offset the drawing spans x 875–1226 and the head, which sits
-            in its upper right, survives the cut. The bottom stops at 510, above
-            the band at 542. */}
+        {/* Batzi, oversized and just running off the right edge — the mascot
+            now, where this used to be the signet a second time. It is the
+            character the whole app is arranged around, and the card is the one
+            place a stranger meets it first.
+
+            The bleed is bounded on both sides and both numbers moved with the
+            artwork: the signet's drawing sat inside x 59–433 of its own 512
+            box, and Batzi fills his frame far more evenly, so the offset that
+            framed the signet would have run the copy column through his tail.
+            520px at `right: -60` puts the box at x 740–1260 — the only part of
+            it reaching past the copy column's x=820 is the transparent corner
+            above his wing — and takes the card's edge through the wingtip
+            rather than the head, which sits centre-left. Vertically the box
+            ends at 530, just above the Supernova band at 542.
+
+            Both are read off *this* drawing rather than off the 512 box, so
+            re-measure them by eye if the pose ever changes. */}
         <img
-          src={dragonUri()}
-          width={480}
-          height={480}
+          src={mascot}
+          width={520}
+          height={520}
           alt=""
-          style={{ position: "absolute", top: 30, right: -100 }}
+          style={{ position: "absolute", top: 10, right: -60 }}
         />
 
         <div
@@ -96,7 +132,7 @@ export default async function OpengraphImage({ params }: PageProps<"/[locale]">)
               the white the app's own tile provides, so a tile here would be a
               white square on white. */}
           <div style={{ display: "flex", alignItems: "center" }}>
-            <img src={dragonUri()} width={72} height={72} alt="" />
+            <img src={signetUri()} width={72} height={72} alt="" />
             <div
               style={{
                 display: "flex",

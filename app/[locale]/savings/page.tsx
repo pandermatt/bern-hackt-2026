@@ -2,9 +2,12 @@ import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 
 import { getSavingsOverview } from "@/app/actions/savings";
+import { DragonBuddy } from "@/components/dragon-buddy";
 import { SavingsGoals } from "@/components/savings-goals";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { formatMoney } from "@/lib/insights";
+import { dragonForSavings, savingsVerdict } from "@/lib/nudges";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +47,40 @@ export default async function SavingsPage({
 
   const { month } = savings;
 
+  /* The dragon's read on the pots, decided once in `lib/nudges.ts` so the
+     picture and the sentence come from the same verdict rather than from two
+     conditions that can drift apart. Same shape as `/budget` and
+     `/anomalies`. */
+  const verdict = savingsVerdict({
+    pots: savings.pots,
+    freeMinor: savings.freeMinor,
+    pooledMinor: savings.pooledMinor,
+  });
+  const funded = savings.pots.filter(
+    (pot) => pot.targetMinor > 0 && pot.savedMinor >= pot.targetMinor,
+  ).length;
+  const dragonLine =
+    verdict === "no-goals"
+      ? t("dragonNoGoals")
+      : verdict === "overdrawn"
+        ? t("dragonOverdrawn")
+        : verdict === "free"
+          ? t("dragonFree")
+          : verdict === "funded"
+            ? t("dragonFunded")
+            : t("dragonSaving", { count: savings.pots.length });
+  /* A figure worth naming, where there is one. "No goals" and an overdrawn
+     pool both have nothing to add — the number that would go here is zero,
+     and printing it says the sentence again. */
+  const dragonNote =
+    verdict === "free"
+      ? t("dragonNoteFree", { amount: formatMoney(savings.freeMinor) })
+      : verdict === "funded"
+        ? t("dragonNoteFunded", { count: funded })
+        : verdict === "saving"
+          ? t("dragonNoteSaving", { amount: formatMoney(savings.allocatedMinor) })
+          : undefined;
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:py-12">
       {/* The dashboard's, the budget page's and the anomalies page's own
@@ -61,6 +98,17 @@ export default async function SavingsPage({
         <p className="mt-1 text-[13.5px] text-text-muted">
           {month ? t("pageSubtitle") : t("pageSubtitleEmpty")}
         </p>
+      </div>
+
+      {/* Under the heading rather than among the pots, for the reason
+          `/anomalies` gives: it is a read on the whole page, and a mascot
+          inside the grid would look like one more goal. */}
+      <div className="mb-6">
+        <DragonBuddy
+          mood={dragonForSavings(verdict)}
+          line={dragonLine}
+          note={dragonNote}
+        />
       </div>
 
       <SavingsGoals overview={savings} />

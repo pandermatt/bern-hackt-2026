@@ -14,6 +14,7 @@ import {
   defaultPeriod,
   extractFollowUps,
   extractJsonAfter,
+  extractMood,
   extractSql,
   formatSwissNumbers,
   languageName,
@@ -44,6 +45,7 @@ import {
   type ToolName,
   type WireMessage,
 } from "@/lib/assistant";
+import type { DragonMood } from "@/lib/nudges";
 import {
   anomaliesSummary,
   categorySummary,
@@ -167,8 +169,13 @@ function normalizeHistory(
   return tail.some((m) => m.role === "user") ? tail : undefined;
 }
 
+/**
+ * `sad` rather than nothing: an error bubble is still Batzi saying something,
+ * and the panel would otherwise have to invent a face for the one case where
+ * the model never got to choose one.
+ */
 function failure(reply: string): AssistantTurn {
-  return { reply, error: true };
+  return { reply, mood: "sad", error: true };
 }
 
 /** The tools whose figures come out of the (period-scoped) dashboard
@@ -322,6 +329,7 @@ export async function* runAssistantTurn(
   let chartExplicit = false;
   let reply: string | undefined;
   let proposedFollowUps: string[] = [];
+  let mood: DragonMood | undefined;
   // Once any tool has run this turn, a digit-bearing reply is a caption, not a
   // stall — the stall/prose heuristics stand down.
   let toolRan = false;
@@ -361,7 +369,10 @@ export async function* runAssistantTurn(
   const salvage = async (): Promise<AssistantTurn | undefined> => {
     if (!proposal && !chart) return undefined;
     const t = await getTranslations({ locale, namespace: "Chat" });
-    return { reply: t("partialReply"), proposal, chart };
+    // A chart or a proposal did arrive, so this is not a failure the way
+    // `failure()` is — the app's own figures made it out. `thinking` rather
+    // than `sad`: the answer is partial, not wrong.
+    return { reply: t("partialReply"), proposal, chart, mood: "thinking" };
   };
 
   // Every failed try, named with the model that failed and whether another one
@@ -526,9 +537,15 @@ export async function* runAssistantTurn(
     }
 
     if (calls.length === 0) {
-      const extracted = extractFollowUps(stripModelMarkup(content));
+      // Both markers come off in one chain, and the mood first: its line is
+      // the shorter of the two and a model that runs them together
+      // ("MOOD: happy FOLLOWUP: …?") would otherwise have the mood swallowed
+      // into a follow-up question.
+      const faced = extractMood(stripModelMarkup(content));
+      const extracted = extractFollowUps(faced.text);
       reply = formatSwissNumbers(extracted.text);
       proposedFollowUps = extracted.followUps;
+      mood = faced.mood;
       break;
     }
 
@@ -837,6 +854,7 @@ export async function* runAssistantTurn(
     chart,
     proposal,
     followUps: await followUpsFor(history, proposedFollowUps, locale),
+    mood,
   });
 }
 
@@ -885,6 +903,24 @@ async function followUpsFor(
  * total (`keepsFigures`), and an unset GEMINI_API_KEY — which is why the caller
  * reaches this before the key check rather than after it.
  */
+/**
+ * A face per recipe, chosen here rather than by the model.
+ *
+ * The happy paths do not ask for one: `paraphrasePromptFor` gives the model a
+ * rendered summary and one job — say this, in two or three sentences — and
+ * asking an 8B model for a mood in the same breath is the same mistake the
+ * follow-ups note warns about. The recipe already knows what kind of answer it
+ * is, so the app picks, and each recipe gets a different one so the transcript
+ * still varies.
+ */
+const HAPPY_PATH_MOOD: Record<HappyPathId, DragonMood> = {
+  recent_spending: "reading",
+  anomalies: "detective",
+  subscriptions: "typing",
+  savings_potential: "piggy-bank",
+  spending_by_category: "zoom",
+};
+
 async function answerHappyPath({
   id,
   question,
@@ -1015,7 +1051,7 @@ async function answerHappyPath({
       status: "ok",
       note: `happy path · ${id} · no key, summary served`,
     });
-    return { reply: text, chart, followUps };
+    return { reply: text, chart, followUps, mood: HAPPY_PATH_MOOD[id] };
   }
   const reply = await paraphrase({
     id,
@@ -1027,7 +1063,7 @@ async function answerHappyPath({
     key,
     record,
   });
-  return { reply: reply ?? text, chart, followUps };
+  return { reply: reply ?? text, chart, followUps, mood: HAPPY_PATH_MOOD[id] };
 }
 
 /**
@@ -1125,10 +1161,12 @@ async function paraphrase({
 
   const usage = geminiUsage(data);
   const content = geminiText(data);
-  // FOLLOWUP lines are not asked for here, but a model that has seen the other
-  // prompt sometimes writes them anyway; stripping is cheaper than explaining.
+  // Neither FOLLOWUP nor MOOD lines are asked for here, but a model that has
+  // seen the other prompt sometimes writes them anyway; stripping is cheaper
+  // than explaining. The mood it names is discarded rather than used — the
+  // recipe's own face is the better answer, and see `HAPPY_PATH_MOOD`.
   const cleaned = formatSwissNumbers(
-    extractFollowUps(stripModelMarkup(content)).text,
+    extractFollowUps(extractMood(stripModelMarkup(content)).text).text,
   ).trim();
 
   // Twenty characters is below any real answer in either language and above

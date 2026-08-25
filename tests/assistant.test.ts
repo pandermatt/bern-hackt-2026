@@ -16,6 +16,7 @@ import {
   defaultPeriod,
   detectSubscriptions,
   extractFollowUps,
+  extractMood,
   parseAllocationArgs,
   parseToolCalls,
   resolvePeriod,
@@ -1002,5 +1003,53 @@ describe("sanitizeEChartsOption", () => {
     expect(
       sanitizeEChartsOption({ series, blob: "x".repeat(30_000) }),
     ).toBeUndefined();
+  });
+});
+
+describe("extractMood", () => {
+  it("takes the face off the answer and keeps the words", () => {
+    const { text, mood } = extractMood(
+      "You spent CHF 1'240.00 on groceries this year.\nMOOD: reading",
+    );
+    expect(mood).toBe("reading");
+    expect(text).toBe("You spent CHF 1'240.00 on groceries this year.");
+  });
+
+  it("does not mind where the line is, or how it is dressed", () => {
+    // A model that has been told to end with the marker puts it first about as
+    // often, and wraps a one-word answer in whatever punctuation it likes.
+    expect(extractMood("**MOOD:** detective\nSomething odd here.").mood).toBe(
+      "detective",
+    );
+    expect(extractMood("- mood: 'piggy-bank'").mood).toBe("piggy-bank");
+    expect(extractMood('MOOD: "Celebrate"\nBudget kept.').mood).toBe("celebrate");
+  });
+
+  it("drops a name it does not have a drawing for, rather than guessing", () => {
+    // The same allowlist discipline `GOAL_ICONS` keeps: a near-miss repaired
+    // into the wrong picture is worse than the panel's neutral fallback.
+    const { text, mood } = extractMood("All good.\nMOOD: excited");
+    expect(mood).toBeUndefined();
+    // Stripped either way — `MOOD: excited` left in the bubble is the one
+    // failure a reader can actually see.
+    expect(text).toBe("All good.");
+  });
+
+  it("takes the model at its final word", () => {
+    expect(extractMood("MOOD: sad\nActually it is fine.\nMOOD: happy").mood).toBe(
+      "happy",
+    );
+  });
+
+  it("leaves an answer that never named one alone", () => {
+    const { text, mood } = extractMood("Your rent is CHF 3'000.00 a month.");
+    expect(mood).toBeUndefined();
+    expect(text).toBe("Your rent is CHF 3'000.00 a month.");
+  });
+
+  it("does not eat a sentence that merely says the word", () => {
+    const { text, mood } = extractMood("Your mood: not my department.");
+    expect(mood).toBeUndefined();
+    expect(text).toBe("Your mood: not my department.");
   });
 });
