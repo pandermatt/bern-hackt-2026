@@ -307,6 +307,20 @@ export const budgets = sqliteTable(
     category: text("category").notNull(),
     /** Positive minor units per month. */
     limitMinor: integer("limit_minor").notNull(),
+    /**
+     * Whether going past this limit is worth being told about.
+     *
+     * Rent is over every month by design, and a warning that fires forever
+     * about a fact the account holder has already accepted teaches them to skip
+     * the whole deck. Switching it off silences the *nudge* and the dragon; the
+     * figure is still true, so `/budget` still prints the row in red.
+     *
+     * **Nullable, and NULL means "warn".** A row written before this column
+     * existed has no opinion and should keep warning — and a nullable column is
+     * what `drizzle-kit push` can add to a populated table without `--force`,
+     * the same constraint `transactions.userId` and `users.name` document.
+     */
+    warnOverspend: integer("warn_overspend", { mode: "boolean" }),
     updatedAt: integer("updated_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

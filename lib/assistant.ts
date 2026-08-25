@@ -20,6 +20,7 @@
  * understood.
  */
 import type { AnomalyGroup, AnomalyOverview } from "@/app/actions/anomalies";
+import type { BudgetOverview } from "@/app/actions/budget";
 import type { SavingsOverview } from "@/app/actions/savings";
 import type { Dashboard } from "@/app/actions/transactions";
 import type { Transaction } from "@/db/schema";
@@ -205,6 +206,7 @@ export const SYSTEM_PROMPT = [
   "Name only the figures that answer the question — the biggest item and the takeaway — rather than listing everything a tool returned.",
   "When the tools cannot answer — a specific transaction, a day of week, a count, a comparison they don't cover — call run_sql with one SQLite SELECT over the transactions table; the schema is in the tool description.",
   "Four tools carry the advice questions: get_savings_potential for where the customer could save (advise only on its flexible categories — fixed costs like housing, insurance and taxes cannot be cut); get_recent_anomalies for anything suspicious or unusual (stay calm — most findings are the customer's own legitimate spending); get_subscriptions for recurring subscriptions; get_savings_goals for the saving goals and a month's unallocated surplus.",
+  "For anything about budgets or limits — which ones are broken, by how much, what to do — call get_budget_status. Name the figures it returns, then give the customer both ways out: leave the budget alone and switch that category's warning off on the budget page, or raise its limit to what they actually spent. You cannot change a budget yourself — never claim you did, or that you will.",
   "To allocate a month's surplus: call get_savings_goals first, then propose_allocation with one amount per goal from the free amount. The app validates the split and shows it to the customer with an Apply button; caption the final split the tool returns and invite the tap. Only that tap moves money — never claim it already moved.",
   'You can show one chart per answer. When the question is about how money splits or how it moves — spending by category, top merchants, income, a trend over months — call display_chart with a source, e.g. [{"display_chart": {"source": "categories", "period": "ytd"}}]. The app assembles the pie from the customer\'s real data and hands you the same figures back for your caption. Skip the chart for a single specific number, a date, a yes/no answer, and for the advice questions below — a pie under "is anything suspicious" helps nobody.',
   'For a visual a pie cannot carry — bars over months, a line, a scatter — call display_echart with a complete Apache ECharts option as a JSON string, built only from figures you already fetched with the tools or run_sql. When the user names a chart type that is not a pie, display_echart is the only right tool.',
@@ -250,6 +252,7 @@ export const TOOL_NAMES = [
   "get_subscriptions",
   "get_recent_anomalies",
   "get_savings_goals",
+  "get_budget_status",
   "propose_allocation",
   "run_sql",
   "display_chart",
@@ -379,6 +382,12 @@ export const TOOL_DEFINITIONS = [
     description:
       "The customer's saving goals (target, saved so far, still missing) plus a month's surplus and how much of it is still free to put into the goals. Defaults to the last completed month; pass a month period for another one.",
     parameters: PERIOD_PARAMETERS,
+  },
+  {
+    name: "get_budget_status",
+    description:
+      "The customer's monthly budget: the limit they set per category, what they have spent against it this month, how far over or under each one is, and whether they asked to be warned about that category at all. The right tool for anything about budgets, limits, or being over them.",
+    parameters: EMPTY_PARAMETERS,
   },
   {
     name: "propose_allocation",
@@ -653,6 +662,7 @@ export function runTool(
     case "get_subscriptions":
     case "get_recent_anomalies":
     case "get_savings_goals":
+    case "get_budget_status":
     case "propose_allocation":
       // All need what a pure helper cannot hold — the SQL sandbox, the parsed
       // ECharts option, or a database read of their own — so the action loop
@@ -1273,6 +1283,70 @@ export function savingsGoalsToolResult(overview: SavingsOverview | null): unknow
   };
 }
 
+/**
+ * The get_budget_status payload.
+ *
+ * Everything the model needs to answer "which budgets am I over, and what do I
+ * do about it" without inventing a franc: the limit, the spend against it, the
+ * gap either way, and whether the customer has already asked not to hear about
+ * that category.
+ *
+ * The note carries the two ways out, because they are both things only the
+ * *customer* can do — this tool reads, and the model must not offer to change a
+ * budget it cannot reach. Same discipline as `savingsGoalsToolResult`, which
+ * says in as many words that the model cannot move money.
+ */
+export function budgetStatusToolResult(overview: BudgetOverview | null): unknown {
+  if (!overview || overview.month === null || overview.rows.length === 0) {
+    return { note: "No statement months yet — there is nothing to budget." };
+  }
+
+  const limited = overview.rows.filter((row) => row.limitMinor !== null);
+  if (limited.length === 0) {
+    return {
+      month: overview.month,
+      note: "The customer has not set any monthly limits yet — they can set one per category on the budget page.",
+    };
+  }
+
+  const over = limited.filter((row) => row.usedMinor > (row.limitMinor as number));
+  const notes: string[] = [];
+  if (over.length === 0) {
+    notes.push("Every limit is being kept this month.");
+  } else {
+    notes.push(
+      "For each category that is over, offer both ways out: leave the budget as it is and switch that category's warning off on the budget page, or raise its limit to what was actually spent. Only the customer can do either — you cannot change a budget.",
+    );
+    if (over.some((row) => !row.warnOverspend)) {
+      notes.push(
+        "A category with warnings already off is one the customer has decided about — mention it as settled, not as a problem.",
+      );
+    }
+  }
+
+  return {
+    month: overview.month,
+    categories: limited.map((row) => ({
+      name: row.category,
+      limit_chf: chf(row.limitMinor as number),
+      spent_chf: chf(row.usedMinor),
+      over_by_chf:
+        row.usedMinor > (row.limitMinor as number)
+          ? chf(row.usedMinor - (row.limitMinor as number))
+          : null,
+      left_chf:
+        row.usedMinor > (row.limitMinor as number)
+          ? null
+          : chf((row.limitMinor as number) - row.usedMinor),
+      // What raising the limit would mean, so the model quotes a figure the
+      // app computed rather than one it rounded to.
+      would_need_chf: chf(row.usedMinor),
+      warnings_on: row.warnOverspend,
+    })),
+    note: notes.join(" "),
+  };
+}
+
 /** A goal-and-francs pair as the model wrote it, minor units, unvalidated. */
 export type RawAllocation = { goal: string; amountMinor: number };
 
@@ -1727,6 +1801,12 @@ export function routeTool(question: string): ToolName | undefined {
     /überschuss/.test(q)
   ) {
     return "get_savings_goals";
+  }
+  // Ahead of everything below, and well ahead of the category catch-all, which
+  // would answer a budget question with a list of what was spent and never
+  // mention a limit. The nudge on `/home` asks exactly this.
+  if (/\b(budget\w*|limits?)\b/.test(q) || /überschritt\w*|budgets?/.test(q)) {
+    return "get_budget_status";
   }
   // "save" alone stays with get_overview below ("how much did I save?"); it is
   // the ability/where words beside it that make the question about potential.

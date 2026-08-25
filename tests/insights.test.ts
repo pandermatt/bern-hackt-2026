@@ -376,6 +376,29 @@ describe("budgetRows", () => {
     expect(housing.suggestedMinor).toBe(200_000);
   });
 
+  it("warns about every category unless one was silenced", () => {
+    const rows = [
+      spend("Housing", "2025-01-05", 180_000),
+      spend("Food & Drink", "2025-01-06", 20_000),
+    ];
+
+    const [housing, food] = budgetRows(
+      rows,
+      "2025-01",
+      new Map([
+        ["Housing", 100_000],
+        ["Food & Drink", 10_000],
+      ]),
+      undefined,
+      new Set(["Housing"]),
+    );
+
+    // The figures are identical either way — the flag is about whether anything
+    // says so, not about the arithmetic.
+    expect(housing).toMatchObject({ usedMinor: 180_000, warnOverspend: false });
+    expect(food).toMatchObject({ usedMinor: 20_000, warnOverspend: true });
+  });
+
   it("reports a missing limit as null, never as zero", () => {
     const rows = [spend("Housing", "2025-01-10", 1_000)];
     const [housing] = budgetRows(rows, "2025-01", new Map());

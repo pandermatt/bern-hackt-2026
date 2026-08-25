@@ -5,6 +5,7 @@ import {
   dragonFor,
   isOverBudget,
   rankNudges,
+  warnsOverBudget,
   UNFILED_MERCHANTS_FLOOR,
   type NudgeInput,
 } from "@/lib/nudges";
@@ -16,6 +17,7 @@ function row(overrides: Partial<BudgetRow> = {}): BudgetRow {
     limitMinor: 100000,
     suggestedMinor: 100000,
     usedMinor: 50000,
+    warnOverspend: true,
     ...overrides,
   };
 }
@@ -64,6 +66,24 @@ describe("isOverBudget", () => {
     // `null` is "no limit", which is not a limit of zero. Without the guard
     // every unbudgeted category reports itself as over the moment it is used.
     expect(isOverBudget(row({ limitMinor: null, usedMinor: 999999 }))).toBe(false);
+  });
+});
+
+describe("warnsOverBudget", () => {
+  it("is an overspend the reader still wants to hear about", () => {
+    expect(warnsOverBudget(row({ limitMinor: 100, usedMinor: 101 }))).toBe(true);
+  });
+
+  it("says nothing about a category whose warning was switched off", () => {
+    // Still over — `/budget` prints the row in red and the radar still puts the
+    // spoke outside its ring. What is off is the telling.
+    const muted = row({ limitMinor: 100, usedMinor: 101, warnOverspend: false });
+    expect(isOverBudget(muted)).toBe(true);
+    expect(warnsOverBudget(muted)).toBe(false);
+  });
+
+  it("has nothing to warn about when the limit is kept", () => {
+    expect(warnsOverBudget(row({ limitMinor: 100, usedMinor: 100 }))).toBe(false);
   });
 });
 
@@ -133,6 +153,26 @@ describe("rankNudges", () => {
     // the whole deck.
     expect(nudges.map((n) => n.id)).toEqual(["over-budget:Housing"]);
     expect(nudges[0]).toMatchObject({ overMinor: 60000, others: 1 });
+  });
+
+  it("leaves a silenced category out of the deck and out of the count", () => {
+    const nudges = rankNudges(
+      input({
+        budget: [
+          // The worst overspend, and the reader has already decided about it.
+          row({
+            category: "Housing",
+            limitMinor: 100000,
+            usedMinor: 160000,
+            warnOverspend: false,
+          }),
+          row({ category: "Food", limitMinor: 20000, usedMinor: 25000 }),
+        ],
+      }),
+    );
+
+    // The card is about Food, and it does not claim Housing as an "other".
+    expect(nudges).toMatchObject([{ category: "Food", others: 0 }]);
   });
 
   it("keeps at most one card of each kind", () => {

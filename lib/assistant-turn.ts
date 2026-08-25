@@ -2,10 +2,12 @@ import { cookies } from "next/headers";
 import { getLocale, getTranslations } from "next-intl/server";
 
 import { getAnomalyOverview } from "@/app/actions/anomalies";
+import { getBudgetOverview } from "@/app/actions/budget";
 import { getSavingsOverview } from "@/app/actions/savings";
 import { getDashboard, listTransactions } from "@/app/actions/transactions";
 import {
   anomaliesToolResult,
+  budgetStatusToolResult,
   buildAllocationProposal,
   chartToolForSource,
   composeEChart,
@@ -719,6 +721,20 @@ export async function* runAssistantTurn(
           content: JSON.stringify({
             tool: name,
             result: savingsGoalsToolResult(overview),
+          }),
+        });
+        toolRan = true;
+        continue;
+      }
+
+      if (name === "get_budget_status") {
+        // The budget page's own default month, which is the month the customer
+        // is looking at when the nudge sends them here.
+        messages.push({
+          role: "tool",
+          content: JSON.stringify({
+            tool: name,
+            result: budgetStatusToolResult(await getBudgetOverview()),
           }),
         });
         toolRan = true;

@@ -34,6 +34,7 @@ function row(overrides: Partial<BudgetRow> = {}): BudgetRow {
     limitMinor: 100000,
     suggestedMinor: 100000,
     usedMinor: 50000,
+    warnOverspend: true,
     ...overrides,
   };
 }
@@ -65,6 +66,13 @@ describe("budgetVerdict", () => {
   it("reports going over ahead of everything else", () => {
     const rows = [row({ usedMinor: 120000 }), row({ category: "Food", usedMinor: 1000 })];
     expect(budgetVerdict(rows)).toBe("over");
+  });
+
+  it("does not report a category the reader asked it not to", () => {
+    // Over, and settled: the row still reads red on the budget page, and the
+    // dragon above it has nothing to say about it.
+    const rows = [row({ usedMinor: 120000, warnOverspend: false })];
+    expect(budgetVerdict(rows)).toBe("tight");
   });
 
   it("separates nearly-over from comfortably inside", () => {

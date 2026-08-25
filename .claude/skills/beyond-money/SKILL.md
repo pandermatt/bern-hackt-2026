@@ -41,8 +41,11 @@ and leave only through the danger zone's `clearTransactions`.
   populated table and `drizzle-kit push` deploys without `--force`, whereas
   `budgets` is created empty, so the constraint costs nothing. The unique index
   on `(user_id, category)` is what makes saving an upsert rather than a
-  read-then-write race. The two savings tables are created empty for the same
-  reason and follow the same shape.
+  read-then-write race. **`budgets.warn_overspend` is nullable, and NULL means
+  "warn"** — a row written before the column existed has no opinion and must
+  keep warning, and nullable is what `push` can add to a table that already has
+  rows. The two savings tables are created empty for the same reason and follow
+  the same shape.
 - **`merchant_overrides` is applied on read and never written into
   `transactions`.** It holds what the account holder decided about a merchant —
   the category its lines belong to, and the domain its logo comes from — set on
@@ -474,6 +477,17 @@ Unchanged from the template this app grew out of, and still exactly true.
   control is spelled from the model id. The chat debug panel's dropdown picks
   which model leads, stored in an `httpOnly` cookie and validated against
   `geminiModelChoices()` on the way back in.
+- **The over-budget nudge opens a conversation; the budget page is where it is
+  acted on.** `components/nudge-card.tsx` sends `Chat.budgetQuestion` through
+  `askBatzi`, and `get_budget_status` answers it from `getBudgetOverview` — the
+  model has no other way to see a limit, since the `run_sql` sandbox holds
+  `transactions` and nothing else. The reply offers the two ways out: switch
+  that category's warning off, or raise its limit to what was actually spent.
+  **The assistant does neither.** It stays read-only the way `propose_allocation`
+  is — the model proposes, and only a control the customer presses writes
+  anything — and the tool result says so in its own note, as the savings one
+  does. A new tool also needs a `Chat.status.<tool>` line in both catalogs, or
+  the panel falls back to "thinking".
 - **The assistant draws again, and never from its own numbers.**
   `display_chart` names a *source* and the app assembles the pie from the same
   aggregate that answered the tool call, so the caption and the picture cannot
@@ -653,7 +667,13 @@ Unchanged from the template this app grew out of, and still exactly true.
   `UNFILED_MERCHANTS_FLOOR` (more than ten): under that it is quicker to file
   them than to read a card about filing them, and the deck has three slots. `isOverBudget`
   lives there too: the comparison used to be inline in both `budget-editor` and
-  `budget-radar` and exported from neither. Capped at three, warnings before
+  `budget-radar` and exported from neither. **`warnsOverBudget` is the second
+  predicate, and the split is the point**: `isOverBudget` is arithmetic, while
+  everything that *warns* — the deck, `budgetVerdict`, the budget page's own
+  dragon — asks the other one, which also honours the category's switch. A
+  silenced category is still over: the editor prints the row in red and the
+  radar puts the spoke outside its ring, because the figure is true and only
+  the telling is off. Capped at three, warnings before
   chores before tips, because an entry page is not an inbox — and **at most one
   card of each kind**. The cap alone let one kind take the whole deck: three
   categories over budget filled all three slots with the same sentence about

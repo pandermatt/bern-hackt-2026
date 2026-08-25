@@ -171,6 +171,21 @@ export function isOverBudget(row: BudgetRow): boolean {
 }
 
 /**
+ * Whether an overspend is worth *saying something about*.
+ *
+ * A separate predicate rather than a condition folded into `isOverBudget`,
+ * because the two are different questions and only one of them is arithmetic.
+ * Rent over its limit is still over its limit — `/budget` prints that row in
+ * red either way, and the radar still draws the spoke outside the ring. What
+ * the switch governs is whether the dragon brings it up, and this is the
+ * predicate everything that *warns* asks: the entry page's deck, the budget
+ * page's own verdict.
+ */
+export function warnsOverBudget(row: BudgetRow): boolean {
+  return isOverBudget(row) && row.warnOverspend;
+}
+
+/**
  * The least unassigned money worth a nudge: CHF 100.
  *
  * The gate is on the *pool* — everything the ended months left over that the
@@ -239,7 +254,9 @@ export type NudgeInput = {
  */
 export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
   const over: NudgeSpec[] = input.budget
-    .filter(isOverBudget)
+    // The warning predicate, not the arithmetic one — and it is what `others`
+    // counts too, or the card claims overspends the reader has silenced.
+    .filter(warnsOverBudget)
     .map((row) => ({
       id: `over-budget:${row.category}`,
       tone: "warning" as const,
@@ -373,7 +390,9 @@ export function budgetVerdict(rows: BudgetRow[]): BudgetVerdict {
   // to be inside of yet, and that is the one case where the dragon has
   // something to *offer* rather than something to report.
   if (limited.length === 0) return "unplanned";
-  if (limited.some(isOverBudget)) return "over";
+  // The ones worth reporting: a category whose warning is switched off is
+  // over, and deliberately not news.
+  if (limited.some(warnsOverBudget)) return "over";
   if (limited.some((row) => row.usedMinor >= (row.limitMinor as number) * TIGHT)) {
     return "tight";
   }

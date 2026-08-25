@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Sparkles } from "lucide-react";
+import { Bell, BellOff, Loader2, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type CSSProperties } from "react";
@@ -52,6 +52,16 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
   const [fields, setFields] = useState<Record<string, string>>(() =>
     Object.fromEntries(rows.map((row) => [row.category, toField(row.limitMinor)])),
   );
+  /**
+   * Which categories are set to say nothing when they go over.
+   *
+   * Held here beside the amounts and committed by the same Save, because
+   * everything else on this row is edit-then-save and one control that writes
+   * on click would be two different rules on one line.
+   */
+  const [muted, setMuted] = useState<ReadonlySet<string>>(
+    () => new Set(rows.filter((row) => !row.warnOverspend).map((row) => row.category)),
+  );
 
   // Compared as amounts, not as strings: after a save the server echoes back
   // "500.00" for a field the user typed as "500", and a string compare would
@@ -62,8 +72,19 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
   // — which is what a mount is for, and what an effect doing the same thing
   // would only approximate a render later.
   const dirty = rows.some(
-    (row) => toMinor(fields[row.category] ?? "") !== row.limitMinor,
+    (row) =>
+      toMinor(fields[row.category] ?? "") !== row.limitMinor ||
+      muted.has(row.category) === row.warnOverspend,
   );
+
+  function toggleWarn(category: string) {
+    setMuted((previous) => {
+      const next = new Set(previous);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }
 
   function applySuggestions() {
     setFields(
@@ -79,6 +100,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
         rows.map((row) => ({
           category: row.category,
           amount: fields[row.category] ?? "",
+          warn: !muted.has(row.category),
         })),
       );
       if (result.ok) {
@@ -103,6 +125,10 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
         {rows.map((row) => {
           const CategoryIcon = categoryLucideIcon(row.category);
           const limit = row.limitMinor;
+          const warns = !muted.has(row.category);
+          // As typed, not as saved: a limit entered a moment ago is a limit
+          // this control has something to be about.
+          const hasLimit = toMinor(fields[row.category] ?? "") !== null;
           const over = limit !== null && row.usedMinor > limit;
           const share = limit && limit > 0 ? (row.usedMinor / limit) * 100 : 0;
 
@@ -123,7 +149,7 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
                the name are auto-placed into what is left of it. */
             <li
               key={row.category}
-              className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors hover:bg-surface-hover sm:grid-cols-[2rem_minmax(9rem,1fr)_8.5rem_8.5rem] sm:gap-x-4 sm:gap-y-0 sm:px-5"
+              className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-4 py-3.5 transition-colors hover:bg-surface-hover sm:grid-cols-[2rem_minmax(9rem,1fr)_8.5rem_11.75rem] sm:gap-x-4 sm:gap-y-0 sm:px-5"
             >
               {/* The category's colour, as its picture rather than as a
                   swatch — same slot, same `slotsOf` map the radar reads, so
@@ -199,27 +225,63 @@ export function BudgetEditor({ rows }: { rows: BudgetRow[] }) {
               {/* The last line of the phone's stack, full width of the
                   column — aligned under the category rather than under its
                   icon, so the rows still read as a list. The fourth column
-                  from `sm` up. */}
-              <label className="col-start-2 sm:col-start-4 sm:row-start-1">
-                <span className="sr-only">
-                  {t("limitFieldLabel", {
+                  from `sm` up, and it holds two things rather than one: the
+                  limit, and whether going past it says anything. They share a
+                  cell because they are one decision with two halves, and a
+                  fifth column for a 36px button would leave the bell orphaned
+                  on its own line on a phone. */}
+              <div className="col-start-2 flex items-center gap-2 sm:col-start-4 sm:row-start-1">
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">
+                    {t("limitFieldLabel", {
+                      category: categoryLabel(row.category),
+                    })}
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={fields[row.category] ?? ""}
+                    onChange={(event) =>
+                      setFields((previous) => ({
+                        ...previous,
+                        [row.category]: event.target.value,
+                      }))
+                    }
+                    placeholder={t("noLimitPlaceholder")}
+                    className="h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  />
+                </label>
+
+                {/* `aria-pressed`, not a checkbox: a control that flips a
+                    state is what every other toggle in this app is, and the
+                    name changes with the state the way the category chips'
+                    does. Disabled while the field is empty *as typed* rather
+                    than as saved — a category with no limit has nothing to
+                    warn about, and the row is one Save away from having one. */}
+                <button
+                  type="button"
+                  onClick={() => toggleWarn(row.category)}
+                  disabled={hasLimit === false}
+                  aria-pressed={warns}
+                  aria-label={t(warns ? "warnOff" : "warnOn", {
                     category: categoryLabel(row.category),
                   })}
-                </span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={fields[row.category] ?? ""}
-                  onChange={(event) =>
-                    setFields((previous) => ({
-                      ...previous,
-                      [row.category]: event.target.value,
-                    }))
-                  }
-                  placeholder={t("noLimitPlaceholder")}
-                  className="h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-right font-mono text-[16px] sm:text-[13px] tabular-nums text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                />
-              </label>
+                  title={t(warns ? "warnOff" : "warnOn", {
+                    category: categoryLabel(row.category),
+                  })}
+                  className={`flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border transition-colors disabled:cursor-default disabled:opacity-40 ${
+                    warns
+                      ? "border-line-strong bg-surface text-text-muted hover:text-text"
+                      : "border-line bg-transparent text-text-subtle"
+                  }`}
+                >
+                  {warns ? (
+                    <Bell className="size-4" aria-hidden />
+                  ) : (
+                    <BellOff className="size-4" aria-hidden />
+                  )}
+                </button>
+              </div>
             </li>
           );
         })}

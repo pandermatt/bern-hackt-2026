@@ -40,6 +40,12 @@ const entrySchema = z.object({
     .string()
     .trim()
     .transform((value) => value.replace(/[’'\s]/g, "").replace(",", ".")),
+  /**
+   * Whether going over this limit should say anything. Optional, and absent
+   * means yes — the same reading NULL has in the column, so a caller that
+   * predates the switch keeps every warning it had.
+   */
+  warn: z.boolean().optional(),
 });
 
 /**
@@ -79,11 +85,16 @@ export async function getBudgetOverview(
     .from(budgets)
     .where(eq(budgets.userId, user.id));
   const limits = new Map(saved.map((row) => [row.category, row.limitMinor]));
+  // Only an explicit `false` silences anything: a row written before the
+  // column existed carries NULL, which is not an opinion and still warns.
+  const muted = new Set(
+    saved.filter((row) => row.warnOverspend === false).map((row) => row.category),
+  );
 
   return {
     months,
     month: requested,
-    rows: requested ? budgetRows(rows, requested, limits) : [],
+    rows: requested ? budgetRows(rows, requested, limits, undefined, muted) : [],
   };
 }
 
@@ -111,7 +122,12 @@ async function budgetError(
  * off it; reads on this page return their data directly.
  */
 export async function saveBudgets(
-  entries: { category: string; amount: string }[],
+  entries: {
+    category: string;
+    amount: string;
+    /** Whether to warn when this category goes over. Absent means yes. */
+    warn?: boolean;
+  }[],
 ): Promise<SaveBudgetsResult> {
   const user = await getCurrentUser();
   if (!user) return budgetError("notSignedIn");
@@ -119,11 +135,14 @@ export async function saveBudgets(
   const parsed = z.array(entrySchema).max(64).safeParse(entries);
   if (!parsed.success) return budgetError("malformed");
 
-  const upserts: { category: string; limitMinor: number }[] = [];
+  const upserts: { category: string; limitMinor: number; warn: boolean }[] = [];
   const clears: string[] = [];
 
-  for (const { category, amount } of parsed.data) {
+  for (const { category, amount, warn } of parsed.data) {
     if (amount === "") {
+      // A category with no limit has no warning to configure either, so the
+      // flag goes with the row rather than lingering as a setting about
+      // nothing.
       clears.push(category);
       continue;
     }
@@ -136,7 +155,7 @@ export async function saveBudgets(
     if (limitMinor > 1_000_000_000) {
       return budgetError("tooLarge");
     }
-    upserts.push({ category, limitMinor });
+    upserts.push({ category, limitMinor, warn: warn ?? true });
   }
 
   try {
@@ -157,13 +176,18 @@ export async function saveBudgets(
             userId: user.id,
             category: row.category,
             limitMinor: row.limitMinor,
+            warnOverspend: row.warn,
             updatedAt: new Date(),
           })
           // The unique index on (user_id, category) is what makes this an
           // upsert instead of a read-then-write race.
           .onConflictDoUpdate({
             target: [budgets.userId, budgets.category],
-            set: { limitMinor: row.limitMinor, updatedAt: new Date() },
+            set: {
+              limitMinor: row.limitMinor,
+              warnOverspend: row.warn,
+              updatedAt: new Date(),
+            },
           })
           .run();
       }
@@ -173,5 +197,8 @@ export async function saveBudgets(
   }
 
   revalidatePath("/[locale]/budget", "page");
+  // `/home` reads the same limits for the dragon's deck, and switching a
+  // warning off is a change to what that page says.
+  revalidatePath("/[locale]/home", "page");
   return { ok: true };
 }

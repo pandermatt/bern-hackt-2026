@@ -857,6 +857,12 @@ export type BudgetRow = {
   suggestedMinor: number;
   /** Spend in the month being viewed. Partial if that month is still running. */
   usedMinor: number;
+  /**
+   * Whether going over this limit is worth a warning. True unless the account
+   * holder switched it off — see `budgets.warn_overspend`, where NULL means
+   * "warn" and only an explicit `false` silences anything.
+   */
+  warnOverspend: boolean;
 };
 
 /**
@@ -877,6 +883,12 @@ export function budgetRows(
   month: string,
   limits: Map<string, number>,
   axes = BUDGET_AXES,
+  /**
+   * Categories whose overspend the account holder asked not to hear about.
+   * Last rather than beside `limits`, so the existing callers and their tests
+   * keep their argument list.
+   */
+  muted: ReadonlySet<string> = new Set(),
 ): BudgetRow[] {
   const stack = stackByCategory(rows);
   if (stack.months.length === 0) return [];
@@ -895,6 +907,7 @@ export function budgetRows(
       // A month outside the range is not an error — it is a month with no
       // spending, which is exactly zero used.
       usedMinor: index >= 0 ? (band.values[index] ?? 0) : 0,
+      warnOverspend: !muted.has(band.key),
     }));
 }
 
