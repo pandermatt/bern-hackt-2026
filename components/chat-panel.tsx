@@ -1,20 +1,22 @@
 "use client";
 
 import { Check, Loader2, PiggyBank, Send } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { askAssistant } from "@/app/actions/chat";
 import { applyAllocationAdds } from "@/app/actions/savings";
 import { ChatEChart } from "@/components/chat-echart";
 import { ChatPie } from "@/components/chat-pie";
 import {
   SUGGESTION_KEYS,
   type AllocationProposal,
+  type AssistantTurn,
   type ChartSpec,
   type ChatRole,
+  type ToolName,
 } from "@/lib/assistant";
+import type { TurnEvent } from "@/lib/assistant-turn";
 import { formatMoney } from "@/lib/insights";
 
 /**
@@ -46,6 +48,52 @@ export const CHAT_PILL_SHAPE =
  * shape and brings its own, rather than appending a second `bg-*` and hoping
  * the cascade lands the right way round. */
 export const CHAT_PILL = `${CHAT_PILL_SHAPE} border-line bg-surface text-text hover:border-line-strong hover:bg-surface-muted`;
+
+/** What the panel says while a turn runs. */
+export type TurnStatus = { tools: ToolName[]; period?: string };
+
+/**
+ * One turn, read as it arrives.
+ *
+ * `/api/assistant` answers with NDJSON — one `TurnEvent` per line — so the
+ * status can change several times before the answer lands. Throws only when
+ * the stream itself fails; a turn that went wrong server-side arrives as an
+ * ordinary event carrying its own sentence.
+ */
+async function readTurn(
+  history: { role: ChatRole; content: string }[],
+  locale: string,
+  onStatus?: (status: TurnStatus) => void,
+): Promise<AssistantTurn> {
+  const response = await fetch("/api/assistant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ history, locale }),
+  });
+  if (!response.ok || !response.body) throw new Error("stream failed to open");
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  let turn: AssistantTurn | undefined;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    // A chunk can split a line, so the tail is kept back until it is whole.
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line) as TurnEvent;
+      if (event.type === "status") onStatus?.({ tools: event.tools, period: event.period });
+      else turn = event.turn;
+    }
+  }
+
+  if (!turn) throw new Error("stream ended without an answer");
+  return turn;
+}
 
 /** Not `ChatMessage` — `lib/assistant.ts` owns that name for the wire shape. */
 export type PanelMessage = {
@@ -81,6 +129,9 @@ export type AssistantChat = {
   setInput: (value: string) => void;
   followUps: string[];
   pending: boolean;
+  /** What the turn is doing right now, while `pending`. Empty `tools` means
+   * the model is still deciding. */
+  status: TurnStatus | null;
   send: (text: string) => void;
   /** Index of the message whose proposal is being applied, if any. */
   applying: number | null;
@@ -94,11 +145,17 @@ export type AssistantChat = {
  */
 export function useAssistantChat(): AssistantChat {
   const t = useTranslations("Chat");
+  const locale = useLocale();
   const router = useRouter();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const [followUps, setFollowUps] = useState<string[]>([]);
-  const [pending, startTransition] = useTransition();
+  // Plain state, not `useTransition`. A transition commits its updates once,
+  // when it settles — so the status set before the first await rendered and
+  // every later one was swallowed, leaving "Batzi is thinking" on screen for
+  // the whole turn. The point of the stream is the updates in between.
+  const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState<TurnStatus | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -112,34 +169,42 @@ export function useAssistantChat(): AssistantChat {
     setFollowUps([]);
     setInput("");
 
-    startTransition(async () => {
+    void (async () => {
+      setPending(true);
+      setStatus({ tools: [] });
+      let turn: AssistantTurn | undefined;
       try {
-        // Cards are client-side decoration; the action only wants the words.
-        const turn = await askAssistant(
+        // Streamed, not awaited in one piece: a charted answer is three round
+        // trips of the model thinking for ten to fifteen seconds apiece, and a
+        // row of dots for all of it says nothing. Each event names what the
+        // turn is doing; the last one carries the answer.
+        turn = await readTurn(
+          // Cards are client-side decoration; the server only wants the words.
           history.map(({ role, content }) => ({ role, content })),
+          locale,
+          setStatus,
         );
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: turn.reply,
-            chart: turn.chart,
-            proposal: turn.proposal,
-            error: turn.error,
-          },
-        ]);
-        setFollowUps(turn.followUps ?? []);
       } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: t("failed"),
-            error: true,
-          },
-        ]);
+        // A dropped stream or an unreachable server. The turn's own failures
+        // arrive as a normal `turn` event with `error` set, and read as the
+        // sentence they carry rather than this one.
       }
-    });
+      setStatus(null);
+      setMessages((prev) => [
+        ...prev,
+        turn
+          ? {
+              role: "assistant",
+              content: turn.reply,
+              chart: turn.chart,
+              proposal: turn.proposal,
+              error: turn.error,
+            }
+          : { role: "assistant", content: t("failed"), error: true },
+      ]);
+      setFollowUps(turn?.followUps ?? []);
+      setPending(false);
+    })();
   };
 
   /**
@@ -189,6 +254,7 @@ export function useAssistantChat(): AssistantChat {
     setInput,
     followUps,
     pending,
+    status,
     send,
     applying,
     applyProposal,
@@ -227,11 +293,27 @@ export function ChatPanel({
     setInput,
     followUps,
     pending,
+    status,
     send,
     applying,
     applyProposal,
     scrollRef,
   } = chat;
+
+  /**
+   * What the turn is doing, in this reader's language. A tool with no phrase
+   * of its own falls back to the generic line rather than throwing — next-intl
+   * treats a missing key as an error, and a tool added later must not be able
+   * to take the panel down. Several tools in one round are joined, since the
+   * model does sometimes ask for two at once.
+   */
+  const statusLabel = (() => {
+    if (!status || status.tools.length === 0) return t("thinking");
+    const named = status.tools
+      .map((tool) => (t.has(`status.${tool}`) ? t(`status.${tool}`) : undefined))
+      .filter((phrase): phrase is string => Boolean(phrase));
+    return named.length > 0 ? named.join(" · ") : t("thinking");
+  })();
 
   // Keep the newest bubble in view — including the typing indicator. The
   // effect lives HERE, not in the hook: the hook survives in the shell while
@@ -381,11 +463,21 @@ export function ChatPanel({
         ))}
 
         {pending && (
-          <div className="flex justify-start duration-300 animate-in fade-in slide-in-from-bottom-2">
+          <div className="flex flex-col items-start gap-1.5 duration-300 animate-in fade-in slide-in-from-bottom-2">
+            {/* What the wait is for. The tool names are the model's own
+                choices, so this is a report rather than a guess — and on a
+                charted answer it changes two or three times before the words
+                arrive. */}
+            <p
+              className="px-1 text-[12px] text-text-muted"
+              role="status"
+              aria-live="polite"
+            >
+              {statusLabel}
+            </p>
             <div
               className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm bg-surface-muted px-4 py-3"
-              role="status"
-              aria-label={t("thinking")}
+              aria-hidden
             >
               {[0, 1, 2].map((dot) => (
                 <span
