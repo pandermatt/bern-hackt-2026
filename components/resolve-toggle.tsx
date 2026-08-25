@@ -2,11 +2,12 @@
 
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { setAnomalyResolved } from "@/app/actions/anomalies";
 import { ResolveRing } from "@/components/resolve-ring";
+import { useResolveFade } from "@/components/resolve-fade";
 
 /**
  * The circle that ticks a finding off, and puts it back.
@@ -24,6 +25,18 @@ import { ResolveRing } from "@/components/resolve-ring";
  * the group's ring, the page's ring and the overview's, and re-deriving all
  * four in the client would be a second implementation of `getAnomalyRuleDetail`
  * that could disagree with it. The action already revalidates both pages.
+ *
+ * What *is* optimistic is the leaving: a resolved row is hidden by default, so
+ * the page comes back without it, and `ResolveFade` dims and closes it up
+ * before the write goes out so that removal lands on markup that is already
+ * invisible.
+ *
+ * **The saving half is plain state, not a transition.** A transition commits
+ * its updates when it settles, so asking the wrapper to fade from inside one
+ * would queue the fade behind the very refresh it is supposed to precede — the
+ * same trap `useAssistantChat` documents. Only the refresh runs in a
+ * transition, which is what keeps the control disabled until the new list
+ * lands.
  */
 export function ResolveToggle({
   ruleId,
@@ -51,7 +64,44 @@ export function ResolveToggle({
 }) {
   const t = useTranslations("Anomalies");
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  // `null` when nothing is going to leave the page — the whole-rule control in
+  // the header, or any of them while the resolved rows are being shown.
+  const fade = useResolveFade();
+  const [saving, setSaving] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
+  const pending = saving || refreshing;
+
+  async function toggle() {
+    setSaving(true);
+    // Ahead of the write, not between it and the refresh: `setAnomalyResolved`
+    // revalidates both pages, so the tree without this row arrives with the
+    // action's own reply and lands before any wait taken afterwards could —
+    // the row was gone some 40ms in, whatever the fade was still doing. Played
+    // first, the removal is the last thing to happen rather than the first,
+    // and it happens to something already invisible.
+    //
+    // Only on the way *in*: un-ticking something puts it back on the page, and
+    // fading out a row the server hands straight back is a flicker.
+    const leaving = resolved ? null : fade;
+    await leaving?.leave();
+
+    const result = await setAnomalyResolved({
+      ruleId,
+      transactionIds,
+      resolved: !resolved,
+    });
+    if (!result.ok) {
+      toast.error(result.error);
+      // Nothing was written, so nothing is going to remove it — a row left
+      // faded out here would be gone from the page with the finding still
+      // open underneath it.
+      leaving?.restore();
+      setSaving(false);
+      return;
+    }
+    startRefresh(() => router.refresh());
+    setSaving(false);
+  }
 
   return (
     <button
@@ -62,20 +112,7 @@ export function ResolveToggle({
       aria-pressed={resolved}
       aria-label={label}
       disabled={pending || transactionIds.length === 0}
-      onClick={() =>
-        startTransition(async () => {
-          const result = await setAnomalyResolved({
-            ruleId,
-            transactionIds,
-            resolved: !resolved,
-          });
-          if (!result.ok) {
-            toast.error(result.error);
-            return;
-          }
-          router.refresh();
-        })
-      }
+      onClick={() => void toggle()}
       className="cursor-pointer rounded-full transition-opacity hover:opacity-70 disabled:cursor-default disabled:opacity-50"
     >
       {/* The button's `aria-label` is its whole accessible name, so the ring's

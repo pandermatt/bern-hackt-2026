@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { getAnomalyRuleDetail } from "@/app/actions/anomalies";
 import { AnomalyIcon } from "@/components/anomaly-icon";
 import { HideResolvedToggle } from "@/components/hide-resolved-toggle";
+import { ResolveFade } from "@/components/resolve-fade";
 import { ResolveToggle } from "@/components/resolve-toggle";
 import { Section } from "@/components/section";
 import type { Transaction } from "@/db/schema";
@@ -39,54 +40,62 @@ const SEVERITY_CLASSES: Record<AnomalySeverity, string> = {
  * which is where it is now said once instead of on every line.
  *
  * A server component: the amounts and merchant names never leave the server.
- * Only the toggle beside it is a client component, and it is handed ids.
+ * The two client components it sits in are handed no more than they need — the
+ * toggle takes ids, and `ResolveFade` takes this markup as children, which is
+ * rendered on the server and only wrapped in the browser.
  */
 function Row({
   row,
   ruleId,
   resolved,
+  fadeOnResolve,
   label,
 }: {
   row: Transaction;
   ruleId: string;
   resolved: boolean;
+  fadeOnResolve: boolean;
   label: string;
 }) {
   const inflow = row.amountMinor > 0;
 
   return (
-    <li
-      className={`flex items-baseline gap-3 px-4 py-2.5 sm:px-5 ${
-        // The same "switched off" treatment the hidden category chips wear, so
-        // a thing you have dealt with looks the same everywhere in the app.
-        resolved ? "opacity-60" : ""
-      }`}
+    <ResolveFade
+      as="li"
+      enabled={fadeOnResolve}
+      // The same "switched off" treatment the hidden category chips wear, so
+      // a thing you have dealt with looks the same everywhere in the app.
+      className={resolved ? "opacity-60" : ""}
     >
-      <span className="self-center">
-        <ResolveToggle
-          ruleId={ruleId}
-          transactionIds={[row.id]}
-          resolved={resolved}
-          label={label}
-          className="size-[16px]"
-        />
-      </span>
-      <span
-        className={`min-w-0 flex-1 truncate text-[13.5px] text-text ${
-          resolved ? "line-through" : ""
-        }`}
-      >
-        {row.description || row.merchant}
-      </span>
-      <span
-        className={`shrink-0 font-mono text-[13px] tabular-nums ${
-          inflow ? "text-positive" : "text-text"
-        }`}
-      >
-        {inflow ? "+" : "−"}
-        {formatMoney(row.amountMinor)}
-      </span>
-    </li>
+      {/* The row's own layout sits inside the wrapper, which is a grid whose
+          single row is what closes up when the finding leaves. */}
+      <div className="flex items-baseline gap-3 px-4 py-2.5 sm:px-5">
+        <span className="self-center">
+          <ResolveToggle
+            ruleId={ruleId}
+            transactionIds={[row.id]}
+            resolved={resolved}
+            label={label}
+            className="size-[16px]"
+          />
+        </span>
+        <span
+          className={`min-w-0 flex-1 truncate text-[13.5px] text-text ${
+            resolved ? "line-through" : ""
+          }`}
+        >
+          {row.description || row.merchant}
+        </span>
+        <span
+          className={`shrink-0 font-mono text-[13px] tabular-nums ${
+            inflow ? "text-positive" : "text-text"
+          }`}
+        >
+          {inflow ? "+" : "−"}
+          {formatMoney(row.amountMinor)}
+        </span>
+      </div>
+    </ResolveFade>
   );
 }
 
@@ -106,11 +115,17 @@ function GroupedRows({
   rows,
   ruleId,
   resolvedIds,
+  fadeOnResolve,
   t,
 }: {
   rows: Transaction[];
   ruleId: string;
   resolvedIds: Set<number>;
+  /**
+   * Whether ticking something off here takes it off the page — false while the
+   * resolved rows are being shown, where nothing leaves and so nothing fades.
+   */
+  fadeOnResolve: boolean;
   t: Awaited<ReturnType<typeof getTranslations<"Anomalies">>>;
 }) {
   const groups = groupByDayMerchant(rows);
@@ -128,7 +143,10 @@ function GroupedRows({
         const many = group.rows.length > 1;
 
         return (
-          <div key={group.key}>
+          /* The heading and its rows leave together when the heading's own
+             circle is clicked; a row's circle finds its own wrapper first and
+             takes only itself. */
+          <ResolveFade key={group.key} enabled={fadeOnResolve}>
             {/* On the page's own ground, not on a panel: the ledger's month
                 headings work exactly this way, and it is what makes this read
                 as a title over a list rather than as the list's first row.
@@ -196,6 +214,7 @@ function GroupedRows({
                   row={row}
                   ruleId={ruleId}
                   resolved={resolvedIds.has(row.id)}
+                  fadeOnResolve={fadeOnResolve}
                   /* Named by the line the row actually shows, not by the
                      merchant: two salary payments from one employer on one
                      day are two buttons, and naming both after the merchant
@@ -207,7 +226,7 @@ function GroupedRows({
                 />
               ))}
             </ul>
-          </div>
+          </ResolveFade>
         );
       })}
     </div>
@@ -376,6 +395,7 @@ export default async function AnomalyRulePage({
               rows={focusRows}
               ruleId={detail.ruleId}
               resolvedIds={resolvedIds}
+              fadeOnResolve={!showingResolved}
               t={t}
             />
           </Section>
@@ -396,6 +416,7 @@ export default async function AnomalyRulePage({
               rows={otherRows}
               ruleId={detail.ruleId}
               resolvedIds={resolvedIds}
+              fadeOnResolve={!showingResolved}
               t={t}
             />
           </Section>

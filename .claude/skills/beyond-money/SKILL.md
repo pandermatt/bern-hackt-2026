@@ -665,6 +665,20 @@ Unchanged from the template this app grew out of, and still exactly true.
   stacking order would be behind that too. A folded card carries `inert` —
   clipped to nothing is not the same as gone, and without it the link inside
   keeps its place in the tab order.
+- **A resolved finding leaves on the same `1fr → 0fr` collapse, and it has to
+  play *before* the write.** `components/resolve-fade.tsx` wraps whatever a
+  `ResolveToggle` takes off the page and hands it the fade through context, so
+  the scope comes from the nesting: a row wraps its own `<li>`, a group wraps
+  its heading and rows, and the header's "resolve all" sits outside every
+  wrapper and gets `null`. The ordering is the part that is easy to get wrong —
+  `setAnomalyResolved` calls `revalidatePath`, so the tree without that row
+  arrives **with the action's own reply**, some 40ms in, and any wait taken
+  after the call is a wait the removal has already outrun. Fade, then write.
+  A failed write calls `restore()`, because nothing else is going to put an
+  invisible row back. `enabled` is false while the resolved rows are shown:
+  nothing leaves in that state. Opacity is set inline rather than as a class —
+  a resolved row already carries `opacity-60`, and two opacity utilities on one
+  element are settled by the order Tailwind emits them in.
 - **A merchant tile is initials with the mark laid over them, and the route
   decides which one shows.** `MerchantAvatar` is a server component and must
   stay one, so it cannot react to a failed load — instead the monogram is the
