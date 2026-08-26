@@ -14,7 +14,7 @@
     "seed": "tsx scripts/seed.ts",
     "edge:build": "tsx scripts/build-edge.ts",
     "edge:dev": "wrangler dev --config edge/wrangler.jsonc",
-    "edge:deploy": "wrangler deploy --config edge/wrangler.jsonc",
+    "edge:deploy": "tsx scripts/deploy-edge.ts",
     "test": "vitest run"
   },
   "engines": {
