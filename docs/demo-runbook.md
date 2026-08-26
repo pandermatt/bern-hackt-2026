@@ -10,9 +10,9 @@ Worker answers in its place.
 
 | | |
 | --- | --- |
-| Between demos | ~€0.15–0.25/month of snapshot storage (€0.0143/GB/month on used space) |
-| During a demo | a CX23 at ~€5.49/month, billed by the hour |
-| Cloudflare | free tier |
+| Between demos | ~€0.15–0.25/month of snapshot storage (€0.0143/GB/month on **used** space, not disk size) |
+| During a demo | the same CX33 the snapshot came from — €8.49/month works out at ~€0.012/hour, so a six-hour demo is about €0.07 |
+| Cloudflare | free tier, and roughly one request per page view against 100k/day |
 
 ## How it fits together
 
@@ -39,42 +39,95 @@ visitor → Cloudflare Worker (always on)
 
 ## One-time setup
 
-Do this on the box **as it stands today**, before the first snapshot. A
-snapshot taken before the tunnel is configured comes back unreachable.
+Done on 2026-08-26. Kept because a server rebuilt from scratch needs it again,
+and because two of these steps are not guessable.
 
-1. Install `cloudflared` and create a named tunnel:
+1. Install `cloudflared`. **`pkg.cloudflare.com` is an apt repository, not a
+   file server** — the flat `cloudflared-stable-linux-amd64.deb` path that used
+   to exist now 404s:
 
    ```bash
-   cloudflared tunnel login
+   sudo mkdir -p --mode=0755 /usr/share/keyrings && curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
    ```
 
    ```bash
-   cloudflared tunnel create beyond-money-origin
+   echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" | sudo tee /etc/apt/sources.list.d/cloudflared.list && sudo apt-get update && sudo apt-get install -y cloudflared
    ```
 
-2. Route the origin hostname at it. This hostname must **not** be one the
-   Worker is routed on, or every proxied request loops back into the Worker:
+2. Create the tunnel and route the hostname at it. That hostname must **not** be
+   one the Worker is routed on, or every proxied request loops back in:
+
+   ```bash
+   cloudflared tunnel login && cloudflared tunnel create beyond-money-origin
+   ```
 
    ```bash
    cloudflared tunnel route dns beyond-money-origin origin.beyond-money.ch
    ```
 
-3. Point the tunnel at Coolify's port in `/etc/cloudflared/config.yml`, then
-   install it as a service so a recreated server dials out on boot:
+3. Write `/etc/cloudflared/config.yml`. **The port is the part that bites:**
 
-   ```bash
-   sudo cloudflared service install
+   ```yaml
+   tunnel: 6dc872b1-3e39-4f6d-991f-a29d4237e58a
+   credentials-file: /root/.cloudflared/6dc872b1-3e39-4f6d-991f-a29d4237e58a.json
+
+   ingress:
+     - hostname: origin.beyond-money.ch
+       service: https://localhost:443
+       originRequest:
+         httpHostHeader: beyond-money.ch
+         noTLSVerify: true
+     - service: http_status:404
    ```
 
-4. Confirm `ORIGIN` in [edge/wrangler.jsonc](../edge/wrangler.jsonc) matches
-   that hostname, add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to the
-   repository secrets, and push to `main` to deploy the Worker.
+   Three things, each of which produced a wrong answer on the way here:
 
-5. **Rehearse the whole cycle before relying on it.** Take a snapshot, create a
-   *second* server from it, and check the app comes up with the demo account's
-   transactions intact and the tunnel reconnected. Only delete the original
-   once that has passed. This is the step that turns "the snapshot should
-   contain everything" into something you know.
+   - **`:443`, not `:80`.** Coolify's proxy on port 80 answers everything with a
+     302 to `https://beyond-money.ch`. Behind the Worker that is an infinite
+     redirect — Worker to tunnel to Coolify to `beyond-money.ch` and back into
+     the Worker. Port 443 is where the app actually is.
+   - **`httpHostHeader`.** Coolify routes by `Host` and has no route for the
+     tunnel's own hostname, so without this it answers 404. Rewriting the header
+     is better than registering the hostname in Coolify, which would also make
+     it chase a certificate it does not need.
+   - **`noTLSVerify`.** The connection is to `localhost` while the certificate
+     is for the public name.
+
+   Then check it before starting anything:
+
+   ```bash
+   cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate
+   ```
+
+4. Install it as a service, so a server recreated from the snapshot dials out
+   on boot — this is what makes the whole scheme work with no DNS edit:
+
+   ```bash
+   sudo cloudflared service install && sudo systemctl enable --now cloudflared
+   ```
+
+5. Confirm `ORIGIN` in [edge/wrangler.jsonc](../edge/wrangler.jsonc) matches the
+   hostname, add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to the
+   repository secrets, and push to `main`.
+
+   `npm run edge:deploy` refuses to run while that hostname has no DNS record —
+   see [scripts/deploy-edge.ts](../scripts/deploy-edge.ts). Deploying the Worker
+   before the tunnel existed is what took the site down on 2026-08-26: the
+   Worker probed a hostname that was not there, concluded the box was gone, and
+   served the asleep page to everyone while the server ran fine behind it.
+
+## DNS records
+
+Three records matter, and the first is counter-intuitive.
+
+| Record | Value | Why |
+| --- | --- | --- |
+| `beyond-money.ch` | `A 192.0.2.1`, **proxied** | A Worker route only fires if a proxied DNS record exists at the hostname. Delete it and the site stops resolving entirely. `192.0.2.1` is the reserved placeholder for an originless name — traffic never reaches it, Cloudflare hands it to the Worker. **Do not leave it pointing at the Hetzner IP**: that address goes back into Hetzner's pool when the server is deleted and is reassigned to somebody else. |
+| `www.beyond-money.ch` | `A 192.0.2.1`, **proxied** | Same reason. Without it the `www.beyond-money.ch/*` route in `wrangler.jsonc` never fires and `www` does not resolve at all. |
+| `origin.beyond-money.ch` | created by `cloudflared tunnel route dns` | The tunnel. Created once, outlives every server built from the snapshot — which is exactly what the deploy guard checks for. |
+
+`dev.beyond-money.ch` is a Cloudflare redirect rule pointing at the GitHub
+repository, not a deployment.
 
 ## Putting the demo to sleep
 
@@ -103,11 +156,17 @@ over on its own. Check <https://beyond-money.ch/> shows the asleep notice.
 
 ## Waking it up
 
-1. Create a server from the snapshot. The type must have **at least** the
-   snapshot's disk size, and an x86 snapshot cannot be restored onto an ARM
-   (CAX) type — pick the same family you snapshotted from.
+1. Create a server from the snapshot, **on the type it came from**. A snapshot
+   carries its source disk and can only be restored onto a type with at least
+   that much — a CX33's 80 GB will not fit on a CX23, and Hetzner refuses with
+   *"image disk is bigger than server type disk"*. There is no way to shrink it.
+   That is fine: billing is hourly, so the larger type costs pennies for a demo
+   and the monthly figure never applies. (An x86 snapshot also cannot go onto an
+   ARM/CAX type.)
 2. That is the whole procedure. Coolify's containers restart on their own,
-   `cloudflared` dials out, and the Worker starts proxying within a minute.
+   `cloudflared` dials out, and the Worker starts proxying within a minute —
+   **at whatever new IP Hetzner hands out**, with nothing to reconfigure. That
+   is what the tunnel buys.
 
 Check <https://beyond-money.ch/api/health> returns `{"ok":true}` and that the
 landing page has its sign-in buttons back.

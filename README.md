@@ -18,7 +18,6 @@ Next.js 16 · shadcn/ui · Tailwind v4
 
 | Branch | URL |
 | --- | --- |
-| `development` | <https://dev.beyond-money.ch/> |
 | `main` | <https://beyond-money.ch/> |
 
 The demo server itself only runs when someone asks to see it — between demos it
