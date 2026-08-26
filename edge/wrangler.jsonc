@@ -44,9 +44,11 @@
     "ORIGIN": "https://origin.beyond-money.ch"
   },
 
+  // No `www` route: that hostname has no DNS record and is not wanted. A Worker
+  // route only fires where a proxied record exists, so one here would be a
+  // pattern that has never matched anything.
   "routes": [
-    { "pattern": "beyond-money.ch/*", "zone_name": "beyond-money.ch" },
-    { "pattern": "www.beyond-money.ch/*", "zone_name": "beyond-money.ch" }
+    { "pattern": "beyond-money.ch/*", "zone_name": "beyond-money.ch" }
   ],
 
   "observability": { "enabled": true }

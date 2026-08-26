@@ -118,12 +118,12 @@ and because two of these steps are not guessable.
 
 ## DNS records
 
-Three records matter, and the first is counter-intuitive.
+Two records matter, and the first is counter-intuitive. There is deliberately
+no `www` — it is not wanted, and `wrangler.jsonc` carries no route for it.
 
 | Record | Value | Why |
 | --- | --- | --- |
 | `beyond-money.ch` | `A 192.0.2.1`, **proxied** | A Worker route only fires if a proxied DNS record exists at the hostname. Delete it and the site stops resolving entirely. `192.0.2.1` is the reserved placeholder for an originless name — traffic never reaches it, Cloudflare hands it to the Worker. **Do not leave it pointing at the Hetzner IP**: that address goes back into Hetzner's pool when the server is deleted and is reassigned to somebody else. |
-| `www.beyond-money.ch` | `A 192.0.2.1`, **proxied** | Same reason. Without it the `www.beyond-money.ch/*` route in `wrangler.jsonc` never fires and `www` does not resolve at all. |
 | `origin.beyond-money.ch` | created by `cloudflared tunnel route dns` | The tunnel. Created once, outlives every server built from the snapshot — which is exactly what the deploy guard checks for. |
 
 `dev.beyond-money.ch` is a Cloudflare redirect rule pointing at the GitHub
