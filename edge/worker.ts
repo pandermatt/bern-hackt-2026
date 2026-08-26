@@ -58,23 +58,6 @@ const LOCALE_COOKIE = "NEXT_LOCALE";
  */
 const DEMO_ASLEEP_HEADER = "x-demo-asleep";
 
-/**
- * Paths answered from the assets bundle rather than the origin, so the
- * prerendered pages keep their styling, fonts and mascot with the box gone.
- * Everything under `_next/static` is content-hashed, so the edge copy and the
- * origin's can never disagree — a stale entry is unreachable rather than wrong.
- */
-const ASSET_PREFIXES = [
-  "/_next/static/",
-  "/fonts/",
-  "/dragons/",
-  "/icon",
-  "/apple-icon",
-  "/favicon",
-  "/team.jpg",
-  "/sw.js",
-];
-
 /** How long one origin liveness answer is reused within an isolate. */
 const PROBE_TTL_MS = 60_000;
 /** A probe slower than this is a box that is not going to serve a page either. */
@@ -119,10 +102,6 @@ function localeOf(request: Request, pathname: string): string {
   if (fromCookie && LOCALES.includes(fromCookie)) return fromCookie;
 
   return DEFAULT_LOCALE;
-}
-
-function isAssetPath(pathname: string): boolean {
-  return ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 /** One of the six documents CI curled out of the build. */
@@ -187,10 +166,18 @@ export default {
     const { pathname } = url;
 
     // Assets first, and from the edge whether or not the box is up: these are
-    // what the prerendered pages are made of. A path not in the bundle falls
-    // through rather than 404ing, so anything the prefix list forgets still
-    // works while the origin is there to answer it.
-    if (isAssetPath(pathname)) {
+    // what the prerendered pages are made of.
+    //
+    // **Asked for every path rather than a list of known prefixes.** The list
+    // was `/team.jpg` on the day it was written and the repo shipped
+    // `team.webp` a week later, which served the landing page's photo as a 503
+    // — an asset list is a second copy of `public/` that nobody remembers to
+    // update. A miss costs one local lookup and falls through to the code
+    // below, so a path that is not in the bundle behaves as if this branch did
+    // not exist.
+    //
+    // GET and HEAD only: an asset must never answer a server action's POST.
+    if (request.method === "GET" || request.method === "HEAD") {
       const asset = await env.ASSETS.fetch(request);
       if (asset.status !== 404) return asset;
     }
