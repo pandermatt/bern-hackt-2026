@@ -36,7 +36,13 @@ const FOOTER_LINK =
  * session to /home before it gets here. Everything below is therefore the
  * signed-out arrangement, which used to be half of a conditional.
  */
-export function AppFooter() {
+/**
+ * `asleep` drops the two auth links, matching the header and the body above —
+ * see `lib/demo-asleep.ts`. The language selector and the version stay: one is
+ * a plain navigation between two prerendered documents and still works with
+ * the box gone, the other is a fact about the build being read.
+ */
+export function AppFooter({ asleep = false }: { asleep?: boolean }) {
   const t = useTranslations("AppFooter");
 
   return (
@@ -85,14 +91,16 @@ export function AppFooter() {
               the page the reader was already on. That guard is gone with the
               footer's other routes: this only renders on "/", which is neither
               of them. */}
-          <div className="flex items-center gap-1 sm:contents">
-            <Link href="/login" className={FOOTER_LINK}>
-              {t("signIn")}
-            </Link>
-            <Link href="/register" className={FOOTER_LINK}>
-              {t("register")}
-            </Link>
-          </div>
+          {!asleep && (
+            <div className="flex items-center gap-1 sm:contents">
+              <Link href="/login" className={FOOTER_LINK}>
+                {t("signIn")}
+              </Link>
+              <Link href="/register" className={FOOTER_LINK}>
+                {t("register")}
+              </Link>
+            </div>
+          )}
 
           <span className="font-mono text-[11px] text-text-subtle">
             v{pkg.version}

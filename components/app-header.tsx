@@ -24,8 +24,21 @@ const CONTROL =
 /**
  * Rendered once by the root layout, so every route gets the same chrome.
  * `user` is null for signed-out visitors, who see a sign-in link and CTA.
+ *
+ * `asleep` is the edge's copy of the landing page, served while the demo
+ * server does not exist (`lib/demo-asleep.ts`). It drops those two links and
+ * keeps the language selector — the pills lead to `/login` and `/register`,
+ * which is precisely what is not there, and the body of the page is where the
+ * explanation belongs. The selector stays because it is a plain navigation
+ * between two prerendered documents, so it still works with the box gone.
  */
-export function AppHeader({ user }: { user: User | null }) {
+export function AppHeader({
+  user,
+  asleep = false,
+}: {
+  user: User | null;
+  asleep?: boolean;
+}) {
   const t = useTranslations('AppHeader');
 
   return (
@@ -86,28 +99,33 @@ export function AppHeader({ user }: { user: User | null }) {
                 /login or /register with no way to switch. Signed in it lives
                 on /account, so this pair never both appear. */}
             <LanguageSelector />
-            <HideOnRoute route="/login">
-              <Link
-                href="/login"
-                className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
-              >
-                <LogIn className="size-3.5 text-text-subtle" />
-                <span>{t('signIn')}</span>
-              </Link>
-            </HideOnRoute>
-            {/* A maximum-contrast pill rather than a brand-coloured one — the
-                redesign's choice, kept. `bg-text`/`text-bg` is that intent
-                expressed in tokens: near-black on white in light, and it
-                inverts with the theme instead of vanishing into it. */}
-            <HideOnRoute route="/register">
-              <Link
-                href="/register"
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-text px-4 py-1.5 text-[13px] font-semibold text-bg shadow-2xs transition-all hover:opacity-85 active:scale-95"
-              >
-                <span>{t('getStarted')}</span>
-                <ArrowRight className="size-3.5" />
-              </Link>
-            </HideOnRoute>
+            {!asleep && (
+              <>
+                <HideOnRoute route="/login">
+                  <Link
+                    href="/login"
+                    className={`flex min-h-10 items-center gap-1.5 sm:min-h-0 ${CONTROL}`}
+                  >
+                    <LogIn className="size-3.5 text-text-subtle" />
+                    <span>{t('signIn')}</span>
+                  </Link>
+                </HideOnRoute>
+                {/* A maximum-contrast pill rather than a brand-coloured one —
+                    the redesign's choice, kept. `bg-text`/`text-bg` is that
+                    intent expressed in tokens: near-black on white in light,
+                    and it inverts with the theme instead of vanishing into
+                    it. */}
+                <HideOnRoute route="/register">
+                  <Link
+                    href="/register"
+                    className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-text px-4 py-1.5 text-[13px] font-semibold text-bg shadow-2xs transition-all hover:opacity-85 active:scale-95"
+                  >
+                    <span>{t('getStarted')}</span>
+                    <ArrowRight className="size-3.5" />
+                  </Link>
+                </HideOnRoute>
+              </>
+            )}
           </div>
         )}
       </div>

@@ -46,3 +46,8 @@ next-env.d.ts
 
 # one-off output of scripts/ast-translate.ts
 /extracted_en.json
+
+# assembled by the deploy-edge CI job: this build's _next/static, public/ and
+# the prerendered documents. Never committed — see edge/wrangler.jsonc.
+/edge/dist
+/edge/.wrangler

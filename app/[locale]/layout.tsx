@@ -16,6 +16,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { routing } from "@/i18n/routing";
 import { getCurrentUser } from "@/lib/auth";
+import { isDemoAsleep } from "@/lib/demo-asleep";
 import { site } from "@/lib/site";
 import "../globals.css";
 
@@ -155,6 +156,9 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[lo
 
   const messages = await getMessages();
   const user = await getCurrentUser();
+  // Read here as well as in `app/[locale]/page.tsx`, because the header is the
+  // layout's and its sign-in links have to agree with the body underneath.
+  const asleep = await isDemoAsleep();
 
   return (
     <html
@@ -183,7 +187,7 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[lo
         <script dangerouslySetInnerHTML={{ __html: MERCHANT_MARK_SCRIPT }} />
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider>
-            <AppHeader user={user} />
+            <AppHeader user={user} asleep={asleep} />
             {/* No footer here. It is the marketing footer — under the ledger
                 or the budget page it was a second, weaker navigation arguing
                 with the header and the tab bar — so `app/[locale]/page.tsx`

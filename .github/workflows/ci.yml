@@ -36,3 +36,65 @@ jobs:
       - run: npm run build
 
       - run: npm test
+
+  # The always-on half of the deployment: a Cloudflare Worker holding a
+  # prerendered copy of the landing page, so beyond-money.ch stays up while the
+  # Hetzner box does not exist. See `edge/worker.ts` and `docs/demo-runbook.md`.
+  deploy-edge:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - run: npm ci
+
+      # A throwaway database. The landing and offline pages read nothing out of
+      # it, but the app opens a handle at import time and `next start` will not
+      # serve a page without the tables.
+      - run: npm run db:push
+        env:
+          DATABASE_PATH: ./data/edge.db
+
+      - run: npm run build
+        env:
+          # Read at BUILD time, and it ends up in the prerendered documents'
+          # Open Graph tags — so it has to be the public address, not the
+          # tunnel the Worker talks to.
+          NEXT_PUBLIC_SITE_URL: https://beyond-money.ch
+
+      # The documents are curled out of a real production server rather than
+      # rendered a second way, so the copy that sits on Cloudflare for a
+      # quarter cannot drift from the app. `--if-empty` is not wanted here:
+      # nothing prerendered is signed in, so there is nothing to seed.
+      # `nohup` and a log file rather than a bare `&`: each `run:` step is its
+      # own shell, and the log is the only way to see why a server that never
+      # came up did not — nobody is watching this job when it runs.
+      - name: Start the app
+        run: nohup npx next start -p 3000 > /tmp/next.log 2>&1 &
+        env:
+          DATABASE_PATH: ./data/edge.db
+
+      - name: Wait for it
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/health; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::the server never became healthy"
+          cat /tmp/next.log
+          exit 1
+
+      - run: npm run edge:build
+
+      - name: Deploy the Worker
+        run: npm run edge:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

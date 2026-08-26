@@ -62,7 +62,10 @@
     "faqBatziQuestion": "What can you see, Batzi?",
     "faqBatziAnswer": "Your rows and no one else's. I query a throwaway in-memory copy of your own transactions — no other accounts, no users, no sessions, no file on disk. Being straight with you: the figures I need for an answer do go to Google's Gemini API, because that is the model doing the writing.",
     "faqDeleteQuestion": "Can I delete all of it?",
-    "faqDeleteAnswer": "Yes, in one press. Account settings has a delete button that takes the account with every transaction, budget, savings pot and finding attached to it. No export to wait for, no retention period, no email asking you to reconsider."
+    "faqDeleteAnswer": "Yes, in one press. Account settings has a delete button that takes the account with every transaction, budget, savings pot and finding attached to it. No export to wait for, no retention period, no email asking you to reconsider.",
+    "asleepTitle": "The live demo is asleep",
+    "asleepBody": "Beyond Money was built at BärnHäckt 2026, and its demo server only runs when someone asks to see it. Everything on this page is still an accurate description of what it does.",
+    "asleepContact": "Want a look? Write to <mail>{email}</mail> and it will be woken up."
   },
   "Auth": {
     "loginTitle": "Sign in",
@@ -1020,7 +1023,10 @@
     "notFoundBody": "That address does not exist — or it moved. Your dashboard is still where you left it.",
     "offlineEyebrow": "No connection",
     "offlineTitle": "You're offline",
-    "offlineBody": "Your transactions live on the server, so this page needs a connection. It will work again as soon as you have one."
+    "offlineBody": "Your transactions live on the server, so this page needs a connection. It will work again as soon as you have one.",
+    "asleepEyebrow": "Demo asleep",
+    "asleepTitle": "The app is not running right now",
+    "asleepBody": "Beyond Money's demo server only runs when someone asks to see it, so there is nothing behind this address today. Your connection is fine — the front page explains what the app does, and how to ask for a look."
   },
   "Months": {
     "short1": "Jan",

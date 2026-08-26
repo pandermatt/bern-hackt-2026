@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { DemoAsleepNotice } from "@/components/demo-asleep-notice";
 import { LandingDragon } from "@/components/landing-dragon";
 import { VictoryBanner } from "@/components/victory-banner";
 import { Link } from "@/i18n/navigation";
@@ -39,7 +40,14 @@ const FAQS = [
   { key: "faqDelete", mood: "bye" },
 ] as const satisfies readonly { key: string; mood: DragonMood }[];
 
-export function Landing() {
+/**
+ * `asleep` is the copy served from the edge while the demo server does not
+ * exist — see `lib/demo-asleep.ts`. It swaps both call-to-action pairs for
+ * `DemoAsleepNotice` and changes nothing else: the product story, the preview
+ * and the FAQ are all true whether or not there is a box to sign in to, and
+ * this page's job on the other 89 days is to tell it.
+ */
+export function Landing({ asleep = false }: { asleep?: boolean }) {
   const t = useTranslations("Landing");
   // The alt lines live in their own namespace — see `Dragon` in the catalogs.
   const tDragon = useTranslations("Dragon");
@@ -73,22 +81,26 @@ export function Landing() {
             {t('heroSubtitle')}
           </p>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3.5">
-            <Link
-              href="/register"
-              className="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-text px-6 text-[15px] font-semibold text-bg transition-all duration-200 hover:bg-text/85 hover:shadow-lg active:scale-95"
-            >
-              <span>{t('getStartedFree')}</span>
-              <ArrowRight className="size-4.5" />
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-line bg-surface px-6 text-[15px] font-semibold text-text transition-all duration-200 hover:bg-surface-hover hover:border-line-strong active:scale-95"
-            >
-              <span>{t('signIn')}</span>
-              <ChevronRight className="size-4 text-text-subtle" />
-            </Link>
-          </div>
+          {asleep ? (
+            <DemoAsleepNotice className="mt-8 max-w-md" />
+          ) : (
+            <div className="mt-8 flex flex-wrap items-center gap-3.5">
+              <Link
+                href="/register"
+                className="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-text px-6 text-[15px] font-semibold text-bg transition-all duration-200 hover:bg-text/85 hover:shadow-lg active:scale-95"
+              >
+                <span>{t('getStartedFree')}</span>
+                <ArrowRight className="size-4.5" />
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-line bg-surface px-6 text-[15px] font-semibold text-text transition-all duration-200 hover:bg-surface-hover hover:border-line-strong active:scale-95"
+              >
+                <span>{t('signIn')}</span>
+                <ChevronRight className="size-4 text-text-subtle" />
+              </Link>
+            </div>
+          )}
 
           {/* Quick trust highlights */}
           <div className="mt-10 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-text-subtle font-medium">
@@ -128,7 +140,7 @@ export function Landing() {
             it, plus its own inner measure for the conversation. Nothing to
             add out here. */}
         <div className="mt-20 sm:mt-28">
-          <LandingDragon />
+          <LandingDragon asleep={asleep} />
         </div>
       </section>
 
@@ -175,23 +187,29 @@ export function Landing() {
             </div>
 
             {/* Action Card Container */}
-            <div className="w-full sm:w-auto shrink-0 flex flex-col gap-3 min-w-[260px]">
-              <Link
-                href="/register"
-                className="inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-full bg-text px-8 text-[15px] font-bold text-bg shadow-xl transition-all duration-200 hover:bg-text/85 hover:scale-[1.02] active:scale-95"
-              >
-                <span>{t("ctaPrimary")}</span>
-                <ArrowRight className="size-4.5" />
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-text bg-transparent px-6 text-[14px] font-bold text-text transition-all duration-200 hover:bg-text/10 active:scale-95"
-              >
-                <span>{t("ctaSecondary")}</span>
-              </Link>
-              <p className="text-center font-mono text-[11px] text-text mt-1">
-                {t("ctaNote")}
-              </p>
+            <div className="w-full sm:w-auto shrink-0 flex flex-col gap-3 min-w-[260px] max-w-sm">
+              {asleep ? (
+                <DemoAsleepNotice />
+              ) : (
+                <>
+                  <Link
+                    href="/register"
+                    className="inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-full bg-text px-8 text-[15px] font-bold text-bg shadow-xl transition-all duration-200 hover:bg-text/85 hover:scale-[1.02] active:scale-95"
+                  >
+                    <span>{t("ctaPrimary")}</span>
+                    <ArrowRight className="size-4.5" />
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-text bg-transparent px-6 text-[14px] font-bold text-text transition-all duration-200 hover:bg-text/10 active:scale-95"
+                  >
+                    <span>{t("ctaSecondary")}</span>
+                  </Link>
+                  <p className="text-center font-mono text-[11px] text-text mt-1">
+                    {t("ctaNote")}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>

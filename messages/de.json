@@ -62,7 +62,10 @@
     "faqBatziQuestion": "Was siehst du, Batzi?",
     "faqBatziAnswer": "Ihre Zeilen und die von niemandem sonst. Ich frage eine flüchtige Kopie Ihrer eigenen Buchungen im Arbeitsspeicher ab — keine anderen Konten, keine Benutzer, keine Sitzungen, keine Datei auf der Platte. Ehrlich gesagt: Die Zahlen, die ich für eine Antwort brauche, gehen an Googles Gemini-API, denn das ist das Modell, das die Antwort schreibt.",
     "faqDeleteQuestion": "Kann ich alles wieder löschen?",
-    "faqDeleteAnswer": "Ja, mit einem Druck. In den Kontoeinstellungen löscht ein Knopf das Konto samt jeder Buchung, jedem Budget, jedem Spartopf und jedem Befund daran. Kein Export, auf den man wartet, keine Aufbewahrungsfrist, keine E-Mail, die Sie umstimmen will."
+    "faqDeleteAnswer": "Ja, mit einem Druck. In den Kontoeinstellungen löscht ein Knopf das Konto samt jeder Buchung, jedem Budget, jedem Spartopf und jedem Befund daran. Kein Export, auf den man wartet, keine Aufbewahrungsfrist, keine E-Mail, die Sie umstimmen will.",
+    "asleepTitle": "Die Live-Demo schläft",
+    "asleepBody": "Beyond Money ist am BärnHäckt 2026 entstanden, und der Demo-Server läuft nur, wenn jemand ihn sehen möchte. Alles auf dieser Seite beschreibt die App trotzdem korrekt.",
+    "asleepContact": "Interesse? Schreiben Sie an <mail>{email}</mail>, dann wird sie geweckt."
   },
   "Auth": {
     "loginTitle": "Anmelden",
@@ -1020,7 +1023,10 @@
     "notFoundBody": "Diese Adresse gibt es nicht — oder sie ist umgezogen. Ihr Dashboard ist noch da, wo Sie es verlassen haben.",
     "offlineEyebrow": "Keine Verbindung",
     "offlineTitle": "Sie sind offline",
-    "offlineBody": "Ihre Transaktionen liegen auf dem Server, diese Seite braucht also eine Verbindung. Sobald Sie wieder online sind, funktioniert sie erneut."
+    "offlineBody": "Ihre Transaktionen liegen auf dem Server, diese Seite braucht also eine Verbindung. Sobald Sie wieder online sind, funktioniert sie erneut.",
+    "asleepEyebrow": "Demo schläft",
+    "asleepTitle": "Die App läuft gerade nicht",
+    "asleepBody": "Der Demo-Server von Beyond Money läuft nur, wenn jemand ihn sehen möchte — hinter dieser Adresse steht heute also nichts. An Ihrer Verbindung liegt es nicht: Die Startseite erklärt, was die App kann und wie Sie einen Blick darauf bekommen."
   },
   "Months": {
     "short1": "Jan",
