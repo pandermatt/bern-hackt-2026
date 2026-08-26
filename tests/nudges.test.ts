@@ -5,6 +5,7 @@ import {
   dragonFor,
   isOverBudget,
   rankNudges,
+  warnsOverBudget,
   UNFILED_MERCHANTS_FLOOR,
   type NudgeInput,
 } from "@/lib/nudges";
@@ -16,6 +17,7 @@ function row(overrides: Partial<BudgetRow> = {}): BudgetRow {
     limitMinor: 100000,
     suggestedMinor: 100000,
     usedMinor: 50000,
+    warnOverspend: true,
     ...overrides,
   };
 }
@@ -64,6 +66,24 @@ describe("isOverBudget", () => {
     // `null` is "no limit", which is not a limit of zero. Without the guard
     // every unbudgeted category reports itself as over the moment it is used.
     expect(isOverBudget(row({ limitMinor: null, usedMinor: 999999 }))).toBe(false);
+  });
+});
+
+describe("warnsOverBudget", () => {
+  it("is an overspend the reader still wants to hear about", () => {
+    expect(warnsOverBudget(row({ limitMinor: 100, usedMinor: 101 }))).toBe(true);
+  });
+
+  it("says nothing about a category whose warning was switched off", () => {
+    // Still over — `/budget` prints the row in red and the radar still puts the
+    // spoke outside its ring. What is off is the telling.
+    const muted = row({ limitMinor: 100, usedMinor: 101, warnOverspend: false });
+    expect(isOverBudget(muted)).toBe(true);
+    expect(warnsOverBudget(muted)).toBe(false);
+  });
+
+  it("has nothing to warn about when the limit is kept", () => {
+    expect(warnsOverBudget(row({ limitMinor: 100, usedMinor: 100 }))).toBe(false);
   });
 });
 
@@ -117,7 +137,7 @@ describe("rankNudges", () => {
     expect(nudge).toMatchObject({ kind: "free-money", amountMinor: 10_000 });
   });
 
-  it("puts the worst overspend first", () => {
+  it("reports the worst overspend, and says how many others there are", () => {
     const nudges = rankNudges(
       input({
         budget: [
@@ -127,28 +147,67 @@ describe("rankNudges", () => {
         ],
       }),
     );
-    expect(nudges.map((n) => n.id)).toEqual([
-      "over-budget:Housing",
-      "over-budget:Food",
-    ]);
-    expect(nudges[0]).toMatchObject({ overMinor: 60000 });
+
+    // One card, not one per category: three of the same sentence about three
+    // different categories reads as one problem repeated, and it used to fill
+    // the whole deck.
+    expect(nudges.map((n) => n.id)).toEqual(["over-budget:Housing"]);
+    expect(nudges[0]).toMatchObject({ overMinor: 60000, others: 1 });
   });
 
-  it("ranks warnings above the tip and caps the list", () => {
+  it("leaves a silenced category out of the deck and out of the count", () => {
+    const nudges = rankNudges(
+      input({
+        budget: [
+          // The worst overspend, and the reader has already decided about it.
+          row({
+            category: "Housing",
+            limitMinor: 100000,
+            usedMinor: 160000,
+            warnOverspend: false,
+          }),
+          row({ category: "Food", limitMinor: 20000, usedMinor: 25000 }),
+        ],
+      }),
+    );
+
+    // The card is about Food, and it does not claim Housing as an "other".
+    expect(nudges).toMatchObject([{ category: "Food", others: 0 }]);
+  });
+
+  it("keeps at most one card of each kind", () => {
     const nudges = rankNudges(
       input({
         budget: [
           row({ category: "Food", limitMinor: 20000, usedMinor: 25000 }),
           row({ category: "Housing", limitMinor: 100000, usedMinor: 160000 }),
         ],
-        anomalies: [finding("REPEAT_CHARGE")],
-        savings: { month: "2025-03", monthEnded: true, freeMinor: 143631 },
+        anomalies: [finding("REPEAT_CHARGE"), finding("AMOUNT_SPIKE")],
+        staleScan: true,
       }),
     );
-    // Four candidates, three slots — and the tip is the one that loses, because
-    // an opportunity keeps until tomorrow and an overspend does not.
+
+    expect(nudges.map((n) => n.kind)).toEqual([
+      "over-budget",
+      "anomaly",
+      "stale-scan",
+    ]);
+  });
+
+  it("ranks warnings above the tip, and caps the list at three", () => {
+    const nudges = rankNudges(
+      input({
+        budget: [row({ category: "Housing", limitMinor: 100000, usedMinor: 160000 })],
+        anomalies: [finding("REPEAT_CHARGE")],
+        staleScan: true,
+        savings: { month: "2025-03", monthEnded: true, freeMinor: 143631 },
+        unfiledMerchants: 14,
+      }),
+    );
+    // Five kinds, three slots — and the tips are what lose, because an
+    // opportunity keeps until tomorrow and an overspend does not.
     expect(nudges).toHaveLength(3);
-    expect(nudges.every((n) => n.tone === "warning")).toBe(true);
+    expect(nudges.map((n) => n.tone)).toEqual(["warning", "warning", "chore"]);
   });
 
   it("asks for a re-scan when the last one has gone stale", () => {

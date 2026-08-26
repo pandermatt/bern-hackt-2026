@@ -1,10 +1,11 @@
 "use client";
 
-import { Check, Loader2, PiggyBank, Send } from "lucide-react";
+import { BellOff, Check, Loader2, PiggyBank, Send, TrendingUp } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { applyBudgetFix } from "@/app/actions/budget";
 import { applyAllocationAdds } from "@/app/actions/savings";
 import { ChatEChart } from "@/components/chat-echart";
 import { ChatPie } from "@/components/chat-pie";
@@ -12,6 +13,7 @@ import {
   SUGGESTION_KEYS,
   type AllocationProposal,
   type AssistantTurn,
+  type BudgetFix,
   type ChartSpec,
   type ChatRole,
   type ToolName,
@@ -116,6 +118,12 @@ export type PanelMessage = {
    * applied. */
   proposalApplied?: boolean;
   proposalError?: string;
+  /** The broken budgets this answer came with, as a card of two-button rows. */
+  budget?: BudgetFix;
+  /** What has been done to each category on that card, kept on the message for
+   *  the same reason `proposalApplied` is. */
+  budgetDone?: Record<string, "raise" | "mute">;
+  budgetError?: string;
   error?: boolean;
 };
 
@@ -144,6 +152,9 @@ export type AssistantChat = {
   /** Index of the message whose proposal is being applied, if any. */
   applying: number | null;
   applyProposal: (index: number) => void;
+  /** `<message index>:<category>` while one budget row is being written. */
+  fixing: string | null;
+  applyBudget: (index: number, category: string, action: "raise" | "mute") => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
 };
 
@@ -165,6 +176,8 @@ export function useAssistantChat(): AssistantChat {
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<TurnStatus | null>(null);
   const [applying, setApplying] = useState<number | null>(null);
+  /** `<message index>:<category>` while one budget row is being written. */
+  const [fixing, setFixing] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -206,6 +219,7 @@ export function useAssistantChat(): AssistantChat {
               content: turn.reply,
               chart: turn.chart,
               proposal: turn.proposal,
+              budget: turn.budget,
               mood: turn.mood,
               error: turn.error,
             }
@@ -257,6 +271,50 @@ export function useAssistantChat(): AssistantChat {
     })();
   };
 
+  /**
+   * One row of the broken-budget card: raise this category's limit to what was
+   * spent, or stop warning about it.
+   *
+   * The client sends the category and which of the two, never a figure — the
+   * action resolves what "raise" means from the same overview the card was
+   * built from, exactly as `applyAllocationAdds` recomputes the surplus
+   * ceiling. The outcome lands on the message, so a card acted on stays acted
+   * on across a toggle away from the panel and back.
+   */
+  const applyBudget = (index: number, category: string, action: "raise" | "mute") => {
+    const message = messages[index];
+    if (!message?.budget || message.budgetDone?.[category] || fixing !== null) return;
+
+    setFixing(`${index}:${category}`);
+    void (async () => {
+      let done = false;
+      let error: string | undefined;
+      try {
+        const result = await applyBudgetFix({ category, action });
+        done = result.ok;
+        if (!result.ok) error = result.error;
+      } catch {
+        error = t("failed");
+      }
+      setMessages((prev) =>
+        prev.map((entry, i) =>
+          i === index
+            ? {
+                ...entry,
+                budgetDone: done
+                  ? { ...entry.budgetDone, [category]: action }
+                  : entry.budgetDone,
+                budgetError: error,
+              }
+            : entry,
+        ),
+      );
+      setFixing(null);
+      // The budget page and the entry page's deck both just changed.
+      if (done) router.refresh();
+    })();
+  };
+
   return {
     messages,
     input,
@@ -267,6 +325,8 @@ export function useAssistantChat(): AssistantChat {
     send,
     applying,
     applyProposal,
+    fixing,
+    applyBudget,
     scrollRef,
   };
 }
@@ -306,6 +366,8 @@ export function ChatPanel({
     send,
     applying,
     applyProposal,
+    fixing,
+    applyBudget,
     scrollRef,
   } = chat;
 
@@ -427,6 +489,108 @@ export function ChatPanel({
                     <ChatEChart chart={message.chart} />
                   ) : (
                     <ChatPie chart={message.chart} />
+                  )}
+                </div>
+              )}
+              {message.budget && (
+                /* The sibling of the allocation card, and the same contract:
+                   the app assembled it from its own figures, and nothing has
+                   changed until one of these buttons is pressed. Two per row,
+                   because there are exactly two honest answers to a broken
+                   budget — the limit was wrong, or the warning is. */
+                <div className="mt-2.5 rounded-lg border border-line bg-surface p-3">
+                  <p className="text-[12px] font-semibold text-text">
+                    {t("budgetFixTitle")}
+                  </p>
+                  <ul className="mt-2 space-y-2.5">
+                    {message.budget.rows.map((budgetRow) => {
+                      const done = message.budgetDone?.[budgetRow.category];
+                      const busy = fixing === `${index}:${budgetRow.category}`;
+                      return (
+                        <li key={budgetRow.category}>
+                          <div className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                            <span className="min-w-0 truncate font-medium text-text">
+                              {budgetRow.category}
+                            </span>
+                            <span className="shrink-0 font-mono text-danger tabular-nums">
+                              {/* Only the overspend: the Raise button beside
+                                  it already names the limit it would become,
+                                  and printing the old one next to the gap read
+                                  as one figure compared with another. */}
+                              {t("budgetFixOver", {
+                                amount: formatMoney(budgetRow.overMinor),
+                              })}
+                            </span>
+                          </div>
+                          {/* `aria-disabled` rather than `disabled`, the same
+                              choice the Apply button documents: a native
+                              disabled drops keyboard focus mid-write, and the
+                              name change is what announces the outcome. The
+                              handlers are guarded in `applyBudget`. */}
+                          <div className="mt-1.5 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                applyBudget(index, budgetRow.category, "raise")
+                              }
+                              aria-disabled={done !== undefined || fixing !== null}
+                              className={`inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                                done === "raise"
+                                  ? "cursor-default bg-positive-soft text-positive"
+                                  : done !== undefined || fixing !== null
+                                    ? "cursor-default bg-accent text-white opacity-40"
+                                    : "cursor-pointer bg-accent text-white hover:bg-accent-hover"
+                              }`}
+                            >
+                              {done === "raise" ? (
+                                <Check className="size-3.5" aria-hidden />
+                              ) : busy ? (
+                                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                              ) : (
+                                <TrendingUp className="size-3.5" aria-hidden />
+                              )}
+                              {done === "raise"
+                                ? t("budgetFixRaised")
+                                : t("budgetFixRaise", {
+                                    amount: formatMoney(budgetRow.usedMinor),
+                                  })}
+                            </button>
+
+                            {/* Only where there is a warning left to switch
+                                off. A category already silenced has one honest
+                                offer, not two. */}
+                            {(budgetRow.warns || done === "mute") && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  applyBudget(index, budgetRow.category, "mute")
+                                }
+                                aria-disabled={done !== undefined || fixing !== null}
+                                className={`inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-colors ${
+                                  done === "mute"
+                                    ? "cursor-default border-line bg-positive-soft text-positive"
+                                    : done !== undefined || fixing !== null
+                                      ? "cursor-default border-line text-text-subtle opacity-40"
+                                      : "cursor-pointer border-line-strong text-text hover:bg-surface-hover"
+                                }`}
+                              >
+                                {done === "mute" ? (
+                                  <Check className="size-3.5" aria-hidden />
+                                ) : (
+                                  <BellOff className="size-3.5" aria-hidden />
+                                )}
+                                {done === "mute" ? t("budgetFixMuted") : t("budgetFixMute")}
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {message.budgetError && (
+                    <p className="mt-1.5 text-[12px] text-danger" role="alert">
+                      {message.budgetError}
+                    </p>
                   )}
                 </div>
               )}

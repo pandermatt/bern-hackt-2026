@@ -21,25 +21,40 @@ import {
 import { CATEGORIES } from "@/scripts/lib/statement";
 
 /**
- * Everything the mapper needs about one merchant the importer could not place.
+ * Everything the mapper needs about one merchant on the account.
  *
- * `category` and `domain` are what this account has *said*, not what is being
- * shown: an empty domain with a `suggestedDomain` beside it is a merchant whose
- * mark comes from the shipped map, and the form says so as a placeholder rather
- * than by pre-filling a value nobody typed.
+ * `category` is what the merchant reads as *now* — this account's own answer
+ * if it gave one, the importer's otherwise. `base` is the importer's, kept
+ * beside it so setting a merchant back to what the rules said can drop the
+ * override rather than store a copy of it.
+ *
+ * `domain` is what the account has *said*, not what is being shown: an empty
+ * one with a `suggestedDomain` beside it is a merchant whose mark comes from
+ * the shipped map, and the form says so as a placeholder rather than by
+ * pre-filling a value nobody typed.
  */
-export type UnfiledMerchant = {
+export type MerchantRow = {
   merchant: string;
   count: number;
   spentMinor: number;
   category: string;
+  /** What the importer's rules made of it, before this account said anything. */
+  base: string;
   domain: string;
   /** What `lib/merchant-brands.ts` would resolve on its own, if anything. */
   suggestedDomain: string | null;
 };
 
 export type MerchantMapping = {
-  merchants: UnfiledMerchant[];
+  /** Merchants still reading as `Other` — the work, and the top of the page. */
+  open: MerchantRow[];
+  /**
+   * Every other merchant the account has ever had, so a decision can be
+   * changed. The importer's own answers are in here too: filing Coop under
+   * Food & Drink is exactly as much a decision as filing an unknown shop, and
+   * the only difference is who made it.
+   */
+  filed: MerchantRow[];
   /** Every category the select offers, in catalog order. */
   categories: string[];
   /**
@@ -52,18 +67,27 @@ export type MerchantMapping = {
 };
 
 /**
- * The merchants sitting in `Other`, with what this account has decided about
- * them.
+ * Every merchant on the account, split into the ones still wanting a category
+ * and the ones that have one.
  *
  * Grouped in SQL rather than by reading every row: this is a settings page, it
  * needs one line per merchant and no transaction detail, and the "one fetch,
  * then aggregate in JavaScript" rule is about the dashboard's *many* aggregates
  * over one scan — not about a single grouped count.
  *
- * It reads `transactions.category` as **stored**, which is the whole point:
- * a merchant that has been re-filed must stay on this list, showing the
- * category it was moved to. Reading the overridden value instead would make a
- * row vanish the moment it was saved, which reads as the save having eaten it.
+ * **A merchant moves lists when it is filed, rather than vanishing.** This read
+ * used to return only the rows stored as `Other`, and kept a merchant on that
+ * list after it had been given a category, on the grounds that a row
+ * disappearing on save reads as the save having eaten it. Two lists answer that
+ * better: the decision is visibly somewhere, and the second list is the only
+ * place a category can be *changed* — before this, a merchant the importer got
+ * right was unreachable, so "Coop is not groceries for me" had no answer.
+ *
+ * The grouping is by (merchant, category) because one merchant legitimately
+ * holds rows in two: a shop's refunds are filed under `Refund`, not under what
+ * they were refunds *for*. The category with the most rows is the one the
+ * merchant reads as, and `Refund` loses a tie on purpose — it describes the
+ * direction of a handful of lines rather than what the merchant sells.
  */
 export async function getMerchantMapping(): Promise<MerchantMapping | null> {
   const user = await getCurrentUser();
@@ -72,46 +96,90 @@ export async function getMerchantMapping(): Promise<MerchantMapping | null> {
   const rows = await db
     .select({
       merchant: transactions.merchant,
+      category: transactions.category,
       count: sql<number>`count(*)`,
       // Expenses are negative, so the magnitude is what a "spent" figure means.
       spentMinor: sql<number>`abs(sum(${transactions.amountMinor}))`,
     })
     .from(transactions)
-    .where(
-      and(
-        eq(transactions.userId, user.id),
-        eq(transactions.category, UNFILED),
-      ),
-    )
-    .groupBy(transactions.merchant);
+    .where(eq(transactions.userId, user.id))
+    .groupBy(transactions.merchant, transactions.category);
 
   const overrides = await merchantOverridesFor(user.id);
 
+  type Tally = {
+    count: number;
+    spentMinor: number;
+    byCategory: Map<string, number>;
+  };
+  const tallies = new Map<string, Tally>();
+
+  for (const row of rows) {
+    // Not a merchant: the single synthetic line each importer writes to seed
+    // the running balance.
+    if (row.category === "Opening balance") continue;
+
+    const tally = tallies.get(row.merchant) ?? {
+      count: 0,
+      spentMinor: 0,
+      byCategory: new Map<string, number>(),
+    };
+    tally.count += Number(row.count);
+    tally.spentMinor += Number(row.spentMinor);
+    tally.byCategory.set(
+      row.category,
+      (tally.byCategory.get(row.category) ?? 0) + Number(row.count),
+    );
+    tallies.set(row.merchant, tally);
+  }
+
+  const open: MerchantRow[] = [];
+  const filed: MerchantRow[] = [];
+
+  for (const [merchant, tally] of tallies) {
+    let base = UNFILED;
+    let best = -1;
+    for (const [category, count] of tally.byCategory) {
+      // `Refund` loses a tie: it says which way a few lines went, not what the
+      // merchant is.
+      const better =
+        count > best || (count === best && base === "Refund" && category !== "Refund");
+      if (better) {
+        base = category;
+        best = count;
+      }
+    }
+
+    const override = overrides.get(merchant);
+    const said =
+      override?.category && isCategory(override.category) ? override.category : null;
+
+    const entry: MerchantRow = {
+      merchant,
+      count: tally.count,
+      spentMinor: tally.spentMinor,
+      category: said ?? base,
+      base,
+      domain: override?.domain ?? "",
+      suggestedDomain: merchantDomain(merchant),
+    };
+
+    (entry.category === UNFILED ? open : filed).push(entry);
+  }
+
+  // Biggest first: the merchant worth ten francs a year is not the one somebody
+  // opened this page to file.
+  const bySpend = (a: MerchantRow, b: MerchantRow) =>
+    b.spentMinor - a.spentMinor || a.merchant.localeCompare(b.merchant);
+
   return {
-    merchants: rows
-      .map((row) => {
-        const override = overrides.get(row.merchant);
-        return {
-          merchant: row.merchant,
-          count: Number(row.count),
-          spentMinor: Number(row.spentMinor),
-          category:
-            override?.category && isCategory(override.category)
-              ? override.category
-              : UNFILED,
-          domain: override?.domain ?? "",
-          suggestedDomain: merchantDomain(row.merchant),
-        };
-      })
-      // Biggest first: the merchant worth ten francs a year is not the one
-      // somebody opened this page to file.
-      .sort((a, b) => b.spentMinor - a.spentMinor || a.merchant.localeCompare(b.merchant)),
+    open: open.sort(bySpend),
+    filed: filed.sort(bySpend),
     /*
      * Everything but the opening balance, which is not a place to put a
-     * merchant — it is the single synthetic line each importer writes to seed
-     * the running balance. `Salary`, `Refund` and `Transfer` stay on the list:
-     * a mis-filed employer or a refund the rules read as a purchase is exactly
-     * the kind of thing somebody comes here to correct.
+     * merchant. `Salary`, `Refund` and `Transfer` stay on the list: a mis-filed
+     * employer or a refund the rules read as a purchase is exactly the kind of
+     * thing somebody comes here to correct.
      */
     categories: CATEGORIES.filter((category) => category !== "Opening balance"),
     unfiled: UNFILED,
@@ -308,9 +376,7 @@ export async function suggestCategoriesForUnfiled(input?: {
   const mapping = await getMerchantMapping();
   if (!mapping) return mappingError("notSignedIn");
 
-  const unfiled = mapping.merchants
-    .filter((row) => row.category === UNFILED)
-    .map((row) => row.merchant);
+  const unfiled = mapping.open.map((row) => row.merchant);
 
   const batches = merchantBatches(unfiled);
   const index = Math.max(0, Math.trunc(input?.batch ?? 0));

@@ -102,18 +102,45 @@ export function NudgeCard({ nudge }: { nudge: NudgeSpec }) {
     );
   }
 
+  if (nudge.kind === "over-budget") {
+    return (
+      /* A conversation, not a page. "You are CHF 708 past your Housing limit"
+         raises a question the budget page cannot answer — is that fine, or
+         should the limit move? — and the assistant can answer it against the
+         real figures. `Chat.budgetQuestion` is its own string rather than one
+         of the starter chips: a chip asking which budgets are broken is a dead
+         end on an account where none are, and this card only exists when one
+         is. */
+      <NudgeAskButton
+        question={tChat("budgetQuestion")}
+        className={`w-full cursor-pointer text-left ${CARD_SHELL}`}
+      >
+        <NudgeRow
+          icon={<TrendingUp className="size-4" aria-hidden />}
+          title={t("overBudgetTitle", { category: nudge.category })}
+          /* Only one over-budget card reaches the deck, so this one says how
+             many others there are rather than letting them go unmentioned. */
+          body={
+            nudge.others > 0
+              ? t("overBudgetBodyMore", {
+                  amount: formatMoney(nudge.overMinor),
+                  count: nudge.others,
+                })
+              : t("overBudgetBody", { amount: formatMoney(nudge.overMinor) })
+          }
+          tint={tint}
+        />
+      </NudgeAskButton>
+    );
+  }
+
   let icon;
   let title;
   let body;
   /** A pathname, or the object form when the destination carries a query. */
   let href: React.ComponentProps<typeof Link>["href"];
 
-  if (nudge.kind === "over-budget") {
-    icon = <TrendingUp className="size-4" aria-hidden />;
-    title = t("overBudgetTitle", { category: nudge.category });
-    body = t("overBudgetBody", { amount: formatMoney(nudge.overMinor) });
-    href = "/budget";
-  } else if (nudge.kind === "stale-scan") {
+  if (nudge.kind === "stale-scan") {
     // The same glyph the outdated banner on `/anomalies` carries.
     icon = <TriangleAlert className="size-4" aria-hidden />;
     title = t("staleScanTitle");

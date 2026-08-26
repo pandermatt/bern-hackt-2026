@@ -41,8 +41,11 @@ and leave only through the danger zone's `clearTransactions`.
   populated table and `drizzle-kit push` deploys without `--force`, whereas
   `budgets` is created empty, so the constraint costs nothing. The unique index
   on `(user_id, category)` is what makes saving an upsert rather than a
-  read-then-write race. The two savings tables are created empty for the same
-  reason and follow the same shape.
+  read-then-write race. **`budgets.warn_overspend` is nullable, and NULL means
+  "warn"** — a row written before the column existed has no opinion and must
+  keep warning, and nullable is what `push` can add to a table that already has
+  rows. The two savings tables are created empty for the same reason and follow
+  the same shape.
 - **`merchant_overrides` is applied on read and never written into
   `transactions`.** It holds what the account holder decided about a merchant —
   the category its lines belong to, and the domain its logo comes from — set on
@@ -474,6 +477,36 @@ Unchanged from the template this app grew out of, and still exactly true.
   control is spelled from the model id. The chat debug panel's dropdown picks
   which model leads, stored in an `httpOnly` cookie and validated against
   `geminiModelChoices()` on the way back in.
+- **A broken budget is answered with a card of two-button rows, and the app
+  builds it.** `buildBudgetFix` assembles it from the same `getBudgetOverview`
+  that answered `get_budget_status`, so the caption and the card cannot
+  disagree about a franc — the same contract as `display_chart` naming a
+  *source*. It is deliberately **not** shaped like `propose_allocation`: how to
+  divide a surplus is a judgement, so the model proposes it, whereas every
+  over-budget category gets the identical pair of offers and there is nothing
+  to decide. Three things:
+  - **The client posts a category and a choice, never a figure.**
+    `applyBudgetFix` resolves what "raise" means server-side, the way
+    `allocateSurplus` recomputes the month's surplus rather than trusting a
+    posted ceiling.
+  - **Raising leaves the warning as it was.** A category somebody silenced and
+    later raised is still silenced; switching it back on would be a second
+    change nobody asked for.
+  - **A silenced row gets one button, not two** — there is no warning left to
+    switch off — and the per-row outcome lives on the message (`budgetDone`),
+    like `proposalApplied`, so a card acted on stays acted on when the shell
+    toggles away from the panel.
+- **The over-budget nudge opens a conversation; the budget page is where it is
+  also acted on.** `components/nudge-card.tsx` sends `Chat.budgetQuestion` through
+  `askBatzi`, and `get_budget_status` answers it from `getBudgetOverview` — the
+  model has no other way to see a limit, since the `run_sql` sandbox holds
+  `transactions` and nothing else. The reply offers the two ways out: switch
+  that category's warning off, or raise its limit to what was actually spent.
+  **The assistant does neither.** It stays read-only the way `propose_allocation`
+  is — the model proposes, and only a control the customer presses writes
+  anything — and the tool result says so in its own note, as the savings one
+  does. A new tool also needs a `Chat.status.<tool>` line in both catalogs, or
+  the panel falls back to "thinking".
 - **The assistant draws again, and never from its own numbers.**
   `display_chart` names a *source* and the app assembles the pie from the same
   aggregate that answered the tool call, so the caption and the picture cannot
@@ -653,9 +686,21 @@ Unchanged from the template this app grew out of, and still exactly true.
   `UNFILED_MERCHANTS_FLOOR` (more than ten): under that it is quicker to file
   them than to read a card about filing them, and the deck has three slots. `isOverBudget`
   lives there too: the comparison used to be inline in both `budget-editor` and
-  `budget-radar` and exported from neither. Capped at three, warnings before
-  the tip, because an entry page is not an inbox — and that cap is now also
-  what keeps the deck legible, since a deck of eight is a pile.
+  `budget-radar` and exported from neither. **`warnsOverBudget` is the second
+  predicate, and the split is the point**: `isOverBudget` is arithmetic, while
+  everything that *warns* — the deck, `budgetVerdict`, the budget page's own
+  dragon — asks the other one, which also honours the category's switch. A
+  silenced category is still over: the editor prints the row in red and the
+  radar puts the spoke outside its ring, because the figure is true and only
+  the telling is off. Capped at three, warnings before
+  chores before tips, because an entry page is not an inbox — and **at most one
+  card of each kind**. The cap alone let one kind take the whole deck: three
+  categories over budget filled all three slots with the same sentence about
+  three different categories, which reads as one problem repeated and hides
+  everything else the page had to say. Nothing is lost by it — the full lists
+  live on `/budget` and `/anomalies`, the cards link there, and the over-budget
+  spec carries `others` so whichever one survives can say how many more there
+  are.
 - **The nudges are what the dragon is saying, so one component owns both.**
   `components/nudge-stack.tsx` holds the deck, the toggle *and* the mascot —
   hence the `speaker` prop. The mascot is **centred under the deck**, with the
@@ -768,11 +813,30 @@ Unchanged from the template this app grew out of, and still exactly true.
   deep on one control — and the `#anomaly-scan` anchor `/anomalies` links to
   twice lives on the Data group, so the link lands on a heading rather than
   mid-panel.
-- **The Merchants group ships folded, as a native `<details>`.** It is one row
-  per unrecognised merchant with two controls each, which on a real statement
+- **The Merchants group is two lists, and ships folded as a native
+  `<details>`.** `getMerchantMapping` returns `open` — merchants still reading
+  as `Other` — and `filed`, **every other merchant the account has ever had**,
+  the ones the importer placed included. The second list is the whole of
+  re-categorising: before it a merchant the rules got right was unreachable, so
+  "Coop is not groceries for me" had nowhere to be said. A merchant *moves*
+  lists when it is filed rather than vanishing, which is the better answer to
+  the worry the old single list was built around. Three things hang off it:
+  - **`base` travels with every row** — what the importer's rules said, beside
+    `category`, which is what the merchant reads as now. Setting a merchant
+    back to `base` sends a **blank** category, which deletes the override:
+    agreeing with the rules is the absence of an opinion, and storing a copy
+    would leave a rule that does nothing until the rules change and then
+    quietly overrules them.
+  - **Save sends only what moved.** The form holds hundreds of merchants and
+    the action reads an absent one as "leave it alone", so the payload is the
+    changed rows and the footer counts them.
+  - **The dominant category wins when a merchant has rows in two**, and
+    `Refund` loses a tie on purpose: a shop's refunds say which way a few lines
+    went, not what the shop sells.
+  It is one row per merchant with two controls each, which on a real statement
   is most of the page, so `MerchantMapper` renders a `<summary>` carrying the
-  count of merchants still filed under `Other` and nothing else until it is
-  opened. `<details>` rather than React state: it arrives folded from the
+  count still filed under `Other` and nothing else until it is opened; the
+  filed list is folded again inside it. `<details>` rather than React state: it arrives folded from the
   server with no hydration, opens with JS off, and brings its own keyboard and
   screen-reader behaviour. It does not animate, and should not — the element
   hides its content with `display: none`, which does not interpolate, and the

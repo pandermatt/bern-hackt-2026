@@ -44,6 +44,13 @@ export type NudgeSpec =
       overMinor: number;
       /** The category's palette slot, so the row wears its dashboard colour. */
       slot: number;
+      /**
+       * How many *other* categories are also over. Only one over-budget card
+       * reaches the deck (see `rankNudges`), so this is what keeps the other
+       * two from being silently dropped — and it is true of whichever one
+       * survives, since it counts the rest either way.
+       */
+      others: number;
     }
   | {
       id: string;
@@ -164,6 +171,21 @@ export function isOverBudget(row: BudgetRow): boolean {
 }
 
 /**
+ * Whether an overspend is worth *saying something about*.
+ *
+ * A separate predicate rather than a condition folded into `isOverBudget`,
+ * because the two are different questions and only one of them is arithmetic.
+ * Rent over its limit is still over its limit — `/budget` prints that row in
+ * red either way, and the radar still draws the spoke outside the ring. What
+ * the switch governs is whether the dragon brings it up, and this is the
+ * predicate everything that *warns* asks: the entry page's deck, the budget
+ * page's own verdict.
+ */
+export function warnsOverBudget(row: BudgetRow): boolean {
+  return isOverBudget(row) && row.warnOverspend;
+}
+
+/**
  * The least unassigned money worth a nudge: CHF 100.
  *
  * The gate is on the *pool* — everything the ended months left over that the
@@ -216,15 +238,25 @@ export type NudgeInput = {
 };
 
 /**
- * Warnings before tips, worst overspend first, then a single opportunity.
+ * Warnings, then chores, then tips — and **at most one of each kind**.
  *
- * Capped, because this is an entry page and not an inbox: four rows of things
- * that are wrong is a page nobody opens twice. The full lists live on
- * `/anomalies` and `/budget`, and the nudges link there.
+ * Capped at three, because this is an entry page and not an inbox: four rows of
+ * things that are wrong is a page nobody opens twice. But a cap alone let one
+ * kind take the whole deck — three categories over budget filled all three
+ * slots with the same sentence about three different categories, which reads as
+ * one problem repeated rather than as three, and hid everything else the page
+ * had to say. One of each kind is what makes the deck a summary of the account
+ * rather than the top of one list.
+ *
+ * Nothing is lost by it: the full lists live on `/budget` and `/anomalies` and
+ * the cards link there, and the over-budget card carries `others` so it can say
+ * how many more there are.
  */
 export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
   const over: NudgeSpec[] = input.budget
-    .filter(isOverBudget)
+    // The warning predicate, not the arithmetic one — and it is what `others`
+    // counts too, or the card claims overspends the reader has silenced.
+    .filter(warnsOverBudget)
     .map((row) => ({
       id: `over-budget:${row.category}`,
       tone: "warning" as const,
@@ -232,8 +264,12 @@ export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
       category: row.category,
       overMinor: row.usedMinor - (row.limitMinor ?? 0),
       slot: row.slot,
+      others: 0,
     }))
-    .sort((a, b) => b.overMinor - a.overMinor);
+    .sort((a, b) => b.overMinor - a.overMinor)
+    // Every one of them is true about the rest, so whichever survives the
+    // one-per-kind filter below can say it.
+    .map((nudge, _index, all) => ({ ...nudge, others: all.length - 1 }));
 
   const flagged: NudgeSpec[] = input.anomalies.map((group) => ({
     id: `anomaly:${group.ruleId}`,
@@ -291,7 +327,14 @@ export function rankNudges(input: NudgeInput, limit = 3): NudgeSpec[] {
     ? [{ id: "stale-scan", tone: "chore", kind: "stale-scan" }]
     : [];
 
-  return [...over, ...flagged, ...chores, ...tips].slice(0, limit);
+  const seen = new Set<NudgeSpec["kind"]>();
+  return [...over, ...flagged, ...chores, ...tips]
+    .filter((nudge) => {
+      if (seen.has(nudge.kind)) return false;
+      seen.add(nudge.kind);
+      return true;
+    })
+    .slice(0, limit);
 }
 
 /**
@@ -347,7 +390,9 @@ export function budgetVerdict(rows: BudgetRow[]): BudgetVerdict {
   // to be inside of yet, and that is the one case where the dragon has
   // something to *offer* rather than something to report.
   if (limited.length === 0) return "unplanned";
-  if (limited.some(isOverBudget)) return "over";
+  // The ones worth reporting: a category whose warning is switched off is
+  // over, and deliberately not news.
+  if (limited.some(warnsOverBudget)) return "over";
   if (limited.some((row) => row.usedMinor >= (row.limitMinor as number) * TIGHT)) {
     return "tight";
   }

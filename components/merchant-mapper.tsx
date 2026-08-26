@@ -10,13 +10,14 @@ import {
   saveMerchantOverrides,
   suggestCategoriesForUnfiled,
   type MerchantMapping,
+  type MerchantRow,
 } from "@/app/actions/merchant-overrides";
 import { MerchantAvatar } from "@/components/merchant-avatar";
 import { formatMoney } from "@/lib/insights";
 import { merchantBatches } from "@/lib/merchant-batches";
 import { useCategoryLabel } from "@/lib/use-category-label";
 
-/** How many rows show before the list asks to be unfolded. */
+/** How many rows a list shows before it asks to be unfolded. */
 const PREVIEW = 12;
 
 /** How long a just-filled row keeps its green after the run has finished. */
@@ -24,8 +25,122 @@ const DONE_HIGHLIGHT_MS = 2_000;
 
 type Field = { category: string; domain: string };
 
+/** The select and the domain field, on a `--surface-muted` panel. */
+const CONTROL =
+  "h-9 w-full rounded-md border border-line-strong bg-surface text-[16px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:text-[13px]";
+
 /**
- * The merchants the importer could not place, and what to do with them.
+ * One merchant, with the two things this account can say about it.
+ *
+ * Module scope, not a closure inside `MerchantMapper`: a component declared
+ * during render is a new type on every render, so React unmounts and remounts
+ * the whole subtree — which on a list of selects means losing focus mid-choice.
+ * The same reason `components/csv-upload.tsx` hoists its `Field`.
+ */
+function MerchantListRow({
+  row,
+  field,
+  categories,
+  unfiled,
+  waiting,
+  landed,
+  onChange,
+  t,
+  categoryLabel,
+}: {
+  row: MerchantRow;
+  field: Field;
+  categories: string[];
+  unfiled: string;
+  /** A request is out about this row right now. */
+  waiting: boolean;
+  /** The auto-filing just put a category on it. */
+  landed: boolean;
+  onChange: (patch: Partial<Field>) => void;
+  t: ReturnType<typeof useTranslations<"MerchantMapping">>;
+  categoryLabel: (category: string) => string;
+}) {
+  return (
+    <li
+      /* The ledger's own row washes, for the same reason it uses them: a tint
+         says which rows something is happening to without moving anything.
+         Accent while a request is out about this row, then the positive green
+         once it came back with a category. */
+      className={`flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3 transition-colors duration-300 sm:px-5 ${
+        waiting ? "bg-accent-soft" : landed ? "bg-positive-soft" : ""
+      }`}
+      aria-busy={waiting || undefined}
+    >
+      <div className="flex min-w-0 flex-1 basis-[13rem] items-center gap-2.5">
+        {/* Keyed on the saved domain, and versioned by it: the mark is cached
+            per account for an hour, and this is the one page where somebody has
+            just changed which domain it comes from and is looking straight at
+            it. */}
+        <MerchantAvatar name={row.merchant} size={20} version={row.domain || undefined} />
+        <div className="min-w-0">
+          <p className="truncate text-[14px] font-medium text-text">{row.merchant}</p>
+          <p className="text-[13px] text-text-muted">
+            {t("lines", { count: row.count })}
+            {" · "}
+            <span className="font-mono tabular-nums">{formatMoney(row.spentMinor)}</span>
+          </p>
+        </div>
+      </div>
+
+      {/* Stacked below `sm`, side by side from there. Sharing one phone row
+          left the select about 200px wide, which truncates the longest option —
+          and the longest option is the default one every unfiled merchant is
+          showing. */}
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        <label className="min-w-0 sm:flex-none">
+          <span className="sr-only">
+            {t("categoryFieldLabel", { merchant: row.merchant })}
+          </span>
+          <select
+            value={field.category}
+            onChange={(event) => onChange({ category: event.target.value })}
+            /* 16px on a phone, 13px from `sm`: anything smaller than 16px makes
+               iOS zoom the page on focus. The same pair the budget editor's
+               inputs use. */
+            className={`${CONTROL} cursor-pointer truncate px-2 hover:bg-surface-hover sm:w-[11rem]`}
+          >
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category === unfiled
+                  ? t("leaveUnfiled", { category: categoryLabel(category) })
+                  : categoryLabel(category)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="min-w-0 sm:flex-none">
+          <span className="sr-only">
+            {t("domainFieldLabel", { merchant: row.merchant })}
+          </span>
+          <input
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={field.domain}
+            onChange={(event) => onChange({ domain: event.target.value })}
+            /* The placeholder is what the shipped map would answer on its own,
+               so an empty field reads as "this is where the logo already comes
+               from" rather than as a gap. */
+            placeholder={row.suggestedDomain ?? t("domainPlaceholder")}
+            className={`${CONTROL} px-2.5 font-mono sm:w-[10.5rem]`}
+          />
+        </label>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Every merchant on the account, in two lists: the ones still wanting a
+ * category, then the ones that have one.
  *
  * `scripts/lib/statement.ts` files anything its rules cannot recognise under
  * `Other`, and `lib/merchant-brands.ts` has no mark for most of them. Both are
@@ -35,16 +150,20 @@ type Field = { category: string; domain: string };
  * comes from — and the answers are stored per account and applied on read (see
  * `db/schema.ts`, `merchant_overrides`).
  *
- * Two things about the list are deliberate:
+ * Three things about the split are deliberate:
  *
- * - **A merchant stays on it after being filed.** The list is "what the
- *   importer could not place", which is a fact about the statement and does not
- *   change when somebody makes a decision about it — and a row that vanished on
- *   save would read as the save having eaten it. The select shows the decision
- *   instead.
+ * - **A merchant moves lists when it is filed; it does not vanish.** The
+ *   worry the single list was built around — a row disappearing on save reads
+ *   as the save having eaten it — is answered better by the decision showing up
+ *   somewhere than by leaving it among the undecided.
+ * - **The second list holds every merchant the account has ever had**, the ones
+ *   the importer got right included. That is the whole of re-categorising:
+ *   before it, a merchant the rules placed was unreachable, so "Coop is not
+ *   groceries for me" had nowhere to be said.
  * - **`Other` is a real option, and choosing it clears the row.** "Leave it
  *   alone" is the absence of an opinion rather than an opinion that it belongs
- *   in `Other`, so it is stored as no row at all.
+ *   in `Other`, so it is stored as no row at all — and so is setting a merchant
+ *   back to what the importer said, which is `base` in the payload below.
  *
  * Fields are held as typed, and parsed once in the server action — the same
  * split `components/budget-editor.tsx` makes, for the same reason: a
@@ -53,10 +172,9 @@ type Field = { category: string; domain: string };
  *
  * **The whole thing ships folded, behind a count of what still wants a
  * decision.** It is the longest block on `/account` by a distance — one row per
- * unrecognised merchant, each with two controls — and it sat open between the
- * settings above it and the danger zone below, so on a real statement the page
- * was mostly this. Folded, the panel is one line that says whether opening it
- * is worth anything.
+ * merchant, each with two controls, and on a real statement that is hundreds —
+ * and it sat open between the settings above it and the danger zone below.
+ * Folded, the panel is one line that says whether opening it is worth anything.
  *
  * It is a native `<details>`, not React state: a disclosure that a person can
  * open is exactly what the element is, it arrives folded from the server with
@@ -91,16 +209,20 @@ export function MerchantMapper({
      is plain state too. A progress bar that only draws when the work is over
      is not a progress bar. */
   const [asking, setAsking] = useState(false);
-  /** Batches finished, and how many there are. */
+  /** Merchants asked about so far, and how many the run covers. */
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   /** The merchants a request is in flight about, right now. */
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set());
   /** The merchants this run has filled in, kept until shortly after it ends. */
   const [justFiled, setJustFiled] = useState<ReadonlySet<string>>(new Set());
-  const [expanded, setExpanded] = useState(false);
+  const [openExpanded, setOpenExpanded] = useState(false);
+  const [filedExpanded, setFiledExpanded] = useState(false);
+
+  const everyMerchant = [...mapping.open, ...mapping.filed];
+
   const [fields, setFields] = useState<Record<string, Field>>(() =>
     Object.fromEntries(
-      mapping.merchants.map((row) => [
+      everyMerchant.map((row) => [
         row.merchant,
         { category: row.category, domain: row.domain },
       ]),
@@ -116,15 +238,31 @@ export function MerchantMapper({
 
   /** The saved row behind each merchant, for a name the form has no field for
    *  yet — a merchant that arrived in the mapping after this form mounted. */
-  const byName = new Map(mapping.merchants.map((row) => [row.merchant, row]));
+  const byName = new Map(everyMerchant.map((row) => [row.merchant, row]));
 
-  const dirty = mapping.merchants.some((row) => {
+  /** What this form would send: the merchants whose two fields have moved. */
+  const changes = everyMerchant.flatMap((row) => {
     const field = fields[row.merchant];
-    return (
-      field !== undefined &&
-      (field.category !== row.category || field.domain.trim() !== row.domain)
-    );
+    if (field === undefined) return [];
+    const category = field.category;
+    const domain = field.domain.trim();
+    if (category === row.category && domain === row.domain) return [];
+    return [
+      {
+        merchant: row.merchant,
+        /*
+         * Back to what the importer said is the *absence* of an opinion, not an
+         * opinion that happens to agree with one — and the action deletes the
+         * row on a blank. Storing a copy of the rules' own answer would leave
+         * the account carrying an override that does nothing until the rules
+         * change, and then quietly overrules them.
+         */
+        category: category === row.base ? "" : category,
+        domain,
+      },
+    ];
   });
+  const dirty = changes.length > 0;
 
   function update(merchant: string, patch: Partial<Field>) {
     setFields((previous) => ({
@@ -151,7 +289,7 @@ export function MerchantMapper({
     // The same slicing the server does, so the rows lit up while a request is
     // out are the rows that request is about. What comes back names them
     // again, which is what settles it if the two lists have drifted.
-    const open = mapping.merchants
+    const open = mapping.open
       .filter(
         (row) =>
           (fieldsRef.current[row.merchant]?.category ?? row.category) ===
@@ -236,13 +374,10 @@ export function MerchantMapper({
 
   function save() {
     startTransition(async () => {
-      const result = await saveMerchantOverrides(
-        mapping.merchants.map((row) => ({
-          merchant: row.merchant,
-          category: fields[row.merchant]?.category ?? mapping.unfiled,
-          domain: fields[row.merchant]?.domain ?? "",
-        })),
-      );
+      // Only what moved. The whole list would be hundreds of entries, most of
+      // them saying "leave this exactly as the rules left it", and the action
+      // takes an absent merchant to mean precisely that.
+      const result = await saveMerchantOverrides(changes);
       if (result.ok) {
         toast.success(t("saved"));
         router.refresh();
@@ -252,25 +387,64 @@ export function MerchantMapper({
     });
   }
 
-  if (mapping.merchants.length === 0) {
+  if (everyMerchant.length === 0) {
     return (
-      <p className="px-4 py-3.5 text-[13.5px] text-text-muted sm:px-5">
-        {t("empty")}
-      </p>
+      <p className="px-4 py-3.5 text-[13.5px] text-text-muted sm:px-5">{t("empty")}</p>
     );
   }
-
-  const shown = expanded
-    ? mapping.merchants
-    : mapping.merchants.slice(0, PREVIEW);
 
   /* Counted off the fields rather than off `mapping`, so the summary and the
      rows under it can never disagree: filing a merchant drops the count as the
      select changes, and the "unsaved changes" hint beside Save is what says
      that has not reached the database yet. */
-  const undecided = mapping.merchants.filter(
+  const undecided = mapping.open.filter(
     (row) => (fields[row.merchant]?.category ?? row.category) === mapping.unfiled,
   ).length;
+
+  const openShown = openExpanded ? mapping.open : mapping.open.slice(0, PREVIEW);
+  const filedShown = filedExpanded ? mapping.filed : mapping.filed.slice(0, PREVIEW);
+
+  const rowsOf = (rows: MerchantRow[]) => (
+    /* Dividers are the panel's own surface showing through, the way every
+       other settings group does it — a grey border on grey is invisible. */
+    <ul className="divide-y divide-surface">
+      {rows.map((row) => (
+        <MerchantListRow
+          key={row.merchant}
+          row={row}
+          field={fields[row.merchant] ?? { category: row.category, domain: row.domain }}
+          categories={mapping.categories}
+          unfiled={mapping.unfiled}
+          waiting={inFlight.has(row.merchant)}
+          landed={justFiled.has(row.merchant)}
+          onChange={(patch) => update(row.merchant, patch)}
+          t={t}
+          categoryLabel={categoryLabel}
+        />
+      ))}
+    </ul>
+  );
+
+  /** The "show all" / "show fewer" toggle a list grows when it is long. */
+  const moreButton = (
+    rows: MerchantRow[],
+    expanded: boolean,
+    setExpanded: (value: boolean) => void,
+  ) =>
+    rows.length > PREVIEW && (
+      <div className="border-t border-surface px-4 py-3 sm:px-5">
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          /* `bg-surface` with a `surface-hover` hover: on a grey panel a button
+             that hovers to `surface-muted` hovers to its own ground and nothing
+             happens. */
+          className="flex h-9 cursor-pointer items-center rounded-md border border-line-strong bg-surface px-2.5 text-[13px] font-medium text-text transition-colors hover:bg-surface-hover"
+        >
+          {expanded ? t("showFewer") : t("showAll", { count: rows.length })}
+        </button>
+      </div>
+    );
 
   return (
     <details className="group" open={defaultOpen || undefined}>
@@ -280,11 +454,11 @@ export function MerchantMapper({
       <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 transition-colors hover:bg-surface-hover sm:px-5 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 flex-1 text-[14px] font-medium text-text">
           {/* Nothing left to decide is a different sentence, not a "0" — the
-              list is still there and still worth opening, and a zero would
-              read as an empty panel. */}
+              filed list is still there and still worth opening, and a zero
+              would read as an empty panel. */}
           {undecided > 0
             ? t("summary", { count: undecided })
-            : t("summaryAllFiled", { count: mapping.merchants.length })}
+            : t("summaryAllFiled", { count: everyMerchant.length })}
         </span>
         <ChevronDown
           aria-hidden
@@ -296,110 +470,45 @@ export function MerchantMapper({
           content outright, so a border on the summary itself would leave a
           line across the bottom of a folded panel. */}
       <div className="border-t border-surface">
-        {/* Dividers are the panel's own surface showing through, the way every
-            other settings group does it — a grey border on grey is invisible. */}
-        <ul className="divide-y divide-surface">
-          {shown.map((row) => {
-            const field = fields[row.merchant] ?? {
-              category: row.category,
-              domain: row.domain,
-            };
+        {/* No heading over this list: the summary the reader just opened says
+            "7 merchants without a category" and this is that list. The second
+            one below carries a heading precisely because it is the one that
+            needs naming. */}
+        {mapping.open.length > 0 ? (
+          <>
+            {rowsOf(openShown)}
+            {moreButton(mapping.open, openExpanded, setOpenExpanded)}
+          </>
+        ) : (
+          <p className="px-4 py-3.5 text-[13.5px] text-text-muted sm:px-5">
+            {t("empty")}
+          </p>
+        )}
 
-            const waiting = inFlight.has(row.merchant);
-            const landed = justFiled.has(row.merchant);
-
-            return (
-              <li
-                key={row.merchant}
-                /* The ledger's own row washes, for the same reason it uses
-                   them: a tint says which rows something is happening to
-                   without moving anything. Accent while a request is out about
-                   this row, then the positive green once it came back with a
-                   category. */
-                className={`flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3 transition-colors duration-300 sm:px-5 ${
-                  waiting ? "bg-accent-soft" : landed ? "bg-positive-soft" : ""
-                }`}
-                aria-busy={waiting || undefined}
-              >
-                <div className="flex min-w-0 flex-1 basis-[13rem] items-center gap-2.5">
-                  {/* Keyed on the saved domain, and versioned by it: the mark is
-                      cached per account for an hour, and this is the one page
-                      where somebody has just changed which domain it comes from
-                      and is looking straight at it. */}
-                  <MerchantAvatar
-                    name={row.merchant}
-                    size={20}
-                    version={row.domain || undefined}
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate text-[14px] font-medium text-text">
-                      {row.merchant}
-                    </p>
-                    <p className="text-[13px] text-text-muted">
-                      {t("lines", { count: row.count })}
-                      {" · "}
-                      <span className="font-mono tabular-nums">
-                        {formatMoney(row.spentMinor)}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Stacked below `sm`, side by side from there. Sharing one
-                    phone row left the select about 200px wide, which truncates
-                    the longest option — and the longest option is the default
-                    one every unfiled merchant is showing. */}
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                  <label className="min-w-0 sm:flex-none">
-                    <span className="sr-only">
-                      {t("categoryFieldLabel", { merchant: row.merchant })}
-                    </span>
-                    <select
-                      value={field.category}
-                      onChange={(event) =>
-                        update(row.merchant, { category: event.target.value })
-                      }
-                      /* 16px on a phone, 13px from `sm`: anything smaller than
-                         16px makes iOS zoom the page on focus. The same pair the
-                         budget editor's inputs use. */
-                      className="h-9 w-full cursor-pointer truncate rounded-md border border-line-strong bg-surface px-2 text-[16px] text-text transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-[11rem] sm:text-[13px]"
-                    >
-                      {mapping.categories.map((category) => (
-                        <option key={category} value={category}>
-                          {category === mapping.unfiled
-                            ? t("leaveUnfiled", { category: categoryLabel(category) })
-                            : categoryLabel(category)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="min-w-0 sm:flex-none">
-                    <span className="sr-only">
-                      {t("domainFieldLabel", { merchant: row.merchant })}
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="url"
-                      autoComplete="off"
-                      autoCapitalize="none"
-                      spellCheck={false}
-                      value={field.domain}
-                      onChange={(event) =>
-                        update(row.merchant, { domain: event.target.value })
-                      }
-                      /* The placeholder is what the shipped map would answer on
-                         its own, so an empty field reads as "this is where the
-                         logo already comes from" rather than as a gap. */
-                      placeholder={row.suggestedDomain ?? t("domainPlaceholder")}
-                      className="h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 font-mono text-[16px] text-text transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-[10.5rem] sm:text-[13px]"
-                    />
-                  </label>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        {/* The second list, folded inside the first. Hundreds of merchants the
+            rules already placed are not what somebody opened this panel for —
+            but they are what re-filing one means, so they are one click away
+            rather than absent. */}
+        {mapping.filed.length > 0 && (
+          <details className="group/filed border-t border-surface">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover sm:px-5 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 flex-1 text-[13px] font-medium text-text-muted">
+                {t("filedHeading", { count: mapping.filed.length })}
+              </span>
+              <ChevronDown
+                aria-hidden
+                className="size-4 shrink-0 text-text-subtle transition-transform group-open/filed:rotate-180"
+              />
+            </summary>
+            <div className="border-t border-surface">
+              <p className="px-4 pt-3 pb-1 text-[12.5px] text-text-muted sm:px-5">
+                {t("filedNote")}
+              </p>
+              {rowsOf(filedShown)}
+              {moreButton(mapping.filed, filedExpanded, setFiledExpanded)}
+            </div>
+          </details>
+        )}
 
         {asking && progress.total > 0 && (
           <div className="border-t border-surface px-4 py-3 sm:px-5">
@@ -427,25 +536,13 @@ export function MerchantMapper({
           </div>
         )}
 
+        {/* Under both lists, because Save commits both — including a category
+            changed in the filed list, which is the whole point of it being
+            editable. */}
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-surface px-4 py-3 sm:px-5">
-          {mapping.merchants.length > PREVIEW && (
-            <button
-              type="button"
-              onClick={() => setExpanded((open) => !open)}
-              /* `bg-surface` with a `surface-hover` hover: on a grey panel a
-                 button that hovers to `surface-muted` hovers to its own ground
-                 and nothing happens. */
-              className="mr-auto flex h-9 cursor-pointer items-center rounded-md border border-line-strong bg-surface px-2.5 text-[13px] font-medium text-text transition-colors hover:bg-surface-hover"
-            >
-              {expanded
-                ? t("showFewer")
-                : t("showAll", { count: mapping.merchants.length })}
-            </button>
-          )}
-
           {dirty && (
-            <span className="text-[12.5px] text-text-muted">
-              {t("unsavedChanges")}
+            <span className="mr-auto text-[12.5px] text-text-muted">
+              {t("unsavedCount", { count: changes.length })}
             </span>
           )}
           {/* Beside Save rather than at the top of the list: it is one more way

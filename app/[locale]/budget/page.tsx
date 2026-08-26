@@ -11,7 +11,12 @@ import { Section } from "@/components/section";
 import { Link, redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { formatMoney } from "@/lib/insights";
-import { budgetVerdict, dragonForBudget, isOverBudget } from "@/lib/nudges";
+import {
+  budgetVerdict,
+  dragonForBudget,
+  isOverBudget,
+  warnsOverBudget,
+} from "@/lib/nudges";
 import { monthLabel } from "@/lib/month-label";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +62,10 @@ export default async function BudgetPage({
      makes between `severity` and `kind`. The figures below are only ever the
      evidence for the verdict; they never pick it. */
   const verdict = budgetVerdict(rows);
-  const over = rows.filter(isOverBudget);
+  // What the dragon is allowed to bring up, which is not every overspend: a
+  // category whose warning is switched off still shows red in the editor
+  // below, and still sits outside its ring on the radar.
+  const over = rows.filter(warnsOverBudget);
   const overBy = over.reduce(
     (sum, row) => sum + (row.usedMinor - (row.limitMinor as number)),
     0,

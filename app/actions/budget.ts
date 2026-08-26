@@ -40,6 +40,12 @@ const entrySchema = z.object({
     .string()
     .trim()
     .transform((value) => value.replace(/[’'\s]/g, "").replace(",", ".")),
+  /**
+   * Whether going over this limit should say anything. Optional, and absent
+   * means yes — the same reading NULL has in the column, so a caller that
+   * predates the switch keeps every warning it had.
+   */
+  warn: z.boolean().optional(),
 });
 
 /**
@@ -79,11 +85,16 @@ export async function getBudgetOverview(
     .from(budgets)
     .where(eq(budgets.userId, user.id));
   const limits = new Map(saved.map((row) => [row.category, row.limitMinor]));
+  // Only an explicit `false` silences anything: a row written before the
+  // column existed carries NULL, which is not an opinion and still warns.
+  const muted = new Set(
+    saved.filter((row) => row.warnOverspend === false).map((row) => row.category),
+  );
 
   return {
     months,
     month: requested,
-    rows: requested ? budgetRows(rows, requested, limits) : [],
+    rows: requested ? budgetRows(rows, requested, limits, undefined, muted) : [],
   };
 }
 
@@ -94,11 +105,14 @@ export type SaveBudgetsResult = { ok: true } | { ok: false; error: string };
  *
  * The client raises whatever string it gets straight into a toast, so it has
  * to arrive already translated — the same shape `app/actions/auth.ts` uses.
+ *
+ * Typed as the failure arm alone rather than as one of the result unions, so
+ * both writers in this file can return it.
  */
 async function budgetError(
   key: string,
   values?: Record<string, string>,
-): Promise<SaveBudgetsResult> {
+): Promise<{ ok: false; error: string }> {
   const t = await getTranslations("BudgetErrors");
   return { ok: false, error: t(key, values) };
 }
@@ -111,7 +125,12 @@ async function budgetError(
  * off it; reads on this page return their data directly.
  */
 export async function saveBudgets(
-  entries: { category: string; amount: string }[],
+  entries: {
+    category: string;
+    amount: string;
+    /** Whether to warn when this category goes over. Absent means yes. */
+    warn?: boolean;
+  }[],
 ): Promise<SaveBudgetsResult> {
   const user = await getCurrentUser();
   if (!user) return budgetError("notSignedIn");
@@ -119,11 +138,14 @@ export async function saveBudgets(
   const parsed = z.array(entrySchema).max(64).safeParse(entries);
   if (!parsed.success) return budgetError("malformed");
 
-  const upserts: { category: string; limitMinor: number }[] = [];
+  const upserts: { category: string; limitMinor: number; warn: boolean }[] = [];
   const clears: string[] = [];
 
-  for (const { category, amount } of parsed.data) {
+  for (const { category, amount, warn } of parsed.data) {
     if (amount === "") {
+      // A category with no limit has no warning to configure either, so the
+      // flag goes with the row rather than lingering as a setting about
+      // nothing.
       clears.push(category);
       continue;
     }
@@ -136,7 +158,7 @@ export async function saveBudgets(
     if (limitMinor > 1_000_000_000) {
       return budgetError("tooLarge");
     }
-    upserts.push({ category, limitMinor });
+    upserts.push({ category, limitMinor, warn: warn ?? true });
   }
 
   try {
@@ -157,13 +179,18 @@ export async function saveBudgets(
             userId: user.id,
             category: row.category,
             limitMinor: row.limitMinor,
+            warnOverspend: row.warn,
             updatedAt: new Date(),
           })
           // The unique index on (user_id, category) is what makes this an
           // upsert instead of a read-then-write race.
           .onConflictDoUpdate({
             target: [budgets.userId, budgets.category],
-            set: { limitMinor: row.limitMinor, updatedAt: new Date() },
+            set: {
+              limitMinor: row.limitMinor,
+              warnOverspend: row.warn,
+              updatedAt: new Date(),
+            },
           })
           .run();
       }
@@ -173,5 +200,61 @@ export async function saveBudgets(
   }
 
   revalidatePath("/[locale]/budget", "page");
+  // `/home` reads the same limits for the dragon's deck, and switching a
+  // warning off is a change to what that page says.
+  revalidatePath("/[locale]/home", "page");
   return { ok: true };
+}
+
+export type BudgetFixResult =
+  | { ok: true; limitMinor: number; warn: boolean }
+  | { ok: false; error: string };
+
+/**
+ * One of the two things the chat's broken-budget card offers: raise this
+ * category's limit to what was actually spent, or stop warning about it.
+ *
+ * **The client names the category and the choice, never the figure.** What to
+ * raise the limit *to* is resolved here from the same overview the card was
+ * built from — the same reason `allocateSurplus` recomputes the month's
+ * surplus rather than trusting a posted ceiling. A caller can only ask for one
+ * of its own categories to be set to its own spend.
+ *
+ * Raising leaves the warning as it was: a category somebody silenced and later
+ * raised is still silenced, and quietly switching it back on would be a second
+ * change nobody asked for.
+ */
+export async function applyBudgetFix(input: {
+  category: string;
+  action: "raise" | "mute";
+}): Promise<BudgetFixResult> {
+  const user = await getCurrentUser();
+  if (!user) return budgetError("notSignedIn");
+
+  const parsed = z
+    .object({
+      category: z.string().trim().min(1).max(40),
+      action: z.enum(["raise", "mute"]),
+    })
+    .safeParse(input);
+  if (!parsed.success) return budgetError("malformed");
+
+  const overview = await getBudgetOverview();
+  const row = overview?.rows.find((entry) => entry.category === parsed.data.category);
+  // No limit is nothing to raise and nothing to warn about — and it is also
+  // what a card left open in a tab while the budget was cleared elsewhere
+  // would ask for.
+  if (!row || row.limitMinor === null) return budgetError("noSuchBudget");
+
+  const limitMinor = parsed.data.action === "raise" ? row.usedMinor : row.limitMinor;
+  const warn = parsed.data.action === "raise" ? row.warnOverspend : false;
+
+  // Through the same writer as the editor, so there is one place that decides
+  // what a saved budget looks like.
+  const saved = await saveBudgets([
+    { category: row.category, amount: (limitMinor / 100).toFixed(2), warn },
+  ]);
+  if (!saved.ok) return { ok: false, error: saved.error };
+
+  return { ok: true, limitMinor, warn };
 }
