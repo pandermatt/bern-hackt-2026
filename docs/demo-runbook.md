@@ -146,7 +146,10 @@ torn write.
 2. **Power the server off** — a full shutdown, not a reboot. Wait for Hetzner
    to report it off.
 
-3. **Take the snapshot**, and give it a name with the date in it.
+3. **Take the snapshot**, and give it a name with the date in it. If the app
+   was redeployed during this demo, this step is what stops the *next* wake
+   starting from the same stale image — an image that is never retaken falls
+   further behind `main` every time something merges.
 
 4. **Delete the server.** This is the step that stops the billing; nothing
    before it does.
@@ -163,10 +166,23 @@ over on its own. Check <https://beyond-money.ch/> shows the asleep notice.
    That is fine: billing is hourly, so the larger type costs pennies for a demo
    and the monthly figure never applies. (An x86 snapshot also cannot go onto an
    ARM/CAX type.)
-2. That is the whole procedure. Coolify's containers restart on their own,
-   `cloudflared` dials out, and the Worker starts proxying within a minute —
-   **at whatever new IP Hetzner hands out**, with nothing to reconfigure. That
-   is what the tunnel buys.
+2. Coolify's containers restart on their own, `cloudflared` dials out, and the
+   Worker starts proxying within a minute — **at whatever new IP Hetzner hands
+   out**, with nothing to reconfigure. That is what the tunnel buys.
+
+3. **Redeploy in Coolify if anything landed on `main` since the snapshot.**
+   The snapshot is an image of the app as it was when it was taken; merging
+   while the box is destroyed cannot update it, because Coolify is on the box.
+   The edge half *does* keep up — `deploy-edge` runs entirely on a GitHub
+   runner — so after a merge into a sleeping deployment the two disagree: the
+   edge serves the new prerendered pages and the restored box serves the old
+   app. Nothing breaks, and the fix is one deploy from the Coolify UI.
+
+   ```bash
+   git log --oneline <snapshot-date>..origin/main
+   ```
+
+   Empty means the image is current and there is nothing to do.
 
 Check <https://beyond-money.ch/api/health> returns `{"ok":true}` and that the
 landing page has its sign-in buttons back.
