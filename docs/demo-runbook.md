@@ -10,7 +10,7 @@ Worker answers in its place.
 
 | | |
 | --- | --- |
-| Between demos | ~€0.15–0.25/month of snapshot storage (€0.0143/GB/month on **used** space, not disk size) |
+| Between demos | **€0.22/month** of snapshot storage — 15.47 GB used at €0.0143/GB/month. Billed on **used** space, not the 80 GB disk, which is why the disk size the snapshot has to be restored onto does not matter to the bill |
 | During a demo | the same CX33 the snapshot came from — €8.49/month works out at ~€0.012/hour, so a six-hour demo is about €0.07 |
 | Cloudflare | free tier, and roughly one request per page view against 100k/day |
 
