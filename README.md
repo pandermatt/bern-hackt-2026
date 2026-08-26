@@ -21,6 +21,12 @@ Next.js 16 · shadcn/ui · Tailwind v4
 | `development` | <https://dev.beyond-money.ch/> |
 | `main` | <https://beyond-money.ch/> |
 
+The demo server itself only runs when someone asks to see it — between demos it
+is destroyed and recreated from a snapshot, and a Cloudflare Worker serves a
+prerendered copy of the landing page so the address stays up. Waking it, putting
+it back to sleep and the things that bite are in
+[docs/demo-runbook.md](docs/demo-runbook.md).
+
 
 ## Setup
 
@@ -97,6 +103,9 @@ is simply closed. Both `/register` states point a visitor at
 | `npm run db:studio` | Drizzle Studio against the same file |
 | `npm run db:backup` | Snapshot the database into `data/backups/` (`VACUUM INTO`) |
 | `npm run seed` | Import `scripts/seed-data/*.csv` into an existing account. `-- --if-empty` skips when the database already holds transactions |
+| `npm run edge:build` | Assemble `edge/dist/` from a **running** production server — see [docs/demo-runbook.md](docs/demo-runbook.md) |
+| `npm run edge:dev` | The Cloudflare Worker locally (`--var ORIGIN:…` picks the origin) |
+| `npm run edge:deploy` | Deploy the Worker. CI does this on every push to `main` |
 | `npm test` | Vitest: CSV parsing, aggregation, import rules, auth, and per-account scoping |
 
 ## Environment

@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "beyond-money-edge",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-01",
+
+  // `dist/` is assembled by the `deploy-edge` job in
+  // `.github/workflows/ci.yml` and is gitignored — it is this build's
+  // `_next/static`, this build's `public/`, and the six documents curled out
+  // of a real `next start`. Never commit it; a stale copy would serve last
+  // month's landing page against this month's asset hashes.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+
+    // The Worker decides everything. Without this, a static asset matching the
+    // path is served before the script runs, and `/de` would answer from the
+    // bundle even while the box is up and has a signed-in visitor to redirect.
+    "run_worker_first": true,
+
+    // Literal matching. The script asks for exact filenames
+    // (`landing-de-asleep.html`), and an unmatched path has to come back as a
+    // 404 so `fetch` can fall through to the origin rather than being handed
+    // an index page.
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+
+  "vars": {
+    // The tunnel hostname `cloudflared` on the Hetzner box dials out to. It is
+    // a *different* hostname from the ones this Worker is routed on below —
+    // routing the Worker on its own origin would loop every proxied request
+    // straight back into it.
+    "ORIGIN": "https://origin.beyond-money.ch"
+  },
+
+  "routes": [
+    { "pattern": "beyond-money.ch/*", "zone_name": "beyond-money.ch" },
+    { "pattern": "www.beyond-money.ch/*", "zone_name": "beyond-money.ch" }
+  ],
+
+  "observability": { "enabled": true }
+}

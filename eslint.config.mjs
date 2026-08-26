@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Assembled by `npm run edge:build` — this build's `_next/static` and
+    // `public/`, plus four prerendered documents. Generated output, and the
+    // minified chunks in it are 120k lint warnings on their own.
+    "edge/dist/**",
+    "edge/.wrangler/**",
   ]),
 ]);
 

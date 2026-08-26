@@ -2,6 +2,7 @@ import { AppFooter } from "@/components/app-footer";
 import { Landing } from "@/components/landing";
 import { redirect } from "@/i18n/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { isDemoAsleep } from "@/lib/demo-asleep";
 
 /**
  * The public front door, and nothing else.
@@ -35,10 +36,17 @@ export default async function Index({ params }: PageProps<"/[locale]">) {
   //
   // It takes no `user`, and cannot: anyone with a session was redirected to
   // /home three lines up, so this page is only ever read signed out.
+
+  // The CI deploy renders this route twice — once plain, once with the header
+  // `isDemoAsleep` reads — and ships both documents to the edge, which picks
+  // one depending on whether the demo server currently exists. See
+  // `lib/demo-asleep.ts`.
+  const asleep = await isDemoAsleep();
+
   return (
     <>
-      <Landing />
-      <AppFooter />
+      <Landing asleep={asleep} />
+      <AppFooter asleep={asleep} />
     </>
   );
 }

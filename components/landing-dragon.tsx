@@ -43,7 +43,13 @@ const TURNS = [
 /** Long enough to read as an answer being written, short enough not to stall. */
 const THINKING_MS = 700;
 
-export function LandingDragon() {
+/**
+ * `asleep` drops the sign-up button under the conversation — the third of the
+ * landing page's three of them. The canned exchange above it stays: it is a
+ * demonstration of what Batzi does, which is true whether or not there is a
+ * server to do it on today.
+ */
+export function LandingDragon({ asleep = false }: { asleep?: boolean }) {
   const t = useTranslations("Landing");
   const tDragon = useTranslations("Dragon");
 
@@ -252,15 +258,17 @@ export function LandingDragon() {
             </div>
           </div>
 
-          <div className="mt-5 flex flex-col items-center">
-            <Link
-              href="/register"
-              className="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-accent px-6 text-[15px] font-semibold text-primary-foreground shadow-sm transition-all duration-200 hover:opacity-90 active:scale-95"
-            >
-              <span>{t("askCta")}</span>
-              <ArrowRight className="size-4.5" />
-            </Link>
-          </div>
+          {!asleep && (
+            <div className="mt-5 flex flex-col items-center">
+              <Link
+                href="/register"
+                className="inline-flex h-12 items-center justify-center gap-2.5 rounded-full bg-accent px-6 text-[15px] font-semibold text-primary-foreground shadow-sm transition-all duration-200 hover:opacity-90 active:scale-95"
+              >
+                <span>{t("askCta")}</span>
+                <ArrowRight className="size-4.5" />
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>
