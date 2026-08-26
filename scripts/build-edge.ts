@@ -72,7 +72,51 @@ async function fetchDocument(path: string, asleep: boolean): Promise<string> {
   if (!html.includes("<!DOCTYPE html>") && !html.includes("<!doctype html>")) {
     throw new Error(`${path} did not return an HTML document.`);
   }
+
+  /*
+   * `NEXT_PUBLIC_SITE_URL` is read at BUILD time and defaults to
+   * `http://localhost:3000` (`lib/site.ts`), which the layout hands to
+   * `metadataBase`. A build that forgot it produces pages whose `og:url` and
+   * `og:image` name a machine nobody else can reach — and these documents are
+   * the ones that sit on Cloudflare for a quarter, so every link preview of
+   * the site is broken for as long as they do.
+   *
+   * The page renders perfectly and nothing else complains, which is exactly
+   * why this is checked here rather than trusted to whoever ran the build.
+   * The CI job sets the variable; a hand-run `npm run build` will not.
+   */
+  if (html.includes("localhost")) {
+    throw new Error(
+      `${path} contains a localhost URL — this build had no ` +
+        `NEXT_PUBLIC_SITE_URL, so its Open Graph tags name your laptop.\n\n` +
+        `  NEXT_PUBLIC_SITE_URL=https://beyond-money.ch npm run build\n\n` +
+        `then restart the server and run this again.`,
+    );
+  }
+
   return html;
+}
+
+/**
+ * The Open Graph card, which is a *dynamic route* — `app/[locale]/
+ * opengraph-image.tsx` renders it per request. Every prerendered page points
+ * `og:image` at it, so with the box destroyed the one image every link preview
+ * of this site fetches is a 503. It is the asleep state that is shared, so it
+ * is the asleep state whose card has to work.
+ *
+ * Public in `proxy.ts` (link crawlers carry no session), so the signed-out
+ * render is what a plain fetch gets.
+ */
+async function fetchImage(path: string): Promise<Buffer> {
+  const response = await fetch(`${BASE_URL}${path}`, { redirect: "manual" });
+  if (response.status !== 200) {
+    throw new Error(`${path} answered ${response.status}, expected 200.`);
+  }
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.startsWith("image/")) {
+    throw new Error(`${path} returned ${type || "no content-type"}, not an image.`);
+  }
+  return Buffer.from(await response.arrayBuffer());
 }
 
 async function main(): Promise<void> {
@@ -85,6 +129,14 @@ async function main(): Promise<void> {
     const html = await fetchDocument(path, asleep);
     await writeFile(join(DIST, file), html, "utf8");
     console.log(`  ${file.padEnd(26)} ← ${path}${asleep ? "  (asleep)" : ""}`);
+  }
+
+  for (const locale of LOCALES) {
+    const png = await fetchImage(`/${locale}/opengraph-image`);
+    await writeFile(join(DIST, `og-${locale}.png`), png);
+    console.log(
+      `  ${`og-${locale}.png`.padEnd(26)} ← /${locale}/opengraph-image`,
+    );
   }
 
   // `public/` at the root, exactly as Next serves it — this is where `sw.js`,

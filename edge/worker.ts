@@ -196,6 +196,26 @@ export default {
       return prerendered(env, `landing-${locale}-asleep.html`, 200);
     }
 
+    // The Open Graph card, which every prerendered page's `og:image` names.
+    // A link preview is the one thing that fetches this site while nobody is
+    // looking at it, so it has to work in exactly the state the box is not
+    // there. Matched on pathname alone: Next appends a cache-busting query
+    // string that changes with the build.
+    if (LOCALES.some((code) => pathname === `/${code}/opengraph-image`)) {
+      return env.ASSETS.fetch(
+        new URL(`https://assets.local/og-${locale}.png`),
+      ).then(
+        (asset) =>
+          new Response(asset.body, {
+            status: 200,
+            headers: {
+              "content-type": "image/png",
+              "cache-control": "public, max-age=3600",
+            },
+          }),
+      );
+    }
+
     // `/offline` answers 200, unlike everything else below it. `public/sw.js`
     // precaches it at install time and its `cachePut` drops anything that is
     // not `response.ok` — served as a 503, the worker would install with no
