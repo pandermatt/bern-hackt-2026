@@ -13,10 +13,20 @@
     "directory": "./dist",
     "binding": "ASSETS",
 
-    // The Worker decides everything. Without this, a static asset matching the
-    // path is served before the script runs, and `/de` would answer from the
-    // bundle even while the box is up and has a signed-in visitor to redirect.
-    "run_worker_first": true,
+    // `run_worker_first` is deliberately NOT set.
+    //
+    // With it on, every request — every chunk, every dragon, every font —
+    // invokes the Worker, and a request is only billable when the Worker runs.
+    // One cold view of the landing page is 25 invocations instead of 1, which
+    // spends the free tier's 100k/day at 4,000 views rather than 100,000, and
+    // puts a function call in front of assets the edge could serve on its own.
+    //
+    // It was set here on the theory that `/de` would otherwise be answered from
+    // the bundle before the script could decide. It would not: the documents
+    // are named `landing-de-asleep.html`, and `html_handling: "none"` means
+    // nothing maps `/de` onto one. No asset matches a page route, so every page
+    // route reaches the Worker exactly as before — assets are simply served
+    // without waking it.
 
     // Literal matching. The script asks for exact filenames
     // (`landing-de-asleep.html`), and an unmatched path has to come back as a

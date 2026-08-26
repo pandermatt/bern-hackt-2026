@@ -165,22 +165,11 @@ export default {
     const url = new URL(request.url);
     const { pathname } = url;
 
-    // Assets first, and from the edge whether or not the box is up: these are
-    // what the prerendered pages are made of.
-    //
-    // **Asked for every path rather than a list of known prefixes.** The list
-    // was `/team.jpg` on the day it was written and the repo shipped
-    // `team.webp` a week later, which served the landing page's photo as a 503
-    // — an asset list is a second copy of `public/` that nobody remembers to
-    // update. A miss costs one local lookup and falls through to the code
-    // below, so a path that is not in the bundle behaves as if this branch did
-    // not exist.
-    //
-    // GET and HEAD only: an asset must never answer a server action's POST.
-    if (request.method === "GET" || request.method === "HEAD") {
-      const asset = await env.ASSETS.fetch(request);
-      if (asset.status !== 404) return asset;
-    }
+    // Assets are not handled here. The assets layer answers a matching path
+    // before this script is invoked at all — which is what keeps those requests
+    // free and unmetered — and only a miss reaches us. `prerendered()` below
+    // still reads from the bundle, by explicit filename, which is a different
+    // thing: those documents are never served at their own paths.
 
     if (await originUp(env)) {
       try {
